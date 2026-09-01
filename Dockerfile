@@ -3,7 +3,7 @@
 # Build stage: full dev deps for the client bundles (esbuild, tailwind), then pruned.
 # Pinned by digest, not tag: a tag can silently become a different image. Dependabot's
 # docker updater (.github/dependabot.yml) proposes the bump when 22-slim moves on.
-FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
+FROM node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS build
 WORKDIR /app
 # better-sqlite3 compiles from source when no prebuilt binary matches; the toolchain
 # stays in this stage only — the runtime stage copies the already-built node_modules.
@@ -21,7 +21,7 @@ RUN npm run build:client && npm prune --omit=dev
 
 # Runtime: prod deps only. tsx is a real dependency — it is the production loader
 # (`src/index.ts` runs as TypeScript; there is no emitted dist/).
-FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+FROM node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
