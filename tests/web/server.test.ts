@@ -49,6 +49,12 @@ describe('server', () => {
     expect(body).toContain('Sign in to create a poll');
   });
 
+  it('states the slot length on the poll page', async () => {
+    const { app, poll } = await setup();
+    const body = await (await app.request(`/p/${poll.rkey}`)).text();
+    expect(body).toContain('30-minute slots');
+  });
+
   it('ships the theme toggle and its FOUC-preventing head script', async () => {
     const { app } = await setup();
     const body = await (await app.request('/')).text();

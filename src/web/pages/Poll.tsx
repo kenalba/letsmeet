@@ -30,6 +30,12 @@ export interface PollPageData {
  */
 const GRID_SCRIPTS = ['/assets/grid.js'];
 
+/** "30-minute" / "1-hour" / "1.5-hour" — mirrors the create form's option labels. */
+function fmtSlotLength(minutes: number): string {
+  if (minutes % 60 !== 0) return minutes < 60 ? `${minutes}-minute` : `${minutes / 60}-hour`;
+  return minutes === 60 ? '1-hour' : `${minutes / 60}-hour`;
+}
+
 export function PollPage(data: PollPageData) {
   const zone = data.time.timezone;
   const { responses, ranked } = data.results;
@@ -70,7 +76,7 @@ export function PollPage(data: PollPageData) {
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
           <p className="hint text-sm text-muted-foreground">
-            {`Grid times are shown in your timezone; listed times are in the poll's timezone (${zone}).`}
+            {`${fmtSlotLength(data.time.slotMinutes)} slots · grid times are shown in your timezone; listed times are in the poll's timezone (${zone}).`}
           </p>
           {isActive ? null : (
             <p className="hint text-sm text-muted-foreground">
