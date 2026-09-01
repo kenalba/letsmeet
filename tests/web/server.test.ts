@@ -111,10 +111,16 @@ describe('server', () => {
     );
     expect(body).toContain('name="dates"');
     expect(body).toContain('class="dates-fallback"');
-    // The island's mount point, plus the two window fields as real time pickers.
+    // The island's mount point, plus the two window fields as native time inputs — still
+    // `required` server-side, because with no JS they are the control.
     expect(body).toContain('id="create-dates"');
     expect(body).toMatch(/id="create-dates"[^>]*hidden/);
     expect(body.match(/type="time"/g)).toHaveLength(2);
+    expect(body.match(/<input[^>]*type="time"[^>]*required/g)).toHaveLength(2);
+    // ...and the two hidden spans the island unhides to mount a segmented TimeField over
+    // each of them. Hidden here, or a no-JS visitor would see an empty box beside the input.
+    expect(body).toMatch(/id="window-start-field"[^>]*hidden/);
+    expect(body).toMatch(/id="window-end-field"[^>]*hidden/);
     expect(body).toContain('name="timezone"');
     expect(body).toContain('value="UTC"');
     expect(body).toContain('name="slotMinutes"');

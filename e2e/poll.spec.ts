@@ -45,14 +45,34 @@ async function pickDate(page: Page, iso: string): Promise<void> {
   throw new Error(`date ${iso} not reachable in calendar`);
 }
 
+/**
+ * Set one window field to a 24h `"HH:mm"`. The island hides the native `<input type=time>`
+ * (it stays as the value carrier the form posts) and mounts a segmented field over it, so
+ * `page.fill` has nothing fillable to aim at: type into the segments instead. The hour
+ * commits and auto-advances on its own — instantly for 2-9, after the "could this still be
+ * 10/11/12?" wait for a lone 1 — so the helper waits for the minute segment to take focus
+ * rather than assuming it already has, then types the minute pair and the period key.
+ */
+async function setTime(page: Page, name: string, hhmm: string): Promise<void> {
+  const [h24, minute] = hhmm.split(':').map(Number);
+  const field = `[data-time-field="${name}"]`;
+  await page.click(`${field} [data-segment="hour"]`);
+  await page.keyboard.type(String(h24 % 12 === 0 ? 12 : h24 % 12));
+  await expect(page.locator(`${field} [data-segment="minute"]`)).toBeFocused();
+  await page.keyboard.type(String(minute).padStart(2, '0'));
+  await page.keyboard.press(h24 < 12 ? 'a' : 'p');
+  // The hidden input is what actually submits; nothing else here proves it was written.
+  await expect(page.locator(`input[name=${name}]`)).toHaveValue(hhmm);
+}
+
 /** Fill the create form the landing page shows to a signed-in host, and submit it. */
 async function createPoll(page: Page, fields: {
   title: string; dates: string; windowStart: string; windowEnd: string; slotMinutes: string;
 }): Promise<string> {
   await page.fill('input[name=title]', fields.title);
   for (const d of fields.dates.split(',')) await pickDate(page, d);
-  await page.fill('input[name=windowStart]', fields.windowStart);
-  await page.fill('input[name=windowEnd]', fields.windowEnd);
+  await setTime(page, 'windowStart', fields.windowStart);
+  await setTime(page, 'windowEnd', fields.windowEnd);
   await page.selectOption('select[name=slotMinutes]', fields.slotMinutes);
   await page.fill('input[name=timezone]', 'UTC');
   await page.click('form.create button[type=submit]');

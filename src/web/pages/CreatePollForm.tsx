@@ -2,7 +2,7 @@ import { Button } from '../ui/button.js';
 import { Input } from '../ui/input.js';
 import { Label } from '../ui/label.js';
 
-/** The one module script that upgrades this form's dates field into a calendar. */
+/** The one module script that upgrades this form's dates and window fields in place. */
 export const CREATE_FORM_SCRIPTS = ['/assets/createForm.js'];
 
 /**
@@ -17,6 +17,13 @@ export const CREATE_FORM_SCRIPTS = ['/assets/createForm.js'];
  *    calendar there, hides `.dates-fallback` and drops the input's `required` (a
  *    display:none required field blocks submit with an unfocusable validation bubble)
  *    while leaving the input itself in the DOM, because it is what actually submits.
+ *
+ * The two window fields work the same way: the native `<input type="time">` pair is the
+ * no-JS control, and `#window-start-field` / `#window-end-field` are the mount points the
+ * island unhides to put a segmented `TimeField` in their place (hiding the inputs and
+ * dropping their `required` for the same reason). Those spans are `display: contents` so
+ * the mounted field becomes a grid item of the label's own column, exactly where the input
+ * was; they carry phrasing content only, so a <span> is legal markup for them.
  *
  * `slotMinutes` stays a **native** select: Radix's SelectContent renders empty server-side
  * and posts nothing without a hidden input, so a styled native select is what keeps the
@@ -53,10 +60,12 @@ export function CreatePollForm() {
         <div className="grid gap-2">
           <Label htmlFor="poll-window-start">Window start</Label>
           <Input id="poll-window-start" type="time" name="windowStart" required />
+          <span id="window-start-field" hidden className="contents" />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="poll-window-end">Window end</Label>
           <Input id="poll-window-end" type="time" name="windowEnd" required />
+          <span id="window-end-field" hidden className="contents" />
         </div>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
