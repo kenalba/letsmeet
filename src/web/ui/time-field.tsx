@@ -258,6 +258,9 @@ export function TimeField({ name, initial, onValue }: TimeFieldProps) {
   return (
     <span
       data-time-field={name}
+      role="group"
+      // Segments announce only "Hour"/"Minute"/"AM/PM"; the group says which window.
+      aria-label={name === 'windowStart' ? 'Window start' : name === 'windowEnd' ? 'Window end' : name}
       onMouseDown={(e) => {
         // Clicking the padding (or a separator) lands on the hour, as a native field does.
         if (e.target === e.currentTarget || !(e.target as HTMLElement).dataset.segment) {

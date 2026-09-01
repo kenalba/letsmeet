@@ -36,8 +36,12 @@ interface CreateFormProps {
   /** The frozen `dates` input. Still in the DOM, still what submits — we just write it. */
   input: HTMLInputElement;
   form: HTMLFormElement;
-  start: WindowField;
-  end: WindowField;
+  /**
+   * Null on coarse-pointer devices: segments have no virtual keyboard, so phones keep the
+   * native time inputs (which open a platform picker) and only the calendar is enhanced.
+   */
+  start: WindowField | null;
+  end: WindowField | null;
 }
 
 /**
@@ -54,8 +58,8 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
   const [dates, setDates] = useState<Set<string>>(() => new Set(parseDates(input.value)));
   // Normalised through the same parse the field itself uses, so a value the browser or a
   // visitor left behind that the TimeField cannot show ("2pm") counts as unset here too.
-  const [startTime, setStartTime] = useState(() => formatTime(parseTime(start.input.value)));
-  const [endTime, setEndTime] = useState(() => formatTime(parseTime(end.input.value)));
+  const [startTime, setStartTime] = useState(() => (start ? formatTime(parseTime(start.input.value)) : ''));
+  const [endTime, setEndTime] = useState(() => (end ? formatTime(parseTime(end.input.value)) : ''));
   const [error, setError] = useState<string | null>(null);
 
   const sorted = useMemo(() => [...dates].sort(), [dates]);
@@ -65,17 +69,18 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
     input.value = sorted.join(',');
   }, [input, sorted]);
   useEffect(() => {
-    start.input.value = startTime;
-  }, [start.input, startTime]);
+    if (start) start.input.value = startTime;
+  }, [start, startTime]);
   useEffect(() => {
-    end.input.value = endTime;
-  }, [end.input, endTime]);
+    if (end) end.input.value = endTime;
+  }, [end, endTime]);
 
   useEffect(() => {
     const onSubmit = (e: Event) => {
       const problems: string[] = [];
       if (dates.size === 0) problems.push('Pick at least one date.');
-      if (!startTime || !endTime) problems.push('Pick a start and end time.');
+      // Without the segmented fields the native inputs keep `required`, which covers this.
+      if (start && end && (!startTime || !endTime)) problems.push('Pick a start and end time.');
       if (problems.length > 0) {
         e.preventDefault();
         setError(problems.join(' '));
@@ -83,7 +88,7 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
     };
     form.addEventListener('submit', onSubmit);
     return () => form.removeEventListener('submit', onSubmit);
-  }, [form, dates, startTime, endTime]);
+  }, [form, dates, startTime, endTime, start, end]);
 
   const replace = useCallback((next: Iterable<string>) => {
     setDates(new Set(next));
@@ -138,14 +143,14 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
           {error}
         </p>
       ) : null}
-      {createPortal(
+      {start ? createPortal(
         <TimeField name={start.input.name} initial={startTime} onValue={onStart} />,
         start.mount,
-      )}
-      {createPortal(
+      ) : null}
+      {end ? createPortal(
         <TimeField name={end.input.name} initial={endTime} onValue={onEnd} />,
         end.mount,
-      )}
+      ) : null}
     </div>
   );
 }
@@ -188,14 +193,21 @@ const datesMount = document.getElementById('create-dates');
 const fallback = document.querySelector<HTMLElement>('.dates-fallback');
 const datesInput = document.querySelector<HTMLInputElement>('input[name="dates"]');
 const form = datesInput?.closest('form');
-const start = findTimeInput('poll-window-start', 'window-start-field');
-const end = findTimeInput('poll-window-end', 'window-end-field');
-if (datesMount && fallback && datesInput && form && start && end) {
+// Segments need a hardware keyboard; a phone gets the platform's own time picker instead.
+const wantSegmented = !window.matchMedia('(pointer: coarse)').matches;
+const foundStart = wantSegmented ? findTimeInput('poll-window-start', 'window-start-field') : null;
+const foundEnd = wantSegmented ? findTimeInput('poll-window-end', 'window-end-field') : null;
+// All-or-nothing: one claimed input with the other's mount missing would be a half-dead form.
+const start = foundStart && foundEnd ? foundStart : null;
+const end = foundStart && foundEnd ? foundEnd : null;
+if (datesMount && fallback && datesInput && form) {
   fallback.hidden = true; // the input stays in the DOM and still submits
   datesInput.required = false; // a display:none required input blocks submit unfocusably
   datesMount.hidden = false;
-  claimTimeInput(start);
-  claimTimeInput(end);
+  if (start && end) {
+    claimTimeInput(start);
+    claimTimeInput(end);
+  }
   createRoot(datesMount).render(
     <StrictMode>
       <CreateForm input={datesInput} form={form} start={start} end={end} />
