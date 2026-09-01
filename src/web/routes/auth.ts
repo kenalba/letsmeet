@@ -29,16 +29,22 @@ export function authRoutes(auth: AuthClient, cookieSecret: string): Hono {
       const url = await auth.authorize(handle);
       return c.redirect(url.toString());
     } catch (err) {
-      return c.text(`Could not start sign-in for "${handle}": ${(err as Error).message}`, 400);
+      console.error('login authorize failed:', err);
+      return c.text(`Could not start sign-in for "${handle}". Check the handle and try again.`, 400);
     }
   });
 
   app.get('/oauth/callback', async (c) => {
-    const { did } = await auth.callback(new URL(c.req.url).searchParams);
-    await setSignedCookie(c, 'did', did, cookieSecret, {
-      httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 60 * 60 * 24 * 30,
-    });
-    return c.redirect('/');
+    try {
+      const { did } = await auth.callback(new URL(c.req.url).searchParams);
+      await setSignedCookie(c, 'did', did, cookieSecret, {
+        httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 60 * 60 * 24 * 30,
+      });
+      return c.redirect('/');
+    } catch (err) {
+      console.error('oauth callback failed:', err);
+      return c.html('<p>Sign-in failed or was cancelled. <a href="/login">Try again</a></p>', 400);
+    }
   });
 
   app.post('/logout', (c) => {

@@ -10,6 +10,14 @@ const stub: AuthClient = {
 };
 const app = authRoutes(stub, 'test-cookie-secret');
 
+const failingStub: AuthClient = {
+  clientMetadata: { client_id: 'https://poll.example/oauth/client-metadata.json' },
+  authorize: async () => { throw new Error('secret-internal-detail'); },
+  callback: async () => { throw new Error('secret-internal-detail'); },
+  restore: async () => { throw new Error('not used here'); },
+};
+const failingApp = authRoutes(failingStub, 'test-cookie-secret');
+
 describe('auth routes', () => {
   it('serves client metadata as JSON', async () => {
     const res = await app.request('/oauth/client-metadata.json');
@@ -33,5 +41,20 @@ describe('auth routes', () => {
     const res = await app.request('/logout', { method: 'POST' });
     expect(res.status).toBe(302);
     expect(res.headers.get('set-cookie')).toContain('did=;');
+  });
+  it('POST /login does not leak internal error details when authorize() throws', async () => {
+    const res = await failingApp.request('/login', {
+      method: 'POST',
+      body: new URLSearchParams({ handle: 'ken.wzrdz.cool' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.text()).not.toContain('secret-internal-detail');
+  });
+  it('GET /oauth/callback does not leak internal error details when callback() throws', async () => {
+    const res = await failingApp.request('/oauth/callback?code=x&state=y');
+    expect(res.status).toBe(400);
+    const body = await res.text();
+    expect(body).toContain('/login');
+    expect(body).not.toContain('secret-internal-detail');
   });
 });
