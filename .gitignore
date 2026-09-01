@@ -1,0 +1,7 @@
+node_modules/
+public/grid.js
+*.db
+*.db-*
+.env
+test-results/
+playwright-report/
