@@ -26,7 +26,7 @@ export function Layout({ title, children, scripts }: LayoutProps) {
       </head>
       <body className="min-h-screen bg-background text-foreground">
         <header className="border-b">
-          <div className="mx-auto flex h-14 max-w-3xl items-center px-4">
+          <div className="mx-auto flex h-14 max-w-4xl items-center px-4">
             <a
               className="brand text-sm font-semibold tracking-tight no-underline hover:text-primary"
               href="/"
