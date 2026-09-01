@@ -1,4 +1,25 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+
+/**
+ * The per-project emulation options that matter to these flows, so guest contexts (opened
+ * via `browser.newContext`, which inherits nothing) render like the project's main page.
+ * Cherry-picked rather than spreading `project.use` wholesale: that object also carries
+ * test-only options (`baseURL` aside) that `newContext` would reject.
+ */
+function projectContext(): {
+  viewport?: { width: number; height: number } | null; userAgent?: string;
+  deviceScaleFactor?: number; isMobile?: boolean; hasTouch?: boolean;
+  timezoneId?: string; baseURL?: string;
+} {
+  const use = test.info().project.use;
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, timezoneId, baseURL } = use;
+  return { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, timezoneId, baseURL };
+}
+
+async function newGuest(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext(projectContext());
+  return { context, page: await context.newPage() };
+}
 
 /**
  * Fixture dates, computed relative to the runner clock instead of pinned to a fixed pair
@@ -8,7 +29,9 @@ import { test, expect, type Page } from '@playwright/test';
  * put them on different, inconsistently-adjusted footings. `playwright.config.ts` pins the
  * browser's `timezoneId` to UTC, so the calendar island renders "today" in UTC — compute the
  * base in UTC too, or a host machine in a different zone could disagree with the browser
- * about which day is 14 days out.
+ * about which day is 14 days out. (The tz-kolkata project runs the browser ahead of UTC,
+ * where the same base is at most one day *less* far out — still future, still reachable by
+ * paging forward. A behind-UTC project would be equally safe, at one day further out.)
  */
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -56,6 +79,14 @@ async function pickDate(page: Page, iso: string): Promise<void> {
 async function setTime(page: Page, name: string, hhmm: string): Promise<void> {
   const [h24, minute] = hhmm.split(':').map(Number);
   const field = `[data-time-field="${name}"]`;
+  // On a coarse pointer the island leaves the native time inputs alone (segments have no
+  // virtual keyboard), so there is no segmented field to drive: fill the input directly.
+  // The island is already mounted by now — `pickDate` waited for the calendar — so a zero
+  // count means "won't mount", not "hasn't yet".
+  if ((await page.locator(field).count()) === 0) {
+    await page.fill(`input[name=${name}]`, hhmm);
+    return;
+  }
   await page.click(`${field} [data-segment="hour"]`);
   await page.keyboard.type(String(h24 % 12 === 0 ? 12 : h24 % 12));
   await expect(page.locator(`${field} [data-segment="minute"]`)).toBeFocused();
@@ -92,18 +123,24 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
     slotMinutes: '60',
   });
 
-  // guest responds in a clean context: drag-paint two cells, name, save
-  const guestContext = await browser.newContext();
-  const guest = await guestContext.newPage();
+  // guest responds in a clean context: paint two cells, name, save. Touch projects tap
+  // each cell (Playwright's touchscreen has no drag primitive); pointer projects drag
+  // across both, which also exercises the rectangle-stroke path.
+  const { context: guestContext, page: guest } = await newGuest(browser);
   await guest.goto(pollUrl);
   const cells = guest.locator('#grid-root [data-slot]');
   await expect(cells.first()).toBeVisible();
   const a = (await cells.nth(0).boundingBox())!;
   const b = (await cells.nth(1).boundingBox())!;
-  await guest.mouse.move(a.x + 5, a.y + 5);
-  await guest.mouse.down();
-  await guest.mouse.move(b.x + 5, b.y + 5);
-  await guest.mouse.up();
+  if (projectContext().hasTouch) {
+    await guest.touchscreen.tap(a.x + 5, a.y + 5);
+    await guest.touchscreen.tap(b.x + 5, b.y + 5);
+  } else {
+    await guest.mouse.move(a.x + 5, a.y + 5);
+    await guest.mouse.down();
+    await guest.mouse.move(b.x + 5, b.y + 5);
+    await guest.mouse.up();
+  }
   await expect(guest.locator('.cell.available')).toHaveCount(2);
   await guest.fill('.name input', 'Sam');
   await guest.click('button.save');
@@ -130,8 +167,7 @@ test('guest edit link round-trips', async ({ page, browser }) => {
 
   // A signed-in viewer posts to /respond-auth and is never offered a name or an edit link,
   // so the guest half of this flow needs its own cookie-free context.
-  const guestContext = await browser.newContext();
-  const guest = await guestContext.newPage();
+  const { context: guestContext, page: guest } = await newGuest(browser);
   await guest.goto(pollUrl);
   await guest.locator('#grid-root [data-slot]').first().click();
   await guest.fill('.name input', 'Ana');
