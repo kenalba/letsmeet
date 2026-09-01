@@ -139,9 +139,13 @@ function fmtRange(slot: Interval, zone: string): string {
   return `${s.toFormat('HH:mm')}–${e.toFormat('HH:mm')} ${s.toFormat('ccc LLL d')}`;
 }
 
-/** JSON safe to drop inside a <script> element: `</` can never close it early. */
+/**
+ * JSON safe to drop inside a <script> element. Escaping every `<` is the only sound rule:
+ * escaping just `</` still lets `<!--<script>` flip the tokenizer into script-data-escaped
+ * state and swallow the rest of the document as script text.
+ */
 function scriptJson(value: unknown): string {
-  return JSON.stringify(value).replace(/<\//g, '<\\/');
+  return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
 export function pollPage(data: PollPageData): Html {
@@ -171,7 +175,7 @@ ${pending > 0
     : null}
 <h1>${data.title}</h1>
 ${data.description ? html`<p class="description">${data.description}</p>` : null}
-<p class="hint">Times below are shown in your own timezone; the poll was set up in ${zone}.</p>
+<p class="hint">Grid times are shown in your timezone; listed times are in the poll's timezone (${zone}).</p>
 ${isActive
     ? null
     : html`<p class="hint">This poll is ${data.status} — responses are closed.</p>`}

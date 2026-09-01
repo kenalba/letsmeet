@@ -64,6 +64,37 @@ describe('server', () => {
     expect(await repo.listRecords(HOST, 'cool.wzrdz.poll.response')).toHaveLength(1);
   });
 
+  it('returns 400 for a malformed JSON body instead of throwing', async () => {
+    const { app, poll } = await setup();
+    const res = await app.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not json',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toHaveProperty('error');
+  });
+
+  it('neutralizes a script-breaking guest name in the embedded JSON', async () => {
+    const { app, poll } = await setup();
+    const evil = '<!--<script>';
+    const posted = await app.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: evil, available: PAINT }),
+    });
+    expect(posted.status).toBe(200);
+
+    const body = await (await app.request(`/p/${poll.rkey}`)).text();
+    // The raw sequence must not survive anywhere: inside #poll-data it would flip the
+    // HTML tokenizer into script-data-escaped state and swallow the rest of the page.
+    expect(body).not.toContain(evil);
+    // ...so everything after the JSON block is still parsed as markup.
+    expect(body).toContain('src="/grid.js"');
+    // ...and the name still shows up, HTML-escaped, in the responders list.
+    expect(body).toContain('&lt;!--&lt;script&gt;');
+  });
+
   it('returns 400 with a message for unusable paint', async () => {
     const { app, poll } = await setup();
     const res = await app.request(`/p/${poll.rkey}/respond`, {

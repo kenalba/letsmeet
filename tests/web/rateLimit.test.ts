@@ -14,6 +14,13 @@ describe('TokenBucket', () => {
     expect(tb.allow('ip1', 0)).toBe(true);
     expect(tb.allow('ip2', 0)).toBe(true);
   });
+  it('caps tracked keys so attacker-rotated keys cannot grow state without bound', () => {
+    const tb = new TokenBucket(3, 0.1);
+    for (let i = 0; i < 10_001; i++) tb.allow(`ip${i}`, 0);
+    expect(tb.size).toBe(10_000);
+    expect(tb.allow('ip10000', 0)).toBe(true); // still functional after eviction
+    expect(tb.size).toBe(10_000);
+  });
   it('refills over time up to capacity', () => {
     const tb = new TokenBucket(2, 0.1); // one token per 10s
     tb.allow('ip1', 0); tb.allow('ip1', 0);

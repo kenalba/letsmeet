@@ -14,12 +14,12 @@ import { buildIcs } from '../../core/ics.js';
 import { TokenBucket } from '../rateLimit.js';
 import { landingPage, createFormPage, pollPage, decidedPage, tombstonePage } from '../views.js';
 
-const guestLimiter = new TokenBucket(10, 0.1);
-
 export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
 ): Hono {
   const app = new Hono();
+  // Per-app, not module-global: two servers in one process must not share a budget.
+  const guestLimiter = new TokenBucket(10, 0.1);
 
   app.get('/', async (c) => c.html(landingPage(await getSessionDid(c, env.COOKIE_SECRET))));
 
@@ -94,14 +94,18 @@ export function pollRoutes(
   app.get('/p/:rkey/e/:token', (c) => renderPoll(c, c.req.param('rkey'), c.req.param('token')));
 
   app.post('/p/:rkey/respond', async (c) => {
-    const ip = c.req.header('x-forwarded-for') ?? 'local';
+    // Our own proxy appends the real client as the last hop, so a client-supplied
+    // prefix cannot rotate bucket keys to escape the limit.
+    const xff = c.req.header('x-forwarded-for');
+    const ip = xff ? xff.split(',').pop()!.trim() : 'local';
     if (!guestLimiter.allow(ip, deps.now().getTime())) {
       return c.json({ error: 'Too many submissions — try again in a minute.' }, 429);
     }
-    const body = (await c.req.json()) as {
+    const body = (await c.req.json().catch(() => null)) as {
       name?: string; available?: Interval[]; ifNeedBe?: Interval[];
       timezone?: string; note?: string; editToken?: string;
-    };
+    } | null;
+    if (!body) return c.json({ error: 'Malformed request body.' }, 400);
     try {
       const out = await submitGuestResponse(deps, c.req.param('rkey'), {
         name: String(body.name ?? '').trim() || 'Guest',
@@ -120,9 +124,10 @@ export function pollRoutes(
   app.post('/p/:rkey/respond-auth', async (c) => {
     const did = await getSessionDid(c, env.COOKIE_SECRET);
     if (!did) return c.json({ error: 'sign in first' }, 401);
-    const body = (await c.req.json()) as {
+    const body = (await c.req.json().catch(() => null)) as {
       available?: Interval[]; ifNeedBe?: Interval[]; timezone?: string; note?: string;
-    };
+    } | null;
+    if (!body) return c.json({ error: 'Malformed request body.' }, 400);
     try {
       await submitAccountResponse(deps, did, c.req.param('rkey'), {
         available: body.available ?? [], ifNeedBe: body.ifNeedBe,
