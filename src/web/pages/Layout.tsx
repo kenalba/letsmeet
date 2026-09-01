@@ -40,10 +40,10 @@ const THEME_TOGGLE = "(function(){var b=document.getElementById('theme-toggle');
   + "function apply(t){var r=document.documentElement;"
   + "if(t==='system'){delete r.dataset.theme}else{r.dataset.theme=t}"
   + "b.textContent='Theme: '+t.charAt(0).toUpperCase()+t.slice(1)}"
-  + "apply(read());"
-  + "b.addEventListener('click',function(){var t=order[(order.indexOf(read())+1)%order.length];"
-  + "try{if(t==='system'){localStorage.removeItem('theme')}else{localStorage.setItem('theme',t)}}"
-  + "catch(e){}apply(t)})})()";
+  + "var cur=read();apply(cur);"
+  + "b.addEventListener('click',function(){cur=order[(order.indexOf(cur)+1)%order.length];"
+  + "try{if(cur==='system'){localStorage.removeItem('theme')}else{localStorage.setItem('theme',cur)}}"
+  + "catch(e){}apply(cur)})})()";
 
 /**
  * The full document every server-rendered page returns. `scheme-light-dark` is what tells

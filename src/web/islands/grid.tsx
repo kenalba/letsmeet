@@ -127,7 +127,7 @@ function Grid({ data }: { data: PollData }) {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     // Cells now contain spans (the time label and the tally), so the topmost element under
     // the pointer is usually one of those — climb to the cell that owns it.
-    const cell = el instanceof Element ? el.closest<HTMLElement>('[data-slot]') : null;
+    const cell = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
     const key = cell?.dataset.slot;
     if (key) paintTo(key);
   };
@@ -191,15 +191,15 @@ function Grid({ data }: { data: PollData }) {
       <div
         key={key}
         data-slot={key}
-        className={`cell ${mine ?? ''}`}
+        className={cn('cell', mine)}
         // The heatmap tint is the cell's *base*, so it is skipped where the viewer's own
         // paint covers it: an inline background would otherwise beat `.cell.available`'s
         // solid green, and that green has to stay dominant.
+        // Text color stays inherited (--card-foreground): it flips with the theme, and it
+        // clears contrast on the tint at every ratio in both palettes — a hardcoded white
+        // did not.
         style={!mine && ratio > 0
-          ? {
-            background: `rgba(43,138,95,${(0.15 + 0.85 * ratio).toFixed(3)})`,
-            color: ratio > 0.55 ? '#fff' : undefined,
-          }
+          ? { background: `rgba(43,138,95,${(0.15 + 0.85 * ratio).toFixed(3)})` }
           : undefined}
         onPointerDown={locked ? undefined : onDown(key)}
         title={title}
