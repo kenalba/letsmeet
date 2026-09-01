@@ -16,4 +16,10 @@ export interface Deps {
   now(): Date;
   /** Override the PDS revalidation window (ms); tests set 0 to force live reads. */
   revalidateTtlMs?: number;
+  /**
+   * The handle a DID's document declares, or null if it has none or cannot be read. Used
+   * to name a responder whose handle was not captured when they answered; absent in fake
+   * mode, where responders are shown by DID.
+   */
+  resolveHandle?(did: string): Promise<string | null>;
 }

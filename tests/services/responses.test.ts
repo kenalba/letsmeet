@@ -177,7 +177,7 @@ describe('submitAccountResponse', () => {
   it('adds the participant and clears pending after a successful write', async () => {
     const { deps, poll } = await setup();
     await submitAccountResponse(deps, 'did:plc:sam', poll.rkey, { available: PAINT });
-    expect(listParticipants(deps.db, poll.rkey)).toContain('did:plc:sam');
+    expect(listParticipants(deps.db, poll.rkey).map((p) => p.did)).toContain('did:plc:sam');
     const cache = listResponseCache(deps.db, poll.rkey).find((r) => r.key === 'did:plc:sam');
     expect(cache?.pending).toBe(false);
   });

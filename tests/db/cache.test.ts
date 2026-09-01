@@ -1,3 +1,7 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import {
@@ -52,6 +56,30 @@ describe('participants', () => {
     const db = openDb(':memory:');
     addParticipant(db, '3kpoll', 'did:plc:sam');
     addParticipant(db, '3kpoll', 'did:plc:sam');
-    expect(listParticipants(db, '3kpoll')).toEqual(['did:plc:sam']);
+    expect(listParticipants(db, '3kpoll')).toEqual([{ did: 'did:plc:sam', handle: null }]);
+  });
+
+  it('records a handle and keeps the last known one when a later write has none', () => {
+    const db = openDb(':memory:');
+    addParticipant(db, '3kpoll', 'did:plc:sam');
+    addParticipant(db, '3kpoll', 'did:plc:sam', 'sam.example');
+    addParticipant(db, '3kpoll', 'did:plc:sam', null);
+    expect(listParticipants(db, '3kpoll')).toEqual([{ did: 'did:plc:sam', handle: 'sam.example' }]);
+    addParticipant(db, '3kpoll', 'did:plc:sam', 'sam.moved');
+    expect(listParticipants(db, '3kpoll')[0].handle).toBe('sam.moved');
+  });
+
+  it('adds the handle column to a database created before it existed', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'letsmeet-')), 'old.db');
+    const old = new Database(path);
+    old.exec('CREATE TABLE participant (poll_rkey TEXT NOT NULL, did TEXT NOT NULL, PRIMARY KEY (poll_rkey, did))');
+    old.prepare('INSERT INTO participant VALUES (?, ?)').run('3kpoll', 'did:plc:sam');
+    old.close();
+    const db = openDb(path);
+    expect(listParticipants(db, '3kpoll')).toEqual([{ did: 'did:plc:sam', handle: null }]);
+    addParticipant(db, '3kpoll', 'did:plc:sam', 'sam.example');
+    expect(listParticipants(db, '3kpoll')[0].handle).toBe('sam.example');
+    // Opening again must not trip over the column it already added.
+    expect(() => openDb(path)).not.toThrow();
   });
 });

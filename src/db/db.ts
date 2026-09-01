@@ -23,12 +23,21 @@ CREATE TABLE IF NOT EXISTS response_cache (
   record_json TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL, PRIMARY KEY (poll_rkey, source, key));
 CREATE TABLE IF NOT EXISTS participant (
-  poll_rkey TEXT NOT NULL, did TEXT NOT NULL, PRIMARY KEY (poll_rkey, did));
+  poll_rkey TEXT NOT NULL, did TEXT NOT NULL, handle TEXT, PRIMARY KEY (poll_rkey, did));
 CREATE TABLE IF NOT EXISTS web_session (
   sid TEXT PRIMARY KEY, did TEXT NOT NULL, handle TEXT,
   created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS web_session_did ON web_session (did);
 `;
+
+/**
+ * Columns added after a table first shipped. `CREATE TABLE IF NOT EXISTS` leaves an
+ * existing table alone, so a deployed database only gains these here — each is applied
+ * once, when `table_info` shows the column missing.
+ */
+const ADDED_COLUMNS: Array<{ table: string; column: string; ddl: string }> = [
+  { table: 'participant', column: 'handle', ddl: 'ALTER TABLE participant ADD COLUMN handle TEXT' },
+];
 
 export type { Database };
 
@@ -36,5 +45,9 @@ export function openDb(path: string): Database.Database {
   const db = new Database(path);
   if (path !== ':memory:') db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  for (const { table, column, ddl } of ADDED_COLUMNS) {
+    const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) db.exec(ddl);
+  }
   return db;
 }

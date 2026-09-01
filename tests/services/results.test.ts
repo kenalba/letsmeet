@@ -68,6 +68,37 @@ describe('getResults', () => {
     expect(results?.responses).toHaveLength(1);
   });
 
+  it('labels an account response with the handle it was submitted under', async () => {
+    const { deps, poll } = await setup();
+    await submitAccountResponse(deps, 'did:plc:ana', poll.rkey, {
+      available: PAINT, handle: 'ana.example',
+    });
+    const results = await getResults(deps, poll.rkey);
+    expect(results?.responses.map((r) => r.who)).toEqual(['ana.example']);
+    expect(results?.ranked[0].available).toEqual(['ana.example']);
+  });
+
+  it('resolves a missing handle on revalidation, once, and keeps the DID when it cannot', async () => {
+    const { deps, poll } = await setup();
+    await submitAccountResponse(deps, 'did:plc:ana', poll.rkey, { available: PAINT });
+    await submitAccountResponse(deps, 'did:plc:bob', poll.rkey, { available: PAINT });
+    const asked: string[] = [];
+    const live: Deps = {
+      ...deps, revalidateTtlMs: 0,
+      resolveHandle: async (did) => {
+        asked.push(did);
+        return did === 'did:plc:ana' ? 'ana.example' : null;
+      },
+    };
+    const who = async () => (await getResults(live, poll.rkey))?.responses.map((r) => r.who).sort();
+    expect(await who()).toEqual(['ana.example', 'did:plc:bob']);
+    // The found handle is stored, so the next read does not ask for it again; the one that
+    // failed is asked for again.
+    expect(await who()).toEqual(['ana.example', 'did:plc:bob']);
+    expect(asked.filter((d) => d === 'did:plc:ana')).toHaveLength(1);
+    expect(asked.filter((d) => d === 'did:plc:bob')).toHaveLength(2);
+  });
+
   it('returns null for an unknown poll', async () => {
     const { deps } = await setup();
     expect(await getResults(deps, 'nope')).toBeNull();

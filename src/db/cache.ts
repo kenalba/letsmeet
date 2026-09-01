@@ -86,12 +86,26 @@ export function countResponses(db: Database.Database, pollRkey: string): number 
   return r.n;
 }
 
-export function addParticipant(db: Database.Database, pollRkey: string, did: string): void {
-  db.prepare('INSERT OR IGNORE INTO participant (poll_rkey, did) VALUES (?, ?)').run(pollRkey, did);
+export interface Participant {
+  did: string;
+  /** The handle to show for this DID, or null when none has been learned yet. */
+  handle: string | null;
 }
 
-export function listParticipants(db: Database.Database, pollRkey: string): string[] {
-  const rows = db.prepare('SELECT did FROM participant WHERE poll_rkey = ? ORDER BY did')
-    .all(pollRkey) as Array<{ did: string }>;
-  return rows.map((r) => r.did);
+/**
+ * Record that `did` answered this poll from their own repo. A handle, when known, is
+ * kept for display; a write without one never erases a handle learned earlier.
+ */
+export function addParticipant(
+  db: Database.Database, pollRkey: string, did: string, handle: string | null = null,
+): void {
+  db.prepare(
+    `INSERT INTO participant (poll_rkey, did, handle) VALUES (?, ?, ?)
+     ON CONFLICT (poll_rkey, did) DO UPDATE SET handle = COALESCE(excluded.handle, participant.handle)`,
+  ).run(pollRkey, did, handle);
+}
+
+export function listParticipants(db: Database.Database, pollRkey: string): Participant[] {
+  return db.prepare('SELECT did, handle FROM participant WHERE poll_rkey = ? ORDER BY did')
+    .all(pollRkey) as Participant[];
 }

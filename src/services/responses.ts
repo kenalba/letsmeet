@@ -124,9 +124,17 @@ export async function submitGuestResponse(
   return { editToken, pending };
 }
 
+/**
+ * `handle` is the responder's handle as their session knows it — the name the results
+ * show for this DID. It is display data, not identity: the record lives in `did`'s repo
+ * regardless, and a missing handle is filled in later from the DID document (getResults).
+ */
 export async function submitAccountResponse(
   deps: Deps, did: string, pollRkey: string,
-  input: { available: Interval[]; ifNeedBe?: Interval[]; timezone?: string; note?: string },
+  input: {
+    available: Interval[]; ifNeedBe?: Interval[]; timezone?: string; note?: string;
+    handle?: string | null;
+  },
 ): Promise<void> {
   const poll = await loadOpenPoll(deps, pollRkey);
   const snapped = snapPaint(poll, input.available, input.ifNeedBe);
@@ -140,7 +148,7 @@ export async function submitAccountResponse(
   const record = buildFromPaint(poll, snapped, { timezone: input.timezone, note: input.note });
   const writer = await deps.writerFor(did);
   await writer.putRecord(did, RESPONSE_NSID, rkey, record);
-  addParticipant(deps.db, pollRkey, did);
+  addParticipant(deps.db, pollRkey, did, input.handle ?? null);
   upsertResponseCache(deps.db, pollRkey, 'account', did, record, false);
 }
 

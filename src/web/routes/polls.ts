@@ -199,8 +199,9 @@ export function pollRoutes(
   });
 
   app.post('/p/:rkey/respond-auth', async (c) => {
-    const did = await sessionDid(c);
-    if (!did) return c.json({ error: 'sign in first' }, 401);
+    const who = await readSession(c, session, deps.now().getTime());
+    if (!who) return c.json({ error: 'sign in first' }, 401);
+    const did = who.did;
     if (!accountLimiter.allow(did, deps.now().getTime())) return c.json(tooMany, 429);
     const body = (await c.req.json().catch(() => null)) as {
       available?: Interval[]; ifNeedBe?: Interval[]; timezone?: string; note?: string;
@@ -209,7 +210,7 @@ export function pollRoutes(
     try {
       await submitAccountResponse(deps, did, c.req.param('rkey'), {
         available: body.available ?? [], ifNeedBe: body.ifNeedBe,
-        timezone: body.timezone, note: body.note,
+        timezone: body.timezone, note: body.note, handle: who.handle,
       });
       return c.json({ ok: true });
     } catch (err) {

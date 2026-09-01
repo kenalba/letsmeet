@@ -144,7 +144,10 @@ export function createServer(
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';
-      await startSession(c, session, did, null, deps.now().getTime());
+      // Optional, same shape the OAuth callback accepts; anything else signs in nameless.
+      const handle = c.req.query('handle');
+      const shown = handle && /^[a-zA-Z0-9.-]{1,253}$/.test(handle) ? handle : null;
+      await startSession(c, session, did, shown, deps.now().getTime());
       return c.redirect('/');
     });
   }

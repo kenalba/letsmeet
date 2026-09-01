@@ -5,7 +5,7 @@ import { rankSlots, type RankedSlot, type ResponseSummary } from '../core/rankin
 import { validateResponseRecord, RESPONSE_NSID, type ResponseRecord } from '../atproto/records.js';
 import { getPollWithRevalidate } from './polls.js';
 import {
-  listParticipants, listResponseCache, upsertResponseCache, type CachedPoll,
+  addParticipant, listParticipants, listResponseCache, upsertResponseCache, type CachedPoll,
 } from '../db/cache.js';
 import { freshnessFor, mapLimit } from './freshness.js';
 
@@ -33,8 +33,14 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
   if (!fresh.isFresh(key, nowMs)) {
     fresh.mark(key, nowMs);
     const participants = listParticipants(deps.db, pollRkey);
-    await mapLimit(participants, FANOUT_CONCURRENCY, Date.now() + FANOUT_BUDGET_MS, async (did) => {
+    await mapLimit(participants, FANOUT_CONCURRENCY, Date.now() + FANOUT_BUDGET_MS, async ({ did, handle }) => {
       try {
+        // A participant recorded before their handle was captured (or whose session had
+        // none) is named from their DID document, once found; until then the DID shows.
+        if (!handle && deps.resolveHandle) {
+          const found = await deps.resolveHandle(did);
+          if (found) addParticipant(deps.db, pollRkey, did, found);
+        }
         const recs = await deps.reader.listRecords(did, RESPONSE_NSID);
         const mine = recs.find((r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri);
         if (mine) {
@@ -56,9 +62,13 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
     });
   }
 
+  // An account response is keyed by DID; people are shown the handle when one is known.
+  const handles = new Map(listParticipants(deps.db, pollRkey).map((p) => [p.did, p.handle]));
   const rows = listResponseCache(deps.db, pollRkey);
   const responses: ResponseSummary[] = rows.map((row) => ({
-    who: row.source === 'guest' ? row.record.guest?.name ?? 'Guest' : row.key,
+    who: row.source === 'guest'
+      ? row.record.guest?.name ?? 'Guest'
+      : handles.get(row.key) ?? row.key,
     pending: row.pending || undefined,
     available: row.record.available,
     ifNeedBe: row.record.ifNeedBe ?? [],

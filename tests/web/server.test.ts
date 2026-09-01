@@ -517,6 +517,22 @@ describe('request hardening', () => {
     return res.headers.get('set-cookie')!.split(';')[0];
   };
 
+  it('names a signed-in responder by the handle from their session, not their DID', async () => {
+    const { deps, poll } = await setup();
+    const dev = devServer(deps);
+    const login = await dev.request('/dev/login?did=did:plc:sam&handle=sam.example');
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const posted = await dev.request(`/p/${poll.rkey}/respond-auth`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ available: PAINT }),
+    });
+    expect(posted.status).toBe(200);
+    const body = await (await dev.request(`/p/${poll.rkey}`)).text();
+    expect(body).toContain('sam.example');
+    expect(body).not.toContain('did:plc:sam');
+  });
+
   it('sends a CSP whose nonce matches every inline script, plus the other headers', async () => {
     const { app, poll } = await setup();
     for (const path of ['/', `/p/${poll.rkey}`, '/login']) {
