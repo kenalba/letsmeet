@@ -143,6 +143,8 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   await guest.goto(pollUrl);
   const cells = guest.locator('#grid-root [data-slot]');
   await expect(cells.first()).toBeVisible();
+  // Nothing painted, nothing to save.
+  await expect(guest.locator('button.save')).toBeDisabled();
   const a = (await cells.nth(0).boundingBox())!;
   const b = (await cells.nth(1).boundingBox())!;
   if (projectContext().hasTouch) {
@@ -155,7 +157,10 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
     await guest.mouse.up();
   }
   await expect(guest.locator('.cell.available')).toHaveCount(2);
+  // Painted but nameless is still not saveable for a guest; the name completes it.
+  await expect(guest.locator('button.save')).toBeDisabled();
   await guest.fill('.name input', 'Sam');
+  await expect(guest.locator('button.save')).toBeEnabled();
   await guest.click('button.save');
   await expect(guest.getByText('keep this link')).toBeVisible();
   await guestContext.close();
@@ -191,6 +196,10 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   await guest.goto(editLink!);
   await expect(guest.locator('.name input')).toHaveValue('Ana');
   await expect(guest.locator('.cell.available')).toHaveCount(1);
+  // Reopened unchanged: the save button waits for an actual edit.
+  await expect(guest.locator('button.save')).toBeDisabled();
+  await guest.locator('#grid-root [data-slot]').nth(1).click();
+  await expect(guest.locator('button.save')).toBeEnabled();
   await guestContext.close();
 });
 

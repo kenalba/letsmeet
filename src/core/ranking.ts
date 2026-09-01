@@ -2,6 +2,9 @@ import type { Interval } from './intervals.js';
 
 export interface ResponseSummary {
   who: string;
+  /** Where the response lives; `key` is the DID (account) or record rkey (guest). */
+  source?: 'guest' | 'account';
+  key?: string;
   pending?: boolean;
   available: Interval[];
   ifNeedBe: Interval[];

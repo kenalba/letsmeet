@@ -6,6 +6,7 @@ import { scriptJson } from '../scriptJson.js';
 import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { buttonVariants } from '../ui/button.js';
+import { cn } from '../lib/cn.js';
 import { Card, CardHeader, CardContent } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
@@ -20,6 +21,8 @@ export interface PollPageData {
   viewerDid: string | null;
   isHost: boolean;
   prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
+  /** The viewer's own name in `results`, when they have answered before. */
+  self?: string;
   editToken?: string;
   /** The site origin, for the link-preview URL; absent in tests that don't care. */
   publicUrl?: string;
@@ -53,6 +56,7 @@ export function PollPage(data: PollPageData) {
     time: data.time,
     slots: data.slots,
     prefill: data.prefill,
+    self: data.self,
     editToken: data.editToken,
     viewerDid: data.viewerDid,
     timezone: zone,
@@ -127,10 +131,42 @@ export function PollPage(data: PollPageData) {
           />
         </div>
 
-        {/* Host-only: guests get the whole story from the grid itself (the heatmap, the
-            tallies, and the hover titles with names). What the grid cannot carry is the
-            host's side — picking the final slot, seeing who is *missing* from each top
-            slot, and which guest responses are still syncing to their PDS. */}
+        {/* Who has answered, as bracketed chips: guests by the name they gave, accounts
+            by handle with the `>` prompt, linking to their profile. Everyone sees this —
+            the same names are already in every cell's hover title. */}
+        {responses.length > 0 ? (
+          <p className="responders pixel-label flex flex-wrap items-baseline gap-x-3">
+            <span className="text-muted-foreground">
+              {responses.length === 1 ? '1 response:' : `${responses.length} responses:`}
+            </span>
+            {responses.map((r, i) => (
+              <span
+                key={`${r.who}-${i}`}
+                className={cn('chip text-muted-foreground', r.pending && 'pending opacity-60')}
+                title={r.pending ? 'still syncing to the host’s repo' : undefined}
+              >
+                [
+                {r.source === 'account' ? (
+                  <a
+                    href={`https://bsky.app/profile/${r.who}`}
+                    className="prompt text-foreground no-underline hover:text-primary"
+                    rel="noopener"
+                  >
+                    {r.who}
+                  </a>
+                ) : (
+                  <span className="text-foreground">{r.who}</span>
+                )}
+                {r.pending ? ' (syncing)' : null}
+                ]
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        {/* Host-only: what the grid cannot carry is the host's side — picking the final
+            slot, seeing who is *missing* from each top slot, and which guest responses
+            are still syncing to their PDS. */}
         {data.isHost ? (
           <Card className="results">
             <CardHeader>
@@ -159,21 +195,6 @@ export function PollPage(data: PollPageData) {
                     </li>
                   ))}
                 </ol>
-              ) : null}
-              {responses.length > 0 ? (
-                <>
-                  <h3 className="text-sm font-semibold tracking-tight">responses</h3>
-                  <ul className="responders text-sm">
-                    {responses.map((r, i) => (
-                      <li
-                        key={`${r.who}-${i}`}
-                        className={r.pending ? 'py-0.5 pending opacity-60' : 'py-0.5'}
-                      >
-                        {r.pending ? `${r.who} (syncing)` : r.who}
-                      </li>
-                    ))}
-                  </ul>
-                </>
               ) : null}
             </CardContent>
           </Card>

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
-  type PaintMap, type PaintMode,
+  paintEquals, liveTally, paintEdges,
+  type PaintMap, type PaintMode, type SlotCount,
 } from '../../core/gridModel.js';
 import type { Interval } from '../../core/intervals.js';
 import { cn } from '../lib/cn.js';
@@ -11,12 +12,6 @@ import { cn } from '../lib/cn.js';
 // data-slot="button", which would land inside #grid-root and start matching the same
 // `[data-slot]` selector the e2e grid-cell locator uses to find painted cells.
 import { buttonVariants } from '../ui/button.js';
-
-/** Names, per slot, of who can make it — mirrors the server's `RankedSlot`. */
-interface SlotCount {
-  available: string[];
-  ifNeedBe: string[];
-}
 
 interface PollData {
   rkey: string;
@@ -26,6 +21,8 @@ interface PollData {
   viewerDid: string | null;
   editToken?: string;
   prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
+  /** The viewer's own name inside `counts`, when they have answered before. */
+  self?: string;
   counts?: Record<string, SlotCount>;
   /** Poll is no longer active: show the same grid, but painting is off (the server would
    *  refuse the response anyway — see `services/responses.ts`). */
@@ -78,27 +75,34 @@ function minutesInZone(iso: string, zone: string): number {
 }
 
 /**
- * How many people have answered, for the heatmap denominator: the distinct names appearing
- * anywhere in `counts`. The server only ships per-slot name lists, so someone who responded
- * without painting a single slot is invisible here and is not counted — they also tint no
- * cell, so the ratio stays within [0,1] and the darkest cell still means "everyone we can
- * see said yes". Duplicate display names collapse into one responder.
+ * How many *other* people have answered, for the heatmap denominator: the distinct names
+ * appearing anywhere in `counts`, minus the viewer's own. The server only ships per-slot
+ * name lists, so someone who responded without painting a single slot is invisible here
+ * and is not counted — they also tint no cell, so the ratio stays within [0,1] and the
+ * darkest cell still means "everyone we can see said yes". Duplicate display names
+ * collapse into one responder.
  */
-function countResponders(counts: Record<string, SlotCount> | undefined): number {
+function countOthers(counts: Record<string, SlotCount> | undefined, self?: string): number {
   const names = new Set<string>();
   for (const c of Object.values(counts ?? {})) {
     for (const n of c.available) names.add(n);
     for (const n of c.ifNeedBe) names.add(n);
   }
+  if (self) names.delete(self);
   return names.size;
 }
 
+const EDGE = 3;
+const EDGE_SHADOW = {
+  top: `inset 0 ${EDGE}px 0 0`, bottom: `inset 0 -${EDGE}px 0 0`,
+  left: `inset ${EDGE}px 0 0 0`, right: `inset -${EDGE}px 0 0 0`,
+} as const;
+
 /**
- * One grid, not two. Every cell is tinted by how many people can make that slot (the old
- * read-only "Group" view), and the viewer's own paint sits on top of that tint as a
- * shape — solid green for available, hatched for if-need-be, both ringed in the page
- * background so they read as *yours* against a similarly-dark heatmap tint. The per-cell
- * tally and the hover title carry the group detail that the overlay covers up.
+ * One grid, not two. Every cell is tinted by how many people can make that slot, counting
+ * the viewer's own unsaved paint as they go, and the viewer's paint is drawn as an outline
+ * around each painted run (green for available, amber for if-need-be, which also carries a
+ * faint hatch) rather than a fill — so the tint and the tally stay readable inside it.
  */
 function Grid({ data }: { data: PollData }) {
   const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || data.timezone;
@@ -108,10 +112,13 @@ function Grid({ data }: { data: PollData }) {
   const [status, setStatus] = useState<string | null>(null);
   const [editLink, setEditLink] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [painted, setPainted] = useState<PaintMap>(() =>
+  // What the server already has for this viewer; the save button lights up only when the
+  // grid (or a guest's name) differs from it.
+  const saved = useMemo<PaintMap>(() =>
     data.prefill
       ? intervalsToPaint(data.prefill.available, data.prefill.ifNeedBe, data.slots)
-      : new Map());
+      : new Map(), []);
+  const [painted, setPainted] = useState<PaintMap>(saved);
 
   // Columns are bucketed by calendar date *in the displayed zone*, so the whole geometry —
   // not just the labels — is rebuilt when the zone toggles.
@@ -130,9 +137,19 @@ function Grid({ data }: { data: PollData }) {
     }
     return [...byMin.entries()].sort((a, b) => a[0] - b[0]);
   }, [geom, zone]);
+  // Each column's slot key per axis row, so a cell can find its neighbours for the outline.
+  const colMaps = useMemo(
+    () => geom.dates.map((d) => new Map(geom.columns.get(d)!.map((k) => [minutesInZone(k, zone), k]))),
+    [geom, zone],
+  );
   const slotByKey = useMemo(() => new Map(data.slots.map((s) => [s.start, s])), []);
-  const responders = useMemo(() => countResponders(data.counts), []);
+  const others = useMemo(() => countOthers(data.counts, data.self), []);
+  // The viewer counts as a responder the moment they have painted anything.
+  const responders = others + (painted.size > 0 ? 1 : 0);
   const locked = data.readonly === true;
+  const dirty = !paintEquals(painted, saved)
+    || name.trim() !== (data.prefill?.name ?? '').trim();
+  const canSave = dirty && painted.size > 0 && (!!data.viewerDid || !!name.trim());
 
   const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap } | null>(null);
 
@@ -215,11 +232,13 @@ function Grid({ data }: { data: PollData }) {
 
   const canSwitchZone = viewerZone !== data.timezone;
 
-  const cell = (key: string) => {
+  const cell = (key: string, ci: number, ri: number) => {
     const end = slotByKey.get(key)!.end;
     const range = `${fmtTime(key, zone)}–${fmtTime(end, zone)}`;
-    const c = data.counts?.[key] ?? NO_COUNT;
     const mine = painted.get(key);
+    // Everyone else's saved answer plus the viewer's current paint, so the numbers keep up
+    // with the brush: "with you, 3 of 4 can make this".
+    const c = liveTally(data.counts?.[key] ?? NO_COUNT, data.self, mine);
     const ratio = responders > 0 ? c.available.length / responders : 0;
     const tally = c.available.length + c.ifNeedBe.length;
     const title = responders === 0 ? range : [
@@ -227,22 +246,28 @@ function Grid({ data }: { data: PollData }) {
       `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`,
       c.ifNeedBe.length ? `If need be: ${c.ifNeedBe.join(', ')}` : '',
     ].filter(Boolean).join('\n');
+    const edges = mine ? paintEdges(painted, key, {
+      top: colMaps[ci].get(rows[ri - 1]?.[0]), bottom: colMaps[ci].get(rows[ri + 1]?.[0]),
+      left: colMaps[ci - 1]?.get(rows[ri][0]), right: colMaps[ci + 1]?.get(rows[ri][0]),
+    }) : [];
+    const edgeColor = mine === 'available' ? 'var(--primary)' : 'var(--lol-bright)';
     return (
       <div
         key={key}
         data-slot={key}
         className={cn('cell', mine)}
-        // The heatmap tint is the cell's *base*, so it is skipped where the viewer's own
-        // paint covers it: an inline background would otherwise beat `.cell.available`'s
-        // solid green, and that green has to stay dominant.
         // Blue, not the brand green: the group's heat and the viewer's own picks must never
         // share a hue, and blue-vs-green also survives the common red-green colorblindness.
-        // Text color stays inherited (--card-foreground): it flips with the theme, and it
-        // clears contrast on the tint at every ratio in both palettes — a hardcoded white
-        // did not.
-        style={!mine && ratio > 0
-          ? { background: `rgba(59,130,246,${(0.15 + 0.85 * ratio).toFixed(3)})` }
-          : undefined}
+        // Only the colour is set inline, so the stylesheet's hatch image for if-need-be
+        // still layers over it. Text color stays inherited (--card-foreground): it flips
+        // with the theme, and it clears contrast on the tint at every ratio in both
+        // palettes — a hardcoded white did not.
+        style={{
+          backgroundColor: ratio > 0 ? `rgba(59,130,246,${(0.15 + 0.85 * ratio).toFixed(3)})` : undefined,
+          boxShadow: edges.length
+            ? edges.map((side) => `${EDGE_SHADOW[side]} ${edgeColor}`).join(', ')
+            : undefined,
+        }}
         onPointerDown={locked ? undefined : onDown(key)}
         title={title}
       >
@@ -301,21 +326,21 @@ function Grid({ data }: { data: PollData }) {
             <div key={min} className="axis-label">{fmtAxisTime(sample, zone)}</div>
           ))}
         </div>
-        {geom.dates.map((d) => {
-          const byMin = new Map(geom.columns.get(d)!.map((k) => [minutesInZone(k, zone), k]));
+        {geom.dates.map((d, ci) => {
+          const byMin = colMaps[ci];
           return (
             <div className="col" key={d}>
               <div className="col-head">
                 <span className="dow">{fmtDow(d)}</span>
                 <span className="dom">{fmtDom(d)}</span>
               </div>
-              {rows.map(([min]) => {
+              {rows.map(([min], ri) => {
                 const key = byMin.get(min);
                 // No slot at this wall-clock time on this day (DST edge): hold the row
                 // open with an unpaintable blank so the columns stay aligned. No
                 // `data-slot`, so neither the e2e locator nor a drag stroke can hit it.
                 return key
-                  ? cell(key)
+                  ? cell(key, ci, ri)
                   : <div key={`gap-${min}`} className="cell gap" aria-hidden="true" />;
               })}
             </div>
@@ -326,7 +351,9 @@ function Grid({ data }: { data: PollData }) {
         <p className="hint">
           {`blue shading counts how many of the ${responders} `
             + `${responders === 1 ? 'response' : 'responses'} can make each slot`}
-          {locked ? '.' : '; green is your own selection.'}
+          {locked
+            ? '.'
+            : ', your unsaved paint included. the green outline is you; amber hatching is your if-need-be.'}
         </p>
       )}
       {!data.viewerDid && !locked && (
@@ -341,7 +368,7 @@ function Grid({ data }: { data: PollData }) {
           className={cn(buttonVariants({ variant: 'default' }), 'save')}
           type="button"
           onClick={submit}
-          disabled={saving || (!data.viewerDid && !name.trim())}
+          disabled={saving || !canSave}
         >save availability</button>
       )}
       {status && <p className="status" role="status">{status}</p>}

@@ -194,7 +194,9 @@ describe('server', () => {
 
     const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
     expect(body).toContain('class="responders');
-    expect(body).toMatch(/class="responders[^"]*">\s*<li[^>]*>Sam</);
+    // Chips: the name in brackets, and it sits above the host's card.
+    expect(body).toMatch(/class="responders[^"]*">[\s\S]*?\[<span[^>]*>Sam<\/span>\]/);
+    expect(body.indexOf('class="responders')).toBeLessThan(body.indexOf('pick the winner'));
     expect(body).toContain(`action="/p/${poll.rkey}/finalize"`);
     expect(body).toContain('pick this time');
     expect(body).toContain(
@@ -252,8 +254,9 @@ describe('server', () => {
     // ...so everything after the JSON block is still parsed as markup.
     expect(body).toContain('src="/assets/grid.js"');
 
-    // The responders list is host-only now, so the HTML-escaped rendering of the name is
-    // asserted on the host's view of the page.
+    // The name is rendered for everyone (the chips) and must come out escaped in both
+    // the guest's and the host's view.
+    expect(body).toContain('&lt;!--&lt;script&gt;');
     const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
     const cookie = login.headers.get('set-cookie')!.split(';')[0];
     const hostBody = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
@@ -533,6 +536,12 @@ describe('request hardening', () => {
     const body = await (await dev.request(`/p/${poll.rkey}`)).text();
     expect(body).toContain('sam.example');
     expect(body).not.toContain('did:plc:sam');
+    // An account chip carries the prompt and links to the profile.
+    expect(body).toMatch(/\[<a href="https:\/\/bsky\.app\/profile\/sam\.example"[^>]*class="prompt[^"]*"[^>]*>sam\.example<\/a>\]/);
+    // Their own view tells the grid which name in the counts is theirs.
+    const own = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(own).toContain('"self":"sam.example"');
+    expect(body).not.toContain('"self"');
   });
 
   it('sends a CSP whose nonce matches every inline script, plus the other headers', async () => {

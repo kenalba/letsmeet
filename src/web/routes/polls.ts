@@ -133,6 +133,9 @@ export function pollRoutes(
       }));
     }
     let prefill;
+    // The viewer's own name in the results, when they have answered before: the grid
+    // subtracts that answer from the tallies it shows while they repaint.
+    let self: string | undefined;
     if (editToken) {
       const respRkey = lookupEditSecret(deps.db, results.poll.uri, editToken);
       const row = respRkey
@@ -144,6 +147,7 @@ export function pollRoutes(
           ifNeedBe: row.record.ifNeedBe ?? [],
           name: row.record.guest?.name,
         };
+        self = results.responses.find((r) => r.source === 'guest' && r.key === respRkey)?.who;
       }
     } else if (viewerDid) {
       // A signed-in responder needs no edit link: their own row is keyed by their DID, so
@@ -153,6 +157,7 @@ export function pollRoutes(
         .find((r) => r.source === 'account' && r.key === viewerDid);
       if (row) {
         prefill = { available: row.record.available, ifNeedBe: row.record.ifNeedBe ?? [] };
+        self = results.responses.find((r) => r.source === 'account' && r.key === viewerDid)?.who;
       }
     }
     const isHost = viewerDid === results.poll.hostDid;
@@ -167,6 +172,7 @@ export function pollRoutes(
       viewerDid,
       isHost,
       prefill,
+      self,
       editToken,
       pendingCount: isHost ? pendingOutboxCount(deps.db, results.poll.hostDid) : 0,
       publicUrl: env.PUBLIC_URL,

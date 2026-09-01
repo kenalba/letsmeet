@@ -68,3 +68,55 @@ export function intervalsToPaint(
   }
   return p;
 }
+
+/** True when both maps paint exactly the same cells in the same modes. */
+export function paintEquals(a: PaintMap, b: PaintMap): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
+
+/** Names, per slot, of who can make it — the shape the server ships as `counts`. */
+export interface SlotCount {
+  available: string[];
+  ifNeedBe: string[];
+}
+
+/**
+ * A slot's tally as the viewer paints: everyone else's saved answers plus the viewer's
+ * current, unsaved paint (listed as "you"). `self` is the viewer's own name in the saved
+ * counts, if they have answered before; it is dropped so a repaint replaces that answer
+ * rather than doubling it.
+ */
+export function liveTally(
+  count: SlotCount, self: string | undefined, mine: PaintMode | undefined,
+): SlotCount {
+  // Always a copy: the caller's saved counts must survive the push below.
+  const others = (names: string[]) => names.filter((n) => n !== self);
+  const available = others(count.available);
+  const ifNeedBe = others(count.ifNeedBe);
+  if (mine === 'available') available.push('you');
+  if (mine === 'ifNeedBe') ifNeedBe.push('you');
+  return { available, ifNeedBe };
+}
+
+export type Side = 'top' | 'bottom' | 'left' | 'right';
+
+/**
+ * Which sides of a painted cell face something painted differently — nothing, the other
+ * mode, or no cell at all. Those are the edges of the region the cell belongs to, and the
+ * only place the viewer's paint is drawn: an outline around each run of cells, leaving the
+ * heat tint and tally inside untouched. Unpainted cells have no edges.
+ */
+export function paintEdges(
+  painted: PaintMap, key: string,
+  neighbors: { top?: string; bottom?: string; left?: string; right?: string },
+): Side[] {
+  const mine = painted.get(key);
+  if (!mine) return [];
+  const sides: Side[] = ['top', 'bottom', 'left', 'right'];
+  return sides.filter((side) => {
+    const k = neighbors[side];
+    return !k || painted.get(k) !== mine;
+  });
+}

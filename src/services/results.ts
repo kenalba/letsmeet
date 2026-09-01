@@ -69,6 +69,8 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
     who: row.source === 'guest'
       ? row.record.guest?.name ?? 'Guest'
       : handles.get(row.key) ?? row.key,
+    source: row.source,
+    key: row.key,
     pending: row.pending || undefined,
     available: row.record.available,
     ifNeedBe: row.record.ifNeedBe ?? [],

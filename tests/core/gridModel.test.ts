@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
+  paintEquals, liveTally, paintEdges,
   type PaintMap,
 } from '../../src/core/gridModel.js';
 import { materializeSlots } from '../../src/core/slots.js';
@@ -63,5 +64,47 @@ describe('intervalsToPaint', () => {
     expect(p.get(a2)).toBe('available');
     expect(p.get(b1)).toBe('ifNeedBe');
     expect(p.get(b2)).toBeUndefined();
+  });
+});
+
+describe('paintEquals', () => {
+  it('compares cells and modes, ignoring insertion order', () => {
+    const a: PaintMap = new Map([[a1, 'available'], [b1, 'ifNeedBe']]);
+    const b: PaintMap = new Map([[b1, 'ifNeedBe'], [a1, 'available']]);
+    expect(paintEquals(a, b)).toBe(true);
+    expect(paintEquals(a, new Map([[a1, 'available'], [b1, 'available']]))).toBe(false);
+    expect(paintEquals(a, new Map([[a1, 'available']]))).toBe(false);
+    expect(paintEquals(new Map(), new Map())).toBe(true);
+  });
+});
+
+describe('liveTally', () => {
+  const saved = { available: ['Sam', 'Ana'], ifNeedBe: ['Bo'] };
+  it('adds the viewer\'s unsaved paint as "you"', () => {
+    expect(liveTally(saved, undefined, 'available')).toEqual({ available: ['Sam', 'Ana', 'you'], ifNeedBe: ['Bo'] });
+    expect(liveTally(saved, undefined, 'ifNeedBe')).toEqual({ available: ['Sam', 'Ana'], ifNeedBe: ['Bo', 'you'] });
+    expect(liveTally(saved, undefined, undefined)).toEqual(saved);
+  });
+  it('replaces the viewer\'s saved answer instead of doubling it', () => {
+    expect(liveTally(saved, 'Ana', 'available')).toEqual({ available: ['Sam', 'you'], ifNeedBe: ['Bo'] });
+    expect(liveTally(saved, 'Ana', 'ifNeedBe')).toEqual({ available: ['Sam'], ifNeedBe: ['Bo', 'you'] });
+    // Clearing a cell they had painted takes them out of it entirely.
+    expect(liveTally(saved, 'Ana', undefined)).toEqual({ available: ['Sam'], ifNeedBe: ['Bo'] });
+  });
+});
+
+describe('paintEdges', () => {
+  it('traces the boundary of a painted run and nothing inside it', () => {
+    // a1 over a2 in one column: the pair forms one region.
+    const p: PaintMap = new Map([[a1, 'available'], [a2, 'available']]);
+    expect(paintEdges(p, a1, { bottom: a2, right: b1 })).toEqual(['top', 'left', 'right']);
+    expect(paintEdges(p, a2, { top: a1, right: b2 })).toEqual(['bottom', 'left', 'right']);
+  });
+  it('treats the other mode as a different region', () => {
+    const p: PaintMap = new Map([[a1, 'available'], [a2, 'ifNeedBe']]);
+    expect(paintEdges(p, a1, { bottom: a2 })).toEqual(['top', 'bottom', 'left', 'right']);
+  });
+  it('has no edges for an unpainted cell', () => {
+    expect(paintEdges(new Map(), a1, { bottom: a2 })).toEqual([]);
   });
 });
