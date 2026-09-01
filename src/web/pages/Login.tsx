@@ -72,6 +72,11 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
               </a>
               . any account works here. you sign in with its handle.
             </p>
+            <p className="text-sm text-muted-foreground">
+              on the next screen, letsmeet asks only to write its own poll and response
+              records in your account, plus a calendar event when a time is picked. no
+              posting, no reading your stuff, nothing towards other services.
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -1,8 +1,6 @@
 import type { Deps } from '../atproto/types.js';
 import type { SpecificDates } from '../core/slots.js';
-import {
-  buildScheduleRecord, validateScheduleRecord, SCHEDULE_NSID, type ScheduleRecord,
-} from '../atproto/records.js';
+import { buildScheduleRecord, validateScheduleRecord, SCHEDULE_NSID, type ScheduleRecord, EVENT_NSID } from '../atproto/records.js';
 import {
   upsertPollCache, getPollCache, tombstonePoll, countResponses, type CachedPoll,
 } from '../db/cache.js';
@@ -129,7 +127,7 @@ export async function updatePollTime(
   await putUpdated(deps, hostDid, rkey, next);
 }
 
-export const EVENT_NSID = 'community.lexicon.calendar.event';
+export { EVENT_NSID };
 
 export async function finalizePoll(
   deps: Deps, hostDid: string, rkey: string, slot: Interval,

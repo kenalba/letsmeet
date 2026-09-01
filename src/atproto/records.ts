@@ -7,6 +7,8 @@ import type { SpecificDates } from '../core/slots.js';
 
 export const SCHEDULE_NSID = 'lol.letsmeet.poll.schedule';
 export const RESPONSE_NSID = 'lol.letsmeet.poll.response';
+/** The community calendar event filed in the host's repo when a time is picked. */
+export const EVENT_NSID = 'community.lexicon.calendar.event';
 
 export const lexicons = new Lexicons(
   [scheduleLex, responseLex, strongRefLex] as unknown as LexiconDoc[],
