@@ -27,10 +27,10 @@ interface PollData {
   editToken?: string;
   prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
   counts?: Record<string, SlotCount>;
+  /** Poll is no longer active: show the same grid, but painting is off (the server would
+   *  refuse the response anyway — see `services/responses.ts`). */
+  readonly?: boolean;
 }
-
-/** "me" paints your own answer; "group" is a read-only heatmap of everyone's. */
-type View = 'me' | 'group';
 
 const NO_COUNT: SlotCount = { available: [], ifNeedBe: [] };
 
@@ -67,10 +67,16 @@ function countResponders(counts: Record<string, SlotCount> | undefined): number 
   return names.size;
 }
 
+/**
+ * One grid, not two. Every cell is tinted by how many people can make that slot (the old
+ * read-only "Group" view), and the viewer's own paint sits on top of that tint as a
+ * shape — solid green for available, hatched for if-need-be, both ringed in the page
+ * background so they read as *yours* against a similarly-dark heatmap tint. The per-cell
+ * tally and the hover title carry the group detail that the overlay covers up.
+ */
 function Grid({ data }: { data: PollData }) {
   const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || data.timezone;
   const [zone, setZone] = useState(viewerZone);
-  const [view, setView] = useState<View>('me');
   const [mode, setMode] = useState<PaintMode>('available');
   const [name, setName] = useState(data.prefill?.name ?? '');
   const [status, setStatus] = useState<string | null>(null);
@@ -86,6 +92,7 @@ function Grid({ data }: { data: PollData }) {
   const geom = useMemo(() => buildGeom(data.slots, zone), [zone]);
   const slotByKey = useMemo(() => new Map(data.slots.map((s) => [s.start, s])), []);
   const responders = useMemo(() => countResponders(data.counts), []);
+  const locked = data.readonly === true;
 
   const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap } | null>(null);
 
@@ -118,7 +125,10 @@ function Grid({ data }: { data: PollData }) {
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    const key = el instanceof HTMLElement ? el.dataset.slot : undefined;
+    // Cells now contain spans (the time label and the tally), so the topmost element under
+    // the pointer is usually one of those — climb to the cell that owns it.
+    const cell = el instanceof Element ? el.closest<HTMLElement>('[data-slot]') : null;
+    const key = cell?.dataset.slot;
     if (key) paintTo(key);
   };
 
@@ -164,47 +174,42 @@ function Grid({ data }: { data: PollData }) {
   };
 
   const canSwitchZone = viewerZone !== data.timezone;
-  const group = view === 'group';
 
   const cell = (key: string) => {
     const end = slotByKey.get(key)!.end;
     const range = `${fmtTime(key, zone)}–${fmtTime(end, zone)}`;
-    if (!group) {
-      return (
-        <div
-          key={key}
-          data-slot={key}
-          className={`cell ${painted.get(key) ?? ''}`}
-          onPointerDown={onDown(key)}
-          title={range}
-        >{fmtTime(key, zone)}</div>
-      );
-    }
     const c = data.counts?.[key] ?? NO_COUNT;
+    const mine = painted.get(key);
     const ratio = responders > 0 ? c.available.length / responders : 0;
-    const hatched = c.available.length === 0 && c.ifNeedBe.length > 0;
-    const title = [
+    const tally = c.available.length + c.ifNeedBe.length;
+    const title = responders === 0 ? range : [
       range,
-      `Available (${c.available.length}${responders ? `/${responders}` : ''}): ${c.available.join(', ') || 'nobody yet'}`,
+      `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`,
       c.ifNeedBe.length ? `If need be: ${c.ifNeedBe.join(', ')}` : '',
     ].filter(Boolean).join('\n');
     return (
       <div
         key={key}
         data-slot={key}
-        className={`cell group${hatched ? ' hatch' : ''}`}
-        style={ratio > 0
+        className={`cell ${mine ?? ''}`}
+        // The heatmap tint is the cell's *base*, so it is skipped where the viewer's own
+        // paint covers it: an inline background would otherwise beat `.cell.available`'s
+        // solid green, and that green has to stay dominant.
+        style={!mine && ratio > 0
           ? {
             background: `rgba(43,138,95,${(0.15 + 0.85 * ratio).toFixed(3)})`,
             color: ratio > 0.55 ? '#fff' : undefined,
           }
           : undefined}
+        onPointerDown={locked ? undefined : onDown(key)}
         title={title}
       >
         <span className="at">{fmtTime(key, zone)}</span>
-        <span className="tally">
-          {c.available.length}{c.ifNeedBe.length ? `+${c.ifNeedBe.length}` : ''}
-        </span>
+        {tally > 0 && (
+          <span className="tally">
+            {c.available.length}{c.ifNeedBe.length ? `+${c.ifNeedBe.length}` : ''}
+          </span>
+        )}
       </div>
     );
   };
@@ -220,7 +225,7 @@ function Grid({ data }: { data: PollData }) {
               mode === 'available' ? 'mode active' : 'mode',
             )}
             aria-pressed={mode === 'available'}
-            disabled={group}
+            disabled={locked}
             onClick={() => setMode('available')}
           >Available</button>
           <button
@@ -230,29 +235,9 @@ function Grid({ data }: { data: PollData }) {
               mode === 'ifNeedBe' ? 'mode active' : 'mode',
             )}
             aria-pressed={mode === 'ifNeedBe'}
-            disabled={group}
+            disabled={locked}
             onClick={() => setMode('ifNeedBe')}
           >If need be</button>
-        </div>
-        <div className="views" role="group" aria-label="Whose availability to show">
-          <button
-            type="button"
-            className={cn(
-              buttonVariants({ variant: group ? 'outline' : 'default', size: 'sm' }),
-              group ? 'view' : 'view active',
-            )}
-            aria-pressed={!group}
-            onClick={() => setView('me')}
-          >Me</button>
-          <button
-            type="button"
-            className={cn(
-              buttonVariants({ variant: group ? 'default' : 'outline', size: 'sm' }),
-              group ? 'view active' : 'view',
-            )}
-            aria-pressed={group}
-            onClick={() => setView('group')}
-          >Group</button>
         </div>
         <button
           type="button"
@@ -265,7 +250,9 @@ function Grid({ data }: { data: PollData }) {
         >Times shown in {zone}{canSwitchZone ? ' — switch' : ''}</button>
       </div>
       <div
-        className={group ? 'grid readonly' : 'grid'}
+        // `counted` only widens the cells, and only once there is a tally to fit: an
+        // unanswered poll keeps the narrow columns that fit a phone without scrolling.
+        className={cn('grid', responders > 0 && 'counted', locked && 'readonly')}
         style={{ touchAction: 'none' }}
         onPointerMove={onMove}
       >
@@ -276,26 +263,28 @@ function Grid({ data }: { data: PollData }) {
           </div>
         ))}
       </div>
-      {group && (
+      {responders > 0 && (
         <p className="hint">
-          {responders > 0
-            ? `Read-only view of ${responders} ${responders === 1 ? 'response' : 'responses'}. Switch to “Me” to paint your own.`
-            : 'No responses yet. Switch to “Me” to paint your own.'}
+          {`Shading counts how many of the ${responders} `
+            + `${responders === 1 ? 'response' : 'responses'} can make each slot`}
+          {locked ? '.' : '; your own cells are outlined.'}
         </p>
       )}
-      {!data.viewerDid && (
+      {!data.viewerDid && !locked && (
         <label className="name">
           Your name <small>(shown publicly on this poll)</small>
           {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
           <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
         </label>
       )}
-      <button
-        className={cn(buttonVariants({ variant: 'default' }), 'save')}
-        type="button"
-        onClick={submit}
-        disabled={saving || (!data.viewerDid && !name.trim())}
-      >Save availability</button>
+      {!locked && (
+        <button
+          className={cn(buttonVariants({ variant: 'default' }), 'save')}
+          type="button"
+          onClick={submit}
+          disabled={saving || (!data.viewerDid && !name.trim())}
+        >Save availability</button>
+      )}
       {status && <p className="status" role="status">{status}</p>}
       {editLink && (
         <p className="edit-link">Keep this link to edit your response later:<br /><code>{editLink}</code></p>

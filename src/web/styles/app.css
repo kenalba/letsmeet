@@ -240,8 +240,12 @@
  * comes after Tailwind's own `utilities` layer (see the `@layer` order at the top of this
  * file), so a leftover color rule here would still have out-ranked those utility classes by
  * layer order alone, regardless of specificity. The structural class names (`.mode`, `.zone`,
- * `.view`, `.active`, `.save`, `.show-results`) stay on the elements as selector hooks even
- * though nothing here targets them any more.
+ * `.active`, `.save`, `.show-results`) stay on the elements as selector hooks even though
+ * nothing here targets them any more. (`.view` is gone with the Me/Group buttons.)
+ *
+ * The grid itself is now one merged view rather than a Me/Group pair: `.cell` is the old
+ * group cell's layout, tinted inline per slot, with the viewer's own `.available` /
+ * `.ifNeedBe` paint drawn on top of that tint. See the `.cell` rules below.
  */
 @layer island {
   #grid-root {
@@ -260,25 +264,36 @@
     .col-head { font-size: 12px; font-weight: 600; padding: 2px 8px; }
     .grid { display: flex; gap: 4px; overflow-x: auto; touch-action: none; }
     .col { display: flex; flex-direction: column; }
+    /* Every cell carries the time on the left and, once anyone has answered, the tally on
+       the right — the layout the old read-only "group" cell had, now the only one. The
+       plain --card background is the zero-responses state; anything higher is tinted
+       inline, per slot, by the island. */
     .cell {
+      display: flex; justify-content: space-between; gap: 8px;
       border: 1px solid var(--border); padding: 2px 8px; font-size: 12px;
       user-select: none; cursor: pointer; min-width: 64px;
       background: var(--card); color: var(--card-foreground);
     }
+    /* Only widened where a tally actually renders, so an unanswered poll keeps columns
+       narrow enough to fit a phone without horizontal scrolling. */
+    .grid.counted .cell { min-width: 84px; }
+    /* The viewer's own paint, drawn over the heatmap tint. Both states are shapes, not
+       shades, so neither can be mistaken for "lots of people picked this": solid brand
+       green and a hatch. The inset ring in the page background is what separates *your*
+       green from a dark heatmap tint underneath a neighbouring cell. */
     .cell.available { background: #2b8a5f; color: white; }
     .cell.ifNeedBe {
       background: repeating-linear-gradient(
         45deg, var(--grid-hatch-a), var(--grid-hatch-a) 4px, var(--grid-hatch-b) 4px, var(--grid-hatch-b) 8px
       );
     }
-    /* Group view: read-only heatmap; the tint is set inline, per slot. */
+    .cell.available, .cell.ifNeedBe { box-shadow: inset 0 0 0 2px var(--background); }
+    /* Closed/cancelled polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
-    .cell.group { display: flex; justify-content: space-between; gap: 8px; min-width: 84px; }
-    .cell.hatch {
-      background: repeating-linear-gradient(
-        45deg, var(--grid-hatch-a), var(--grid-hatch-a) 4px, var(--grid-hatch-b) 4px, var(--grid-hatch-b) 8px
-      );
-    }
+    /* `.cell.group` and `.cell.hatch` are gone with the Me/Group split. The hatch is now
+       exclusively "you said if-need-be"; the group's if-need-be count lives in the tally
+       (`2+1`) and the hover title, because a second identical hatch meaning *someone else*
+       said if-need-be would be unreadable next to the first. */
     .tally { font-variant-numeric: tabular-nums; opacity: .85; }
     .edit-link code { word-break: break-all; }
   }

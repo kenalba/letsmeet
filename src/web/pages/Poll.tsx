@@ -36,6 +36,8 @@ export function PollPage(data: PollPageData) {
   const counts: Record<string, { available: string[]; ifNeedBe: string[] }> = {};
   for (const r of ranked) counts[r.slot.start] = { available: r.available, ifNeedBe: r.ifNeedBe };
 
+  const isActive = data.status === 'active';
+
   const gridData = {
     rkey: data.rkey,
     time: data.time,
@@ -45,9 +47,11 @@ export function PollPage(data: PollPageData) {
     viewerDid: data.viewerDid,
     timezone: zone,
     counts,
+    // A closed/cancelled poll still shows the grid — heatmap, tallies and any paint the
+    // viewer already filed — but painting it is pointless: `submitGuestResponse` refuses
+    // anything that is not active.
+    readonly: !isActive,
   };
-
-  const isActive = data.status === 'active';
   const showRanked = responses.length > 0 || data.isHost;
   const pending = data.isHost ? data.pendingCount ?? 0 : 0;
 

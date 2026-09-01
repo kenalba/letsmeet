@@ -100,7 +100,8 @@ Recovery property: losing the DB costs host re-logins, any unflushed outbox rows
 - Segmented toggle: Available / If need be. If-need-be renders hatched/muted.
 - Mobile: one finger paints (`touch-action: none` on grid), two fingers scroll; floating scroll/paint toggle as escape hatch. Default poll shape (evening window, 30-min slots, ≤7 days) must fit a phone viewport with no scrolling.
 - DST: each date × window materializes to UTC individually. Windows crossing viewer-local midnight render as a continuous column labeled with the viewer-local landing date.
-- Results: heat map + ranked list ("everyone", then "all but one — missing X"); ifNeedBe counts 0.5 in sort, shown separately ("4 available + 2 if needed"). Tap cell → who's in/iffy/silent. Tabs on mobile, side-by-side wide.
+- Results: **the grid is the heat map** — one merged grid, not a Me/Group pair. Every cell is tinted by how many respondents can make that slot, shows a tally (`2` available, `2+1` with if-need-be) once anyone has answered, and names them on hover. The viewer's own paint draws on top of that tint as a *shape* — solid green for available, hatched for if-need-be, both ringed in the page background — so it stays legible against a dark tint and the group's if-need-be is carried by the tally rather than a second, confusable hatch. A closed poll shows the same grid with painting disabled.
+- Alongside it a ranked list ("everyone", then "all but one — missing X"); ifNeedBe counts 0.5 in sort, shown separately ("4 available + 2 if needed").
 
 ## Abuse limits
 
