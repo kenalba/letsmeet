@@ -91,7 +91,7 @@ describe('server', () => {
     // HTML tokenizer into script-data-escaped state and swallow the rest of the page.
     expect(body).not.toContain(evil);
     // ...so everything after the JSON block is still parsed as markup.
-    expect(body).toContain('src="/grid.js"');
+    expect(body).toContain('src="/assets/grid.js"');
     // ...and the name still shows up, HTML-escaped, in the responders list.
     expect(body).toContain('&lt;!--&lt;script&gt;');
   });
