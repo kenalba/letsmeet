@@ -35,7 +35,7 @@ export function Layout({ title, children, scripts }: LayoutProps) {
             </a>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-3xl px-4 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-4xl px-4 py-8">{children}</main>
         {scripts?.map((src) => <script key={src} type="module" src={src} />)}
       </body>
     </html>

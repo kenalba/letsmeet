@@ -51,6 +51,10 @@
   --chart-3: oklch(0.702 0.121 159.68);
   --chart-4: oklch(0.646 0.089 200.6);
   --chart-5: oklch(0.769 0.104 91.2);
+
+  /* Grid island's "if need be" hatch stripes — see the `@layer island` block below. */
+  --grid-hatch-a: #9fd6bd;
+  --grid-hatch-b: #d8efe4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -80,6 +84,12 @@
     --chart-3: oklch(0.796 0.101 160.4);
     --chart-4: oklch(0.696 0.098 200.6);
     --chart-5: oklch(0.827 0.109 91.2);
+
+    /* Muted desaturated greens — the light pair (#9fd6bd/#d8efe4) reads as barely-there on
+       a dark --card, so dark mode gets its own values that still land between --card and
+       the solid "available" green in perceived lightness (verified via a luminance probe). */
+    --grid-hatch-a: oklch(0.46 0.06 160);
+    --grid-hatch-b: oklch(0.33 0.045 160);
   }
 }
 
@@ -142,8 +152,10 @@
  *
  * Value changes, all forced by the page now having a dark theme (the old page pinned itself
  * light with a hard-coded body background): `.cell` and the name field state their own
- * background/foreground instead of inheriting the page's, and the two muted-grey rules use
- * the design token rather than a hex that only reads on white.
+ * background/foreground via `--card`/`--card-foreground` instead of a hex pinned to white,
+ * the two muted-grey rules use the design token rather than a hex that only reads on white,
+ * and the "if need be" hatch stripes read from `--grid-hatch-a`/`--grid-hatch-b`, which carry
+ * separate light and dark values (defined above) instead of a light-only pin.
  *
  * Rules for markup the React pages now style with Tailwind (`body`, `header`, `main`, bare
  * headings/paragraphs/links, `.banner`, `.ranked`, `.responders`, `.pending`) are gone; the
@@ -165,7 +177,8 @@
     input {
       display: block; width: 100%; max-width: 420px; margin-top: 4px;
       padding: 6px 8px; font: inherit;
-      border: 1px solid #b9c0bc; border-radius: 4px; background: #fff; color: #17201c;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: var(--card); color: var(--card-foreground);
     }
     small { color: var(--muted-foreground); }
     .hint { color: var(--muted-foreground); font-size: 13px; }
@@ -175,19 +188,23 @@
     .grid { display: flex; gap: 4px; overflow-x: auto; touch-action: none; }
     .col { display: flex; flex-direction: column; }
     .cell {
-      border: 1px solid #ccc; padding: 2px 8px; font-size: 12px;
+      border: 1px solid var(--border); padding: 2px 8px; font-size: 12px;
       user-select: none; cursor: pointer; min-width: 64px;
-      background: #fff; color: #17201c;
+      background: var(--card); color: var(--card-foreground);
     }
     .cell.available { background: #2b8a5f; color: white; }
     .cell.ifNeedBe {
-      background: repeating-linear-gradient(45deg, #9fd6bd, #9fd6bd 4px, #d8efe4 4px, #d8efe4 8px);
+      background: repeating-linear-gradient(
+        45deg, var(--grid-hatch-a), var(--grid-hatch-a) 4px, var(--grid-hatch-b) 4px, var(--grid-hatch-b) 8px
+      );
     }
     /* Group view: read-only heatmap; the tint is set inline, per slot. */
     .grid.readonly .cell { cursor: default; }
     .cell.group { display: flex; justify-content: space-between; gap: 8px; min-width: 84px; }
     .cell.hatch {
-      background: repeating-linear-gradient(45deg, #9fd6bd, #9fd6bd 4px, #d8efe4 4px, #d8efe4 8px);
+      background: repeating-linear-gradient(
+        45deg, var(--grid-hatch-a), var(--grid-hatch-a) 4px, var(--grid-hatch-b) 4px, var(--grid-hatch-b) 8px
+      );
     }
     .tally { font-variant-numeric: tabular-nums; opacity: .85; }
     .edit-link code { word-break: break-all; }

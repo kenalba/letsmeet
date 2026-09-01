@@ -329,8 +329,7 @@ describe('server', () => {
 
 describe('scriptJson', () => {
   it('escapes every < so an embedded value cannot flip the script tokenizer', () => {
-    // Same rule the poll page's #poll-data block depends on, asserted against the module
-    // that now owns it (views.ts only re-exports it until the poll page ports).
+    // Same rule the poll page's #poll-data block depends on.
     const out = scriptJson({ name: '<!--<script>' });
     expect(out).toBe('{"name":"\\u003c!--\\u003cscript>"}');
     expect(out).not.toContain('<');

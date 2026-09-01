@@ -1,7 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DateTime } from 'luxon';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
   type PaintMap, type PaintMode,
@@ -42,13 +41,13 @@ function fmtTime(iso: string, zone: string): string {
 }
 
 /**
- * `d` is already a calendar date *in `zone`* (buildGeom bucketed it there), so anchor it at
- * noon in that same zone before formatting: parsing "d T12:00" as machine-local and then
- * rendering it in a far-away zone can slide the label onto the neighbouring day.
+ * `d` is already a calendar date *in `zone`* (buildGeom bucketed it there) — its weekday is
+ * fixed regardless of viewing zone, so anchoring at noon UTC and formatting in UTC reads back
+ * that same date `d` for any `zone`: no zone-aware math needed, unlike `fmtTime` below.
  */
 function fmtDate(d: string, zone: string): string {
-  return DateTime.fromISO(`${d}T12:00`, { zone }).toJSDate().toLocaleDateString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: zone,
+  return new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
   });
 }
 

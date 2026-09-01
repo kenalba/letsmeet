@@ -19,6 +19,7 @@ import { DecidedPage } from '../pages/Decided.js';
 import { TombstonePage } from '../pages/Tombstone.js';
 import { NewPollPage } from '../pages/NewPoll.js';
 import { PollPage } from '../pages/Poll.js';
+import { ErrorPage } from '../pages/ErrorPage.js';
 
 export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
@@ -49,7 +50,10 @@ export function pollRoutes(
       timezone: String(f.get('timezone')),
     };
     if (time.dates.length === 0) {
-      return c.text('Could not create poll: no dates selected.', 400);
+      return c.html(renderPage(createElement(ErrorPage, {
+        heading: 'Could not create poll',
+        message: 'Could not create poll: no dates selected.',
+      })), 400);
     }
     try {
       const { rkey } = await createPoll(deps, did, {
@@ -59,7 +63,10 @@ export function pollRoutes(
       });
       return c.redirect(`/p/${rkey}`);
     } catch (err) {
-      return c.text(`Could not create poll: ${(err as Error).message}`, 400);
+      return c.html(renderPage(createElement(ErrorPage, {
+        heading: 'Could not create poll',
+        message: `Could not create poll: ${(err as Error).message}`,
+      })), 400);
     }
   });
 
@@ -172,7 +179,10 @@ export function pollRoutes(
       });
       return c.redirect(`/p/${c.req.param('rkey')}`);
     } catch (err) {
-      return c.text(`Could not finalize: ${(err as Error).message}`, 400);
+      return c.html(renderPage(createElement(ErrorPage, {
+        heading: 'Could not finalize',
+        message: `Could not finalize: ${(err as Error).message}`,
+      })), 400);
     }
   });
 

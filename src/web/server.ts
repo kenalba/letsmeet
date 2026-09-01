@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { setSignedCookie } from 'hono/cookie';
@@ -5,6 +6,8 @@ import type { Deps } from '../atproto/types.js';
 import type { AuthClient } from '../atproto/oauthClient.js';
 import { authRoutes } from './routes/auth.js';
 import { pollRoutes } from './routes/polls.js';
+import { renderPage } from './render.js';
+import { ErrorPage } from './pages/ErrorPage.js';
 
 export function createServer(
   deps: Deps,
@@ -13,7 +16,18 @@ export function createServer(
   env: { COOKIE_SECRET: string; PUBLIC_URL: string; devLogin?: boolean },
 ): Hono {
   const app = new Hono();
-  app.use('/assets/*', serveStatic({ root: './public' }));
+  app.notFound((c) => c.html(renderPage(createElement(ErrorPage, {
+    heading: 'Not found',
+    message: "That page doesn't exist.",
+  })), 404));
+  // Bundle filenames are stable across deploys (no content hash), so tell browsers to
+  // revalidate every load rather than cache a stale build indefinitely.
+  app.use('/assets/*', serveStatic({
+    root: './public',
+    onFound: (_path, c) => {
+      c.header('Cache-Control', 'no-cache');
+    },
+  }));
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';

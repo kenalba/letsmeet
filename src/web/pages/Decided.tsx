@@ -1,7 +1,7 @@
 import type { ScheduleRecord } from '../../atproto/records.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { Layout } from './Layout.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
+import { Card, CardContent, CardDescription, CardHeader } from '../ui/card.js';
 
 export function DecidedPage(
   { rkey, record, publicUrl }: { rkey: string; record: ScheduleRecord; publicUrl: string },
@@ -24,8 +24,8 @@ export function DecidedPage(
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Decided</CardTitle>
-            <CardDescription>Everyone answered; the host picked a time.</CardDescription>
+            <h2 className="leading-none font-semibold">Decided</h2>
+            <CardDescription>The host picked a time.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <p className="chosen text-xl font-medium tabular-nums">
