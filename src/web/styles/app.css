@@ -366,7 +366,16 @@
        the columns wide enough to scroll. Day heads stack weekday over month-day on two
        deliberate lines so nothing wraps mid-word. Everything in a column is border-box
        with a fixed row height, so axis labels and cells stay aligned. */
-    .grid { display: flex; overflow-x: auto; touch-action: none; padding-bottom: 2px; }
+    /* The grid is also the sideways scroller on a phone, so touch gestures stay with the
+       browser (`manipulation`: pan + pinch, no double-tap zoom); the island only paints from
+       a held finger, and cancels the scroll itself while it does. No callout on that hold. */
+    .grid {
+      display: flex; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 2px;
+      touch-action: manipulation; -webkit-touch-callout: none;
+    }
+    /* Shown only where there is no mouse to make the hold-to-paint gesture obvious. */
+    .touch-hint { display: none; }
+    @media (pointer: coarse) { .touch-hint { display: block; } }
     .col { display: flex; flex-direction: column; flex: 1 0 44px; max-width: 96px; }
     /* Adjacent 1px borders collapse into single grid lines; the axis column has no
        borders, so the first date column keeps its own left edge. */

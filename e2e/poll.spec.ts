@@ -225,3 +225,84 @@ test('sign-in handle field suggests accounts as you type', async ({ page }) => {
   await handle.fill('zzz');
   await expect(options).toHaveCount(0);
 });
+
+/**
+ * A phone paints with a held finger and scrolls with a swipe. Playwright's touchscreen has
+ * only `tap`, so the gestures are raw CDP touch events, which makes this Chromium-only —
+ * and the mobile project is the only one with a touch screen anyway.
+ */
+test('touch: a swipe scrolls the grid, a held finger paints it', async ({ page, browser, browserName }) => {
+  test.skip(!projectContext().hasTouch || browserName !== 'chromium', 'needs a touch screen and CDP');
+  const hostDid = `did:plc:e2etouch${test.info().project.name.replace(/[^a-z0-9]/gi, '')}`;
+  await page.goto(`/dev/login?did=${hostDid}`);
+  await expect(page.locator('code')).toHaveText(hostDid);
+  // Two weeks of days: wider than a phone, so the grid has somewhere to scroll to; a long
+  // window, so the page does too.
+  const dates = Array.from({ length: 14 }, (_, i) =>
+    isoDate(new Date(FIXTURE_BASE.getTime() + i * 24 * 60 * 60 * 1000))).join(',');
+  const created = await page.request.post('/polls', {
+    form: { title: 'two weeks', dates, windowStart: '09:00', windowEnd: '21:00', slotMinutes: '30', timezone: 'UTC' },
+    maxRedirects: 0,
+  });
+  const pollUrl = created.headers()['location']!;
+  expect(pollUrl).toMatch(/\/p\//);
+
+  const { context: guestContext, page: guest } = await newGuest(browser);
+  await guest.goto(pollUrl);
+  const cells = guest.locator('#grid-root [data-slot]');
+  await expect(cells.first()).toBeVisible();
+  const grid = guest.locator('#grid-root .grid');
+  expect(await grid.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+
+  const cdp = await guestContext.newCDPSession(guest);
+  const swipe = async (from: { x: number; y: number }, to: { x: number; y: number }, holdMs = 0) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+    if (holdMs) await guest.waitForTimeout(holdMs);
+    const steps = 8;
+    for (let i = 1; i <= steps; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{
+        x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps,
+      }] });
+      await guest.waitForTimeout(16);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+  const painted = guest.locator('#grid-root .cell.available');
+  // Where the page and the grid have scrolled to; a swipe flings, so wait for it to settle
+  // before trusting any bounding box measured afterwards.
+  const offsets = () => guest.evaluate(() =>
+    [window.scrollY, document.querySelector('#grid-root .grid')!.scrollLeft].join(','));
+  const settled = async () => {
+    await expect.poll(async () => {
+      const before = await offsets();
+      await guest.waitForTimeout(100);
+      return (await offsets()) === before;
+    }).toBe(true);
+  };
+
+  // A sideways swipe scrolls the grid and paints nothing.
+  const box = (await grid.boundingBox())!;
+  await swipe({ x: box.x + 300, y: box.y + 200 }, { x: box.x + 60, y: box.y + 200 });
+  await expect.poll(() => grid.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  await expect(painted).toHaveCount(0);
+  await settled();
+  // An upward swipe that starts on the grid scrolls the page.
+  await swipe({ x: box.x + 200, y: box.y + 300 }, { x: box.x + 200, y: box.y + 100 });
+  await expect.poll(() => guest.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect(painted).toHaveCount(0);
+  await settled();
+
+  // A held finger, dragged two rows down its column, paints those three cells.
+  await guest.evaluate(() => window.scrollTo(0, 0));
+  await grid.evaluate((el) => { el.scrollLeft = 0; });
+  await expect.poll(offsets).toBe('0,0');
+  await settled();
+  const centre = (b: { x: number; y: number; width: number; height: number }) =>
+    ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+  await swipe(centre((await cells.nth(0).boundingBox())!), centre((await cells.nth(2).boundingBox())!), 500);
+  await expect(painted).toHaveCount(3);
+  // A tap toggles a single cell without any hold.
+  await guest.touchscreen.tap(...Object.values(centre((await cells.nth(5).boundingBox())!)) as [number, number]);
+  await expect(painted).toHaveCount(4);
+  await guestContext.close();
+});

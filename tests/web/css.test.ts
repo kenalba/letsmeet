@@ -74,6 +74,15 @@ describe('built app.css', () => {
     expect(css).toContain('.border-primary-ink');
   });
 
+  it('leaves touch scrolling of the grid to the browser', () => {
+    // `touch-action: none` on the scroll container is what made a phone unable to scroll
+    // the grid (or the page, from a finger on it): the island paints from a held finger.
+    const grid = /#grid-root \.grid\{([^}]*)\}/.exec(css);
+    expect(grid).not.toBeNull();
+    expect(grid![1]).toContain('touch-action:manipulation');
+    expect(css).not.toContain('touch-action:none');
+  });
+
   it('keeps the two dark token blocks identical', () => {
     // They are duplicated in source because a media-gated selector and an unconditional one
     // cannot share a rule; this is the guard that stops them drifting.

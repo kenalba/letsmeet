@@ -98,6 +98,10 @@ const EDGE_SHADOW = {
   left: `inset ${EDGE}px 0 0 0`, right: `inset -${EDGE}px 0 0 0`,
 } as const;
 
+/** How long a finger rests on a cell before it paints instead of scrolling. Under the
+ * browsers' own long-press (~500ms), so no callout or context menu races it. */
+const HOLD_MS = 350;
+
 /**
  * One grid, not two. Every cell is tinted by how many people can make that slot, counting
  * the viewer's own unsaved paint as they go, and the viewer's paint is drawn as an outline
@@ -151,11 +155,21 @@ function Grid({ data }: { data: PollData }) {
     || name.trim() !== (data.prefill?.name ?? '').trim();
   const canSave = dirty && painted.size > 0 && (!!data.viewerDid || !!name.trim());
 
-  const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap } | null>(null);
+  const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
+  // A finger resting on a cell that is not yet a stroke. It becomes one if it holds for
+  // HOLD_MS, a tap if it lifts first, and nothing if the browser turns its movement into a
+  // scroll (pointercancel). A mouse never waits: it can't scroll by dragging anyway.
+  const press = useRef<{ key: string; timer: number } | null>(null);
+  const gridEl = useRef<HTMLDivElement>(null);
+
+  const cancelPress = () => {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+  };
 
   // A pointer released off the grid (or cancelled by the OS) must still end the stroke.
   useEffect(() => {
-    const end = () => { drag.current = null; };
+    const end = () => { cancelPress(); drag.current = null; };
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
     return () => {
@@ -164,19 +178,56 @@ function Grid({ data }: { data: PollData }) {
     };
   }, []);
 
+  // The grid scrolls sideways on a phone, so the browser keeps touch gestures
+  // (`touch-action: manipulation`) and only a held finger paints. Once it does, its movement
+  // must not become a scroll: `touch-action` can't change mid-gesture and React's touch
+  // handlers are passive, so this is a native, cancelling listener.
+  useEffect(() => {
+    const el = gridEl.current;
+    if (!el) return;
+    const block = (e: TouchEvent) => { if (drag.current?.touch) e.preventDefault(); };
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, []);
+
   const paintTo = (key: string) => {
     const d = drag.current;
     if (!d) return;
     setPainted(applyPaint(d.base, rectKeys(geom, d.anchor, key), d.op, mode));
   };
 
+  const startStroke = (key: string, touch: boolean) => {
+    drag.current = { anchor: key, op: strokeOp(painted, key, mode), base: painted, touch };
+    paintTo(key);
+  };
+
   const onDown = (key: string) => (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      cancelPress();
+      press.current = {
+        key,
+        timer: window.setTimeout(() => {
+          press.current = null;
+          startStroke(key, true);
+          // A nudge to say "you're painting now", where the device has one.
+          try { navigator.vibrate?.(8); } catch { /* not this device */ }
+        }, HOLD_MS),
+      };
+      return;
+    }
     e.preventDefault();
     // Capture keeps the move stream coming even when the pointer wanders off the cell;
     // hit-testing below still uses the real element under the pointer.
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* unsupported id */ }
-    drag.current = { anchor: key, op: strokeOp(painted, key, mode), base: painted };
-    paintTo(key);
+    startStroke(key, false);
+  };
+
+  // A finger that lifts before the hold fires is a tap: paint (or unpaint) that one cell.
+  // Runs before the window listener above clears the stroke it starts.
+  const onUp = (key: string) => () => {
+    if (press.current?.key !== key) return;
+    cancelPress();
+    startStroke(key, true);
   };
 
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -269,6 +320,7 @@ function Grid({ data }: { data: PollData }) {
             : undefined,
         }}
         onPointerDown={locked ? undefined : onDown(key)}
+        onPointerUp={locked ? undefined : onUp(key)}
         title={title}
       >
         {tally > 0 && (
@@ -315,9 +367,13 @@ function Grid({ data }: { data: PollData }) {
           onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
         >times shown in {zone}{canSwitchZone ? ' · switch' : ''}</button>
       </div>
+      {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
+      {!locked && (
+        <p className="hint touch-hint">tap a slot to paint it. hold, then drag, for a block. swipe to scroll.</p>
+      )}
       <div
+        ref={gridEl}
         className={cn('grid', locked && 'readonly')}
-        style={{ touchAction: 'none' }}
         onPointerMove={onMove}
       >
         <div className="col axis">

@@ -69,6 +69,7 @@ export function PollPage(data: PollPageData) {
   const pending = data.isHost ? data.pendingCount ?? 0 : 0;
 
   const path = `/p/${data.rkey}`;
+  const signInHref = data.viewerDid ? undefined : `/login?returnTo=${encodeURIComponent(path)}`;
   return (
     <Layout
       title={pageTitle(data.title)}
@@ -77,7 +78,7 @@ export function PollPage(data: PollPageData) {
       } so far. paint the times you're free.`}
       canonical={data.publicUrl ? `${data.publicUrl}${path}` : undefined}
       scripts={GRID_SCRIPTS}
-      signInHref={data.viewerDid ? undefined : `/login?returnTo=${encodeURIComponent(path)}`}
+      signInHref={signInHref}
     >
       <div className="flex flex-col gap-6">
         {pending > 0 ? (
@@ -120,9 +121,16 @@ export function PollPage(data: PollPageData) {
         </div>
 
         <div className="flex flex-col gap-3">
-          <p className="name-note text-sm text-muted-foreground">
-            guests get asked for a name when they save. it's shown on this poll.
-          </p>
+          {/* The fork in the road for a signed-out viewer, put before the grid so nobody
+              paints first and loses it to the sign-in redirect. The header's "sign in" is
+              too quiet to carry this: the name field below reads as the only way. */}
+          {isActive && signInHref ? (
+            <p className="name-note text-sm text-muted-foreground">
+              you're answering as a guest: you'll give a name when you save, and it's shown on this poll.{' '}
+              <a className="prompt text-foreground" href={signInHref}>sign in with bluesky</a>
+              {' '}to answer as yourself instead.
+            </p>
+          ) : null}
           <div id="grid-root" />
           <script
             id="poll-data"
