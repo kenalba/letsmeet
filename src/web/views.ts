@@ -69,8 +69,14 @@ small { color: #5d6b64; }
 .responders { list-style: none; padding: 0; }
 .responders li { padding: 2px 0; }
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.toolbar > div { display: flex; gap: 6px; }
 .zone { color: #5d6b64; font-size: 13px; }
+button.zone { background: #fff; border-color: #b9c0bc; }
+button.mode, button.view { background: #fff; color: #1f6f4d; }
+button:disabled { opacity: .55; cursor: default; }
 .col-head { font-size: 12px; font-weight: 600; padding: 2px 8px; }
+.grid { display: flex; gap: 4px; overflow-x: auto; touch-action: none; }
+.col { display: flex; flex-direction: column; }
 .cell {
   border: 1px solid #ccc; padding: 2px 8px; font-size: 12px;
   user-select: none; cursor: pointer; min-width: 64px;
@@ -79,7 +85,16 @@ small { color: #5d6b64; }
 .cell.ifNeedBe {
   background: repeating-linear-gradient(45deg, #9fd6bd, #9fd6bd 4px, #d8efe4 4px, #d8efe4 8px);
 }
+/* Group view: read-only heatmap; the tint is set inline, per slot. */
+.grid.readonly .cell { cursor: default; }
+.cell.group { display: flex; justify-content: space-between; gap: 8px; min-width: 84px; }
+.cell.hatch {
+  background: repeating-linear-gradient(45deg, #9fd6bd, #9fd6bd 4px, #d8efe4 4px, #d8efe4 8px);
+}
+.tally { font-variant-numeric: tabular-nums; opacity: .85; }
 .mode.active { outline: 2px solid #2b8a5f; }
+button.mode.active, button.view.active { background: #2b8a5f; color: #fff; }
+.view.active { outline: 2px solid #2b8a5f; }
 .edit-link code { word-break: break-all; }
 @media (max-width: 600px) { main { padding: 12px; } }
 `;
