@@ -48,7 +48,7 @@ All configuration is via environment variables, read once at boot in
 | `COOKIE_SECRET` | **yes** | `dev-cookie-secret` | Signs the session cookie (`hono/cookie`'s signed-cookie HMAC). Use a random string, 32+ characters — e.g. `openssl rand -base64 32`. The insecure default is fine for local dev only, and the server refuses to boot on it (see below). |
 | `SESSION_ENC_KEY` | **yes** | `00`×32 (all-zero) | 32-byte AES-256-GCM key, **hex-encoded (64 hex characters)** — this encrypts OAuth session/state rows at rest in the DB (`src/db/sessions.ts` does `Buffer.from(keyHex, 'hex')`). Generate with `openssl rand -hex 32`. The all-zero default is a real key, not a "disabled" sentinel — and, like the cookie default, the server refuses to boot on it. |
 | `OAUTH_JWK` | **yes** (non-loopback `PUBLIC_URL`) | unset | A single ES256 private JWK, as JSON, produced by `npx tsx scripts/genJwk.ts`. Used for `private_key_jwt` client authentication to the PDS/authorization server when `PUBLIC_URL` is a real https origin. Ignored when `PUBLIC_URL` is a loopback address (see the dev sign-in note below). Generate it once and store it in your secrets, not in git. |
-| `LEX_HANDLE` | only when publishing lexicons | unset | The handle of the lexicon-authority account (see §5 — e.g. wzrdz.cool), for `scripts/publishLexicons.ts`. Not read by the server. |
+| `LEX_HANDLE` | only when publishing lexicons | unset | The lexicon-authority account's **canonical** handle as it appears in its DID document (see §5 — `ken.wzrdz.cool`, not `wzrdz.cool`), for `scripts/publishLexicons.ts`. Not read by the server. |
 | `LEX_APP_PASSWORD` | only when publishing lexicons | unset | An **app password** (not the account password, not OAuth) for that account. Not read by the server. |
 | `LEX_PDS` | no | `https://bsky.social` | The PDS/entryway to authenticate `publishLexicons.ts` against. Only change this if the authority account lives on a self-hosted PDS. |
 | `FAKE_PDS` | never in prod | unset | Dev/test-only. `1` swaps every atproto call for an in-process fake repo and mounts a password-free `/dev/login` route. `src/index.ts` prints a warning banner when this is on. **Do not set this in a deployment.** |
@@ -264,11 +264,15 @@ something the running server does.
    ```
 
    The owning DID can be any account you control — no dedicated
-   `letsmeet.lol` account is required. Pointing this at the existing
-   wzrdz.cool account's DID is the expected setup; the TXT record is what
-   makes that DID the authority for `lol.letsmeet.*`. Look up a DID with
+   `letsmeet.lol` account is required. The TXT record is what makes that
+   DID the authority for `lol.letsmeet.*`. Look up a DID with
    `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=<handle>`
    if you don't already have it recorded.
+
+   **Done 2026-09-01:** the record points at
+   `did:plc:s6bsxutpplnkmlllri6nif6d` (the `ken.wzrdz.cool` account) and
+   both lexicons are published there. Repeat steps 2–4 only when a lexicon
+   changes — `putRecord` overwrites in place.
 
 2. **Get an app password.** Log into that account and
    create an app password (Settings → App Passwords). Do **not** use the
@@ -283,8 +287,13 @@ something the running server does.
      npx tsx scripts/publishLexicons.ts
    ```
 
-   Add `LEX_PDS=...` only if the account isn't on `bsky.social`. Expect two
-   lines of output, one per lexicon:
+   `LEX_HANDLE` has to be the handle in the account's DID document
+   (`ken.wzrdz.cool`). A domain that merely resolves to the same DID (e.g.
+   `wzrdz.cool`) is rejected with `Invalid identifier or password` — which
+   reads like a bad app password but isn't. Add `LEX_PDS=...` only if the
+   account isn't behind the `bsky.social` entryway. Delete the app password
+   afterwards; the script is one-shot. Expect two lines of output, one per
+   lexicon:
 
    ```
    published lol.letsmeet.poll.schedule -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.poll.schedule
