@@ -10,7 +10,7 @@
     "test": "vitest run",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build:grid": "esbuild src/web/static/grid.tsx --bundle --format=esm --jsx=automatic --jsx-import-source=preact --outfile=public/grid.js"
+    "build:grid": "esbuild src/web/static/grid.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=preact --outfile=public/grid.js"
   },
   "keywords": [],
   "author": "",

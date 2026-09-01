@@ -5,10 +5,23 @@ island for the grid) backed by SQLite. It is designed to run behind Caddy at
 `poll.wzrdz.cool`, on the same home server that hosts the rest of the wzrdz.cool
 stack, or on any small VPS.
 
-The one thing worth internalizing before you deploy: **the app's SQLite
-database is a disposable index, not the source of truth.** Every poll and
-every signed-in response lives as an atproto record in someone's PDS. If
-`wzrdz-poll.db` is lost, you lose:
+The one thing worth internalizing before you deploy: **`DB_PATH` needs real
+backups.** The records survive without it; the app does not.
+
+Every poll and every response does live as an atproto record in someone's
+PDS, and those records are untouched by anything that happens to this server.
+But v1 has no way to find them again. A share link is `/p/<rkey>` — an rkey
+and nothing else, no host DID — so the *only* thing that maps a share link to
+the host repo it came from is the `poll_cache` row in this SQLite file. Lose
+the DB and every share link ever handed out 404s, permanently, even though
+the schedule and response records are still sitting in their PDSes. There is
+no scan, no firehose index, and no rebuild path in v1.
+
+So: back up `DB_PATH` (a periodic `sqlite3 "$DB_PATH" '.backup ...'` or a
+volume snapshot is plenty — it is a small file), and treat losing it as data
+loss, not cache eviction.
+
+On top of the share links, a lost DB also costs:
 
 - Host OAuth sessions (hosts have to sign in again — no data loss).
 - Any outbox rows that hadn't yet flushed to a PDS (normally ~zero at any
@@ -16,11 +29,10 @@ every signed-in response lives as an atproto record in someone's PDS. If
 - Guest edit-link tokens (a guest who lost their link submits fresh; no
   data loss, just an inconvenience).
 
-Polls themselves — the `cool.wzrdz.poll.schedule` and
-`cool.wzrdz.poll.response` records, and the `community.lexicon.calendar.event`
-record written on finalize — survive in the relevant PDSes regardless of what
-happens to this server. Treat the DB like a cache you'd be mildly annoyed,
-never devastated, to rebuild.
+*v1.1 notes:* put the host DID in the share URL (`/p/<did>/<rkey>`) so a poll
+page is self-describing and the cache is genuinely rebuildable from the PDSes
+— that, plus a `poll_cache` repair path, is what would make this DB
+disposable for real.
 
 ## 1. Environment
 
@@ -32,8 +44,8 @@ All configuration is via environment variables, read once at boot in
 | `PORT` | no | `8787` | TCP port the Node process listens on. Caddy proxies to this. |
 | `PUBLIC_URL` | **yes** | `http://localhost:8787` | The externally-visible origin, no trailing slash — e.g. `https://poll.wzrdz.cool`. Used to build the OAuth `redirect_uri`, `client_id`, and `jwks_uri`, and to render share links. Leaving this at the `localhost` default in production breaks OAuth and produces poll links nobody outside the box can open. |
 | `DB_PATH` | no | `./wzrdz-poll.db` | Path to the SQLite file. Point this at a persistent volume outside the deploy directory if you ever redeploy by replacing `/opt/wzrdz-poll` wholesale. |
-| `COOKIE_SECRET` | **yes** | `dev-cookie-secret` | Signs the session cookie (`hono/cookie`'s signed-cookie HMAC). Use a random string, 32+ characters — e.g. `openssl rand -base64 32`. The insecure default is fine for local dev only. |
-| `SESSION_ENC_KEY` | **yes** | `00`×32 (all-zero) | 32-byte AES-256-GCM key, **hex-encoded (64 hex characters)** — this encrypts OAuth session/state rows at rest in the DB (`src/db/sessions.ts` does `Buffer.from(keyHex, 'hex')`). Generate with `openssl rand -hex 32`. The all-zero default is a real key, not a "disabled" sentinel — never run production on it. |
+| `COOKIE_SECRET` | **yes** | `dev-cookie-secret` | Signs the session cookie (`hono/cookie`'s signed-cookie HMAC). Use a random string, 32+ characters — e.g. `openssl rand -base64 32`. The insecure default is fine for local dev only, and the server refuses to boot on it (see below). |
+| `SESSION_ENC_KEY` | **yes** | `00`×32 (all-zero) | 32-byte AES-256-GCM key, **hex-encoded (64 hex characters)** — this encrypts OAuth session/state rows at rest in the DB (`src/db/sessions.ts` does `Buffer.from(keyHex, 'hex')`). Generate with `openssl rand -hex 32`. The all-zero default is a real key, not a "disabled" sentinel — and, like the cookie default, the server refuses to boot on it. |
 | `OAUTH_JWK` | **yes** (non-loopback `PUBLIC_URL`) | unset | A single ES256 private JWK, as JSON, produced by `npx tsx scripts/genJwk.ts`. Used for `private_key_jwt` client authentication to the PDS/authorization server when `PUBLIC_URL` is a real https origin. Ignored when `PUBLIC_URL` is a loopback address (see the dev sign-in note below). Generate it once and store it in your secrets, not in git. |
 | `LEX_HANDLE` | only when publishing lexicons | unset | The wzrdz.cool atproto account's handle, for `scripts/publishLexicons.ts`. Not read by the server. |
 | `LEX_APP_PASSWORD` | only when publishing lexicons | unset | An **app password** (not the account password, not OAuth) for that account. Not read by the server. |
@@ -50,6 +62,12 @@ openssl rand -base64 32     # -> COOKIE_SECRET
 openssl rand -hex 32        # -> SESSION_ENC_KEY
 npx tsx scripts/genJwk.ts   # -> OAUTH_JWK (prints one line of JSON)
 ```
+
+Unless `FAKE_PDS=1`, `src/index.ts` checks these two at boot and exits 1 with
+a list of what's wrong if `COOKIE_SECRET` is still `dev-cookie-secret`, or if
+`SESSION_ENC_KEY` isn't 64 hex characters or is still all zeroes. A unit that
+won't start with "refusing to boot without real secrets:" in the journal is
+missing its `EnvironmentFile`, not broken.
 
 ### Before you build
 
@@ -118,11 +136,16 @@ Leave `FAKE_PDS` unset. Make sure `DB_PATH` points somewhere that survives a
 
 ```
 poll.wzrdz.cool {
+    encode zstd gzip
     reverse_proxy 127.0.0.1:8787
 }
 ```
 
-This is enough — Caddy terminates TLS and, by default, sets
+`encode zstd gzip` compresses the responses on the way out: the app serves
+server-rendered HTML plus the (minified) grid bundle, and neither Hono nor
+the Node adapter compresses anything itself.
+
+The rest is enough — Caddy terminates TLS and, by default, sets
 `X-Forwarded-For` on the request it forwards to the backend, appending the
 real client IP as the last hop of that header. This matters concretely: the
 guest-submission rate limiter in `src/web/routes/polls.ts`
@@ -206,7 +229,14 @@ the design spec) — the substitute is this manual checklist, run once against
 the real deployment before announcing it, and again after any change that
 touches OAuth, record writing, or finalization.
 
-**Pre-flight — confirm `jwks_uri` actually resolves.** With a real (non-loopback) `PUBLIC_URL`, the OAuth client metadata built in `src/atproto/oauthClient.ts` advertises `token_endpoint_auth_method: 'private_key_jwt'` and a `jwks_uri` of `${PUBLIC_URL}/oauth/jwks.json` — the authorization server fetches that URL to verify the JWTs the app signs with `OAUTH_JWK`. As of this writing, `src/web/routes/auth.ts` only serves `/oauth/client-metadata.json`; there is no `/oauth/jwks.json` route. Check with `curl -i https://poll.wzrdz.cool/oauth/jwks.json` before testing sign-in — a 404 there means token exchange (and therefore every real, non-`FAKE_PDS` sign-in) will fail, and the route needs to be added (serving the public half of `OAUTH_JWK`, e.g. via `JoseKey`'s public-JWK export) before this checklist can proceed.
+**Pre-flight — confirm `jwks_uri` actually resolves.** With a real (non-loopback) `PUBLIC_URL`, the OAuth client metadata built in `src/atproto/oauthClient.ts` advertises `token_endpoint_auth_method: 'private_key_jwt'` and a `jwks_uri` of `${PUBLIC_URL}/oauth/jwks.json` — the authorization server fetches that URL to verify the JWTs the app signs with `OAUTH_JWK`. `src/web/routes/auth.ts` serves that route from the client's keyset (public halves only). Check it before testing sign-in:
+
+```bash
+curl -s https://poll.wzrdz.cool/oauth/jwks.json | jq .
+# -> {"keys":[{"kty":"EC","crv":"P-256","x":"...","y":"...","kid":"...","alg":"ES256",...}]}
+```
+
+An empty `keys` array means `OAUTH_JWK` never reached the process (check the `EnvironmentFile`) — token exchange, and therefore every real non-`FAKE_PDS` sign-in, will fail. A `d` member in any key means a private key is being published: stop and fix that before anything else.
 
 Once that's confirmed:
 
@@ -265,7 +295,8 @@ Carried over from the design spec (`docs/superpowers/specs/2026-08-31-wzrdz-poll
 - **No notifications.** Nobody gets emailed or pinged when a poll is created, someone responds, or a poll is finalized. Hosts and respondents have to check back on the poll page themselves.
 - **No calendar OAuth.** The app never talks to Google/Microsoft calendar APIs (deliberately — "the scope trap"). The only calendar interop is the ICS/webcal export and the `community.lexicon.calendar.event` atproto record on finalize.
 - **OAuth scope is `atproto transition:generic`**, not a narrower `cool.wzrdz.poll.*`-scoped grant — atproto's scope model doesn't yet support per-collection write scoping, so a host's sign-in grants the app the same broad write access any `transition:generic` app gets.
-- **Guest response cap is 60 per poll**, fixed in v1 (`GUEST_CAP` in `src/services/responses.ts`). The 61st guest submission on a poll is rejected; there's no UI to raise this per-poll.
+- **Response cap is 60 per poll**, fixed in v1 (`GUEST_CAP` in `src/services/responses.ts`). Despite the name it counts *every* response row — guest and signed-in alike — so 60 signed-in responses lock guests out of the same poll entirely. The 61st new response is rejected with "this poll is full" (edits to an existing response still go through at the cap); there's no UI to raise it per-poll.
+- **Painting the grid is pointer-only.** The cells respond to mouse/touch drag and nothing else: there is no keyboard interaction and no screen-reader affordance, so keyboard and assistive-technology users cannot submit a response in v1 at all. Planned for v1.1 (focusable cells, arrow-key/space painting, and an accessible non-grid fallback for entering availability).
 
 Also out of scope for v1 (unaffected by anything in this runbook, but worth
 knowing when triaging a bug report): recurring polls, teams/orgs, billing,
