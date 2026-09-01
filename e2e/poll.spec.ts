@@ -96,10 +96,11 @@ async function setTime(page: Page, name: string, hhmm: string): Promise<void> {
   await expect(page.locator(`input[name=${name}]`)).toHaveValue(hhmm);
 }
 
-/** Fill the create form the landing page shows to a signed-in host, and submit it. */
+/** Fill the create form on /new (the signed-in landing links to it), and submit it. */
 async function createPoll(page: Page, fields: {
   title: string; dates: string; windowStart: string; windowEnd: string; slotMinutes: string;
 }): Promise<string> {
+  await page.goto('/new');
   await page.fill('input[name=title]', fields.title);
   for (const d of fields.dates.split(',')) await pickDate(page, d);
   await setTime(page, 'windowStart', fields.windowStart);

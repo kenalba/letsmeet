@@ -104,3 +104,57 @@ describe('auth routes', () => {
     expect(body).not.toContain('secret-internal-detail');
   });
 });
+
+describe('returnTo round trip', () => {
+  const withState = (state?: string): AuthClient => ({
+    ...stub,
+    callback: async () => ({ did: 'did:plc:host', state }),
+  });
+
+  it('renders a validated returnTo as a hidden form field', async () => {
+    const res = await app.request('/login?returnTo=%2Fp%2Fabc123');
+    const body = await res.text();
+    expect(body).toContain('name="returnTo"');
+    expect(body).toContain('value="/p/abc123"');
+  });
+
+  it('drops a returnTo that is not a same-site path', async () => {
+    for (const evil of ['https://evil.example/p/x', '//evil.example/p/x', 'javascript:alert(1)']) {
+      const res = await app.request(`/login?returnTo=${encodeURIComponent(evil)}`);
+      const body = await res.text();
+      expect(body).not.toContain('name="returnTo"');
+      expect(body).not.toContain('evil.example');
+    }
+  });
+
+  it('callback lands on the state envelope\'s returnTo and stores the handle', async () => {
+    const rt = authRoutes(
+      withState(JSON.stringify({ returnTo: '/p/abc123', handle: 'ken.letsmeet.lol' })),
+      'test-cookie-secret', 'https://poll.example',
+    );
+    const res = await rt.request('/oauth/callback?code=x&state=y');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/p/abc123');
+    expect(res.headers.get('set-cookie')).toContain('handle=');
+  });
+
+  it('callback refuses an off-site returnTo from the state and lands on /', async () => {
+    const rt = authRoutes(
+      withState(JSON.stringify({ returnTo: 'https://evil.example/', handle: 'bad<name>' })),
+      'test-cookie-secret', 'https://poll.example',
+    );
+    const res = await rt.request('/oauth/callback?code=x&state=y');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+    // The malformed handle is dropped too — only [a-zA-Z0-9.-] survives into the cookie.
+    expect(res.headers.get('set-cookie')).not.toContain('handle=');
+  });
+
+  it('callback with no state still signs in and lands on /', async () => {
+    const rt = authRoutes(withState(undefined), 'test-cookie-secret', 'https://poll.example');
+    const res = await rt.request('/oauth/callback?code=x&state=y');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('set-cookie')).toContain('did=');
+  });
+});

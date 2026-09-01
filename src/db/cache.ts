@@ -31,6 +31,21 @@ export function getPollCache(db: Database.Database, rkey: string): CachedPoll | 
   };
 }
 
+/** Every live (non-tombstoned) poll a host created, newest activity first — the signed-in
+ *  landing's "your polls" list. Same caveat as the rest of this cache: only polls created
+ *  through this app are here; records written some other way are invisible until v1.1's
+ *  rebuild path exists. */
+export function listPollsByHost(db: Database.Database, hostDid: string): CachedPoll[] {
+  const rows = db.prepare(
+    'SELECT * FROM poll_cache WHERE host_did = ? AND tombstoned = 0 ORDER BY updated_at DESC',
+  ).all(hostDid) as
+    Array<{ rkey: string; uri: string; host_did: string; cid: string | null; record_json: string; tombstoned: number }>;
+  return rows.map((r) => ({
+    rkey: r.rkey, uri: r.uri, hostDid: r.host_did, cid: r.cid,
+    record: JSON.parse(r.record_json) as ScheduleRecord, tombstoned: r.tombstoned === 1,
+  }));
+}
+
 export function tombstonePoll(db: Database.Database, rkey: string): void {
   db.prepare('UPDATE poll_cache SET tombstoned = 1, updated_at = ? WHERE rkey = ?')
     .run(Date.now(), rkey);

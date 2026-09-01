@@ -331,7 +331,7 @@ function Grid({ data }: { data: PollData }) {
       )}
       {!data.viewerDid && !locked && (
         <label className="name">
-          Your name <small>(shown publicly on this poll)</small>
+          Your name <span className="note">(shown publicly on this poll)</span>
           {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
           <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
         </label>

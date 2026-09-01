@@ -30,6 +30,20 @@ export interface PollPageData {
  */
 const GRID_SCRIPTS = ['/assets/grid.js'];
 
+/**
+ * The share button's whole behavior, inline: three lines of DOM work don't earn an island.
+ * It copies the CANONICAL poll path from data-path, never location.href — a guest viewing
+ * through their edit link is on `/p/<rkey>/e/<token>`, and sharing that would hand their
+ * private edit token to the group chat.
+ */
+const SHARE_SCRIPT = "(function(){var b=document.getElementById('share-poll');if(!b)return;"
+  + "b.hidden=false;var t=b.textContent;var url=location.origin+b.getAttribute('data-path');"
+  + "b.addEventListener('click',function(){"
+  + "var done=function(){b.textContent='Copied!';setTimeout(function(){b.textContent=t},1500)};"
+  + "var ask=function(){window.prompt('Copy this link:',url)};"
+  + "if(navigator.clipboard&&navigator.clipboard.writeText){"
+  + "navigator.clipboard.writeText(url).then(done,ask)}else{ask()}})})()";
+
 /** "30-minute" / "1-hour" / "1.5-hour" — mirrors the create form's option labels. */
 function fmtSlotLength(minutes: number): string {
   if (minutes % 60 !== 0) return minutes < 60 ? `${minutes}-minute` : `${minutes / 60}-hour`;
@@ -60,8 +74,13 @@ export function PollPage(data: PollPageData) {
   };
   const pending = data.isHost ? data.pendingCount ?? 0 : 0;
 
+  const path = `/p/${data.rkey}`;
   return (
-    <Layout title={`${data.title} — letsmeet`} scripts={GRID_SCRIPTS}>
+    <Layout
+      title={`${data.title} — letsmeet`}
+      scripts={GRID_SCRIPTS}
+      signInHref={data.viewerDid ? undefined : `/login?returnTo=${encodeURIComponent(path)}`}
+    >
       <div className="flex flex-col gap-6">
         {pending > 0 ? (
           <p className="banner rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
@@ -70,12 +89,25 @@ export function PollPage(data: PollPageData) {
         ) : null}
 
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
+            {/* Server-rendered hidden: without JS the button does nothing, so it only
+                appears once SHARE_SCRIPT wires it up. */}
+            <button
+              id="share-poll"
+              type="button"
+              data-path={path}
+              hidden
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Copy share link
+            </button>
+          </div>
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
           <p className="hint text-sm text-muted-foreground">
-            {`${fmtSlotLength(data.time.slotMinutes)} slots · grid times are shown in your timezone; listed times are in the poll's timezone (${zone}).`}
+            {`${fmtSlotLength(data.time.slotMinutes)} slots · grid times are shown in your timezone · listed times are in the poll's timezone (${zone}).`}
           </p>
           {isActive ? null : (
             <p className="hint text-sm text-muted-foreground">
@@ -86,8 +118,7 @@ export function PollPage(data: PollPageData) {
 
         <div className="flex flex-col gap-3">
           <p className="name-note text-sm text-muted-foreground">
-            Guests are asked for a name when they save.{' '}
-            <small>Shown publicly on this poll</small>.
+            Guests are asked for a name when they save. Shown publicly on this poll.
           </p>
           <div id="grid-root" />
           <script
@@ -148,6 +179,7 @@ export function PollPage(data: PollPageData) {
             </CardContent>
           </Card>
         ) : null}
+        <script dangerouslySetInnerHTML={{ __html: SHARE_SCRIPT }} />
       </div>
     </Layout>
   );

@@ -1,7 +1,7 @@
 import { Layout } from './Layout.js';
+import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
-import { CreatePollForm, CREATE_FORM_SCRIPTS } from './CreatePollForm.js';
 
 const STEPS = [
   'Sign in with your atproto handle — the poll is a record in your own repo.',
@@ -9,10 +9,22 @@ const STEPS = [
   'Share the link. Guests paint their availability without an account; you pick the winner.',
 ];
 
-export function LandingPage({ did }: { did: string | null }) {
+/** What the landing needs to list a poll — a projection of the cache row, not the row. */
+export interface PollListItem {
+  rkey: string;
+  title: string;
+  status: string;
+}
+
+export function LandingPage({ did, handle, polls = [] }: {
+  did: string | null;
+  /** The handle stored at sign-in; a session from before that existed falls back to did. */
+  handle?: string;
+  polls?: PollListItem[];
+}) {
   if (!did) {
     return (
-      <Layout title="letsmeet">
+      <Layout title="letsmeet" signInHref="/login">
         <div className="grid gap-10">
           <section className="grid gap-4">
             <h1 className="text-3xl font-semibold tracking-tight">Pick a time, together</h1>
@@ -49,33 +61,52 @@ export function LandingPage({ did }: { did: string | null }) {
   }
 
   return (
-    <Layout title="letsmeet" scripts={CREATE_FORM_SCRIPTS}>
+    <Layout title="letsmeet">
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">New poll</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Your polls</h1>
             <p className="text-sm text-muted-foreground">
               Signed in as{' '}
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-                {did}
+                {handle ?? did}
               </code>
             </p>
           </div>
-          <form method="post" action="/logout">
-            <Button type="submit" variant="outline" size="sm">
-              Sign out
+          <div className="flex items-center gap-2">
+            <Button asChild size="sm">
+              <a href="/new">New poll</a>
             </Button>
-          </form>
+            <form method="post" action="/logout">
+              <Button type="submit" variant="outline" size="sm">
+                Sign out
+              </Button>
+            </form>
+          </div>
         </div>
         <Card>
-          <CardHeader>
-            <CardTitle>Poll details</CardTitle>
-            <CardDescription>
-              Times are interpreted in the poll's timezone; guests see their own.
-            </CardDescription>
-          </CardHeader>
           <CardContent>
-            <CreatePollForm />
+            {polls.length === 0 ? (
+              <p className="hint text-sm text-muted-foreground">
+                No polls yet — <a href="/new" className="text-primary underline underline-offset-4">create your first</a>.
+              </p>
+            ) : (
+              <ul className="polls divide-y">
+                {polls.map((p) => (
+                  <li key={p.rkey}>
+                    <a
+                      href={`/p/${p.rkey}`}
+                      className="flex items-center justify-between gap-3 py-2.5 no-underline hover:text-primary"
+                    >
+                      <span className="text-sm font-medium">{p.title}</span>
+                      <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
+                        {p.status}
+                      </Badge>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>

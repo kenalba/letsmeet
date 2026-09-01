@@ -71,26 +71,31 @@ describe('server', () => {
     expect(body.indexOf("getElementById('theme-toggle')")).toBeGreaterThan(buttonIdx);
   });
 
-  it('shows the signed-in DID in exactly one <code> element on the landing page', async () => {
-    const { deps } = await setup();
+  it('shows the signed-in DID and their polls on the landing page, create form on /new', async () => {
+    const { deps, poll } = await setup();
     const dev = createServer(deps, stubAuth, {
       COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
     });
-    const login = await dev.request('/dev/login?did=did:plc:sam');
+    // setup()'s poll belongs to HOST; a stranger's landing must not list it.
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
     const cookie = login.headers.get('set-cookie')!.split(';')[0];
     const body = await (await dev.request('/', { headers: { cookie } })).text();
     expect(body).toContain('/assets/app.css');
-    expect(body).toMatch(/<code[^>]*>did:plc:sam<\/code>/);
+    expect(body).toMatch(new RegExp(`<code[^>]*>${HOST}</code>`));
     // The e2e suite locates the DID with a bare `code` locator, which is strict-mode:
     // a second <code> anywhere on this page would break it.
     expect(body.match(/<code[\s>]/g)).toHaveLength(1);
-    // ...and the create form the e2e helper fills is still here, field names intact.
-    expect(body).toMatch(/<form [^>]*class="create[ "]/);
-    expect(body).toContain('name="slotMinutes"');
-    // ...and it is the same shared form, island script included, that /new renders.
-    expect(body).toContain('class="dates-fallback"');
-    expect(body).toContain('id="create-dates"');
-    expect(body).toContain('/assets/createForm.js');
+    // The landing lists the host's polls with links; the create form lives on /new now.
+    expect(body).toContain(`href="/p/${poll.rkey}"`);
+    expect(body).toContain('href="/new"');
+    expect(body).not.toContain('name="slotMinutes"');
+
+    // Someone else's landing lists nothing.
+    const other = await dev.request('/dev/login?did=did:plc:stranger');
+    const otherCookie = other.headers.get('set-cookie')!.split(';')[0];
+    const otherBody = await (await dev.request('/', { headers: { cookie: otherCookie } })).text();
+    expect(otherBody).not.toContain(`/p/${poll.rkey}`);
+    expect(otherBody).toContain('No polls yet');
   });
 
   it('serves the create form with the calendar island at GET /new', async () => {

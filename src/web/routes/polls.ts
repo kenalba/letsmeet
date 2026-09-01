@@ -4,7 +4,8 @@ import type { Deps } from '../../atproto/types.js';
 import type { AuthClient } from '../../atproto/oauthClient.js';
 import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
-import { getSessionDid } from './auth.js';
+import { getSessionDid, getSessionHandle } from './auth.js';
+import { listPollsByHost } from '../../db/cache.js';
 import { createPoll, getPollWithRevalidate, finalizePoll } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
@@ -30,7 +31,15 @@ export function pollRoutes(
 
   app.get('/', async (c) => {
     const did = await getSessionDid(c, env.COOKIE_SECRET);
-    return c.html(renderPage(createElement(LandingPage, { did })));
+    const handle = did ? await getSessionHandle(c, env.COOKIE_SECRET) : null;
+    const polls = did
+      ? listPollsByHost(deps.db, did).map((p) => ({
+          rkey: p.rkey, title: p.record.title, status: p.record.status,
+        }))
+      : [];
+    return c.html(renderPage(createElement(LandingPage, {
+      did, handle: handle ?? undefined, polls,
+    })));
   });
 
   app.get('/new', async (c) => {

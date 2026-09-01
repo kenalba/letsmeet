@@ -8,7 +8,7 @@ import { Label } from '../ui/label.js';
  * `error` carries the POST handler's own sanitized string, unchanged — the handler decides
  * what a visitor may be told (and what status it ships with); this page only frames it.
  */
-export function LoginPage({ error }: { error?: string }) {
+export function LoginPage({ error, returnTo }: { error?: string; returnTo?: string }) {
   return (
     <Layout title="Sign in — letsmeet">
       <div className="mx-auto grid max-w-md gap-6">
@@ -30,6 +30,9 @@ export function LoginPage({ error }: { error?: string }) {
               </p>
             ) : null}
             <form method="post" action="/login" className="grid gap-4">
+              {/* Already validated by the route; rides the form so the POST (and the OAuth
+                  state after it) can put the visitor back where they came from. */}
+              {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               <div className="grid gap-2">
                 <Label htmlFor="handle">Your handle</Label>
                 <Input

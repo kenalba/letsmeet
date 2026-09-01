@@ -269,7 +269,9 @@
       border: 1px solid var(--border); border-radius: 4px;
       background: var(--card); color: var(--card-foreground);
     }
-    small { color: var(--muted-foreground); }
+    /* .note is muted-but-not-smaller: <small> shrank "(shown publicly...)" a size below
+       the label it belongs to, which read as an accident. */
+    small, .note { color: var(--muted-foreground); }
     .hint { color: var(--muted-foreground); font-size: 13px; }
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
     .toolbar > div { display: flex; gap: 6px; }

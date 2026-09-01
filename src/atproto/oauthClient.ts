@@ -7,8 +7,14 @@ export interface AuthClient {
   clientMetadata: Record<string, unknown>;
   /** Public half of the keyset, served at /oauth/jwks.json. Never contains a private key. */
   jwks: Record<string, unknown>;
-  authorize(handle: string): Promise<URL>;
-  callback(params: URLSearchParams): Promise<{ did: string }>;
+  /**
+   * `state` rides the OAuth `state` parameter through the authorization round trip and
+   * comes back from `callback` — the only thing that survives the PDS redirect. The auth
+   * routes use it to carry a JSON envelope (the returnTo path, the typed handle) and are
+   * responsible for validating every field on the way back; this layer just carries it.
+   */
+  authorize(handle: string, state?: string): Promise<URL>;
+  callback(params: URLSearchParams): Promise<{ did: string; state?: string }>;
   restore(did: string): Promise<Agent>;
 }
 
@@ -64,12 +70,12 @@ export async function createOAuthClient(
     // `client.jwks` is derived from the keyset's *public* JWKs, and is `{ keys: [] }` for the
     // loopback client, which authenticates with `none` and has no keyset at all.
     jwks: client.jwks as unknown as Record<string, unknown>,
-    async authorize(handle) {
-      return client.authorize(handle, { scope: SCOPE });
+    async authorize(handle, state) {
+      return client.authorize(handle, { scope: SCOPE, state });
     },
     async callback(params) {
-      const { session } = await client.callback(params);
-      return { did: session.did };
+      const { session, state } = await client.callback(params);
+      return { did: session.did, state: state ?? undefined };
     },
     async restore(did) {
       const session = await client.restore(did);
