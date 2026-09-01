@@ -1,0 +1,63 @@
+import { describe, it, expect } from 'vitest';
+import { materializeSlots } from '../../src/core/slots.js';
+
+describe('materializeSlots', () => {
+  it('materializes a plain evening window to UTC', () => {
+    const slots = materializeSlots({
+      dates: ['2026-09-02'], window: { start: '17:00', end: '19:00' },
+      slotMinutes: 60, timezone: 'America/New_York',
+    });
+    // EDT is UTC-4 in September
+    expect(slots).toEqual([
+      { start: '2026-09-02T21:00:00.000Z', end: '2026-09-02T22:00:00.000Z' },
+      { start: '2026-09-02T22:00:00.000Z', end: '2026-09-02T23:00:00.000Z' },
+    ]);
+  });
+
+  it('US spring-forward: nominal 3h window yields 2 real hours', () => {
+    // 2026-03-08 America/New_York, clocks jump 02:00 -> 03:00
+    const slots = materializeSlots({
+      dates: ['2026-03-08'], window: { start: '01:00', end: '04:00' },
+      slotMinutes: 60, timezone: 'America/New_York',
+    });
+    expect(slots).toEqual([
+      { start: '2026-03-08T06:00:00.000Z', end: '2026-03-08T07:00:00.000Z' },
+      { start: '2026-03-08T07:00:00.000Z', end: '2026-03-08T08:00:00.000Z' },
+    ]);
+  });
+
+  it('EU fall-back: nominal 3h window yields 4 real hours', () => {
+    // 2026-10-25 Europe/Berlin, clocks fall back 03:00 -> 02:00
+    const slots = materializeSlots({
+      dates: ['2026-10-25'], window: { start: '01:00', end: '04:00' },
+      slotMinutes: 60, timezone: 'Europe/Berlin',
+    });
+    expect(slots).toHaveLength(4);
+    expect(slots[0].start).toBe('2026-10-24T23:00:00.000Z');
+    expect(slots[3].end).toBe('2026-10-25T03:00:00.000Z');
+  });
+
+  it('window crossing midnight extends into the next day', () => {
+    const slots = materializeSlots({
+      dates: ['2026-09-02'], window: { start: '22:00', end: '01:00' },
+      slotMinutes: 60, timezone: 'UTC',
+    });
+    expect(slots).toHaveLength(3);
+    expect(slots[2].end).toBe('2026-09-03T01:00:00.000Z');
+  });
+
+  it('handles non-contiguous date lists', () => {
+    const slots = materializeSlots({
+      dates: ['2026-09-02', '2026-09-04'], window: { start: '10:00', end: '11:00' },
+      slotMinutes: 30, timezone: 'UTC',
+    });
+    expect(slots).toHaveLength(4);
+  });
+
+  it('rejects an unknown timezone', () => {
+    expect(() => materializeSlots({
+      dates: ['2026-09-02'], window: { start: '10:00', end: '11:00' },
+      slotMinutes: 30, timezone: 'Mars/Olympus_Mons',
+    })).toThrow();
+  });
+});
