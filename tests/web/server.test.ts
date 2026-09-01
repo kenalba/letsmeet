@@ -48,6 +48,8 @@ describe('server', () => {
     expect(body).toContain('rel="stylesheet"');
     expect(body).toContain('/assets/app.css');
     expect(body).toContain('sign in to make a poll');
+    // The type credit links to the designer's tip jar, in the footer's prompt dialect.
+    expect(body).toMatch(/<a[^>]*href="https:\/\/buymeacoffee\.com\/helenazhang"[^>]*class="prompt[^"]*"[^>]*>helena zhang<\/a>/);
   });
 
   it('states the slot length on the poll page', async () => {

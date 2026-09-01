@@ -161,7 +161,16 @@ export function Layout({ title, description, canonical, children, scripts, signI
             >
               source
             </a>
-            <span>type: departure mono by helena zhang</span>
+            <span>
+              type: departure mono by{' '}
+              <a
+                href="https://buymeacoffee.com/helenazhang"
+                className="prompt no-underline hover:text-foreground"
+                rel="noopener"
+              >
+                helena zhang
+              </a>
+            </span>
           </div>
         </footer>
         {scripts?.map((src) => <script key={src} type="module" src={src} />)}
