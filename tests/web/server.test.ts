@@ -607,6 +607,61 @@ describe('page chrome', () => {
   });
 });
 
+describe('handle typeahead', () => {
+  const withSearch = (deps: Deps, search: (q: string) => Promise<Array<{ handle: string }>>) =>
+    createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', handleSearch: search,
+    });
+
+  it('answers /api/handles from the injected search and marks it privately cacheable', async () => {
+    const { deps } = await setup();
+    const app = withSearch(deps, async (q) => [{ handle: `${q}.test` }]);
+    const res = await app.request('/api/handles?q=ali');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ actors: [{ handle: 'ali.test' }] });
+    expect(res.headers.get('cache-control')).toContain('private');
+  });
+
+  it('rejects an empty or overlong query', async () => {
+    const { deps } = await setup();
+    const app = withSearch(deps, async () => { throw new Error('must not be called'); });
+    expect((await app.request('/api/handles')).status).toBe(400);
+    expect((await app.request('/api/handles?q=%20%20')).status).toBe(400);
+    expect((await app.request(`/api/handles?q=${'a'.repeat(65)}`)).status).toBe(400);
+  });
+
+  it('degrades to an empty list when the upstream fails', async () => {
+    const { deps } = await setup();
+    const app = withSearch(deps, async () => { throw new Error('AppView down'); });
+    const res = await app.request('/api/handles?q=ali');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ actors: [] });
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('rate-limits a burst from one address and memoizes repeats', async () => {
+    const { deps } = await setup();
+    let calls = 0;
+    const app = withSearch(deps, async (q) => { calls++; return [{ handle: `${q}.test` }]; });
+    let denied = 0;
+    for (let i = 0; i < 60; i++) {
+      const res = await app.request(`/api/handles?q=q${i % 5}`, { headers: { 'x-forwarded-for': '10.0.2.1' } });
+      if (res.status === 429) denied++;
+    }
+    expect(denied).toBeGreaterThan(0);
+    expect(calls).toBe(5);
+  });
+
+  it('ships the island on the login page and allows only Bluesky avatars in the CSP', async () => {
+    const { app } = await setup();
+    const res = await app.request('/login');
+    const body = await res.text();
+    expect(body).toContain('src="/assets/login.js"');
+    expect(body).toMatch(/<input[^>]*id="handle"[^>]*autoComplete="username"|<input[^>]*id="handle"[^>]*autocomplete="username"/i);
+    expect(res.headers.get('content-security-policy')).toContain("img-src 'self' data: https://cdn.bsky.app");
+  });
+});
+
 describe('scriptJson', () => {
   it('escapes every < so an embedded value cannot flip the script tokenizer', () => {
     // Same rule the poll page's #poll-data block depends on.

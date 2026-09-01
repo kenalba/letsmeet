@@ -181,3 +181,26 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   await expect(guest.locator('.cell.available')).toHaveCount(1);
   await guestContext.close();
 });
+
+test('sign-in handle field suggests accounts as you type', async ({ page }) => {
+  await page.goto('/login');
+  const handle = page.locator('#handle');
+  await handle.fill('ali');
+  const options = page.getByRole('option');
+  // The fake-PDS server answers /api/handles from a fixed roster (handleSearch.ts).
+  await expect(options).toHaveCount(2);
+  await expect(options.first()).toContainText('alice.test');
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+
+  // Keyboard: down twice lands on the second suggestion; Enter picks it without submitting.
+  await handle.press('ArrowDown');
+  await handle.press('ArrowDown');
+  await handle.press('Enter');
+  await expect(handle).toHaveValue('alicia.example.com');
+  await expect(options).toHaveCount(0);
+  await expect(page).toHaveURL(/\/login$/);
+
+  // Escape closes; a query with no match shows nothing.
+  await handle.fill('zzz');
+  await expect(options).toHaveCount(0);
+});

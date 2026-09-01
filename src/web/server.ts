@@ -9,6 +9,8 @@ import type { AuthClient } from '../atproto/oauthClient.js';
 import { GENERIC_ERROR } from '../core/errors.js';
 import { authRoutes } from './routes/auth.js';
 import { pollRoutes } from './routes/polls.js';
+import { apiRoutes } from './routes/api.js';
+import { bskyHandleSearch, cachedHandleSearch, type HandleSearch } from './handleSearch.js';
 import { page } from './respond.js';
 import { startSession, type SessionEnv } from './session.js';
 import { ErrorPage } from './pages/ErrorPage.js';
@@ -23,8 +25,11 @@ export const MAX_BODY_BYTES = 256 * 1024;
 export function createServer(
   deps: Deps,
   auth: AuthClient,
-  /** `devLogin` mounts a password-free sign-in; only the fake-PDS test rig may set it. */
-  env: { COOKIE_SECRET: string; PUBLIC_URL: string; devLogin?: boolean },
+  /**
+   * `devLogin` mounts a password-free sign-in; only the fake-PDS test rig may set it.
+   * `handleSearch` backs the sign-in typeahead; the rig and tests inject a stand-in.
+   */
+  env: { COOKIE_SECRET: string; PUBLIC_URL: string; devLogin?: boolean; handleSearch?: HandleSearch },
 ): Hono {
   const app = new Hono();
   const session: SessionEnv = {
@@ -40,7 +45,8 @@ export function createServer(
       // Inline `style=` attributes are how the grid paints heat and how the theme icons
       // hide; CSS is not a script-execution vector, so this is the pragmatic line.
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:'],
+      // Avatars in the sign-in typeahead come from Bluesky's CDN; nothing else external.
+      imgSrc: ["'self'", 'data:', 'https://cdn.bsky.app'],
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
@@ -140,6 +146,7 @@ export function createServer(
     });
   }
   app.route('/', authRoutes(auth, { ...session, publicUrl: env.PUBLIC_URL, now: deps.now }));
+  app.route('/', apiRoutes(cachedHandleSearch(env.handleSearch ?? bskyHandleSearch()), deps.now));
   app.route('/', pollRoutes(deps, auth, env));
   return app;
 }

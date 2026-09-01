@@ -1,4 +1,7 @@
 import { Layout, pageTitle } from './Layout.js';
+
+/** The typeahead island — see src/web/islands/login.ts. Without it the form still works. */
+export const LOGIN_SCRIPTS = ['/assets/login.js'];
 import { Button } from '../ui/button.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { Input } from '../ui/input.js';
@@ -10,7 +13,7 @@ import { Label } from '../ui/label.js';
  */
 export function LoginPage({ error, returnTo }: { error?: string; returnTo?: string }) {
   return (
-    <Layout title={pageTitle('Sign in')}>
+    <Layout title={pageTitle('Sign in')} scripts={LOGIN_SCRIPTS}>
       <div className="mx-auto grid max-w-md gap-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <Card>
@@ -40,6 +43,8 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                   name="handle"
                   placeholder="you.bsky.social"
                   autoComplete="username"
+                  spellCheck={false}
+                  autoCapitalize="none"
                   required
                 />
               </div>

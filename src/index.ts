@@ -7,6 +7,7 @@ import { flushOutbox } from './services/responses.js';
 import { pruneOutbox } from './db/outbox.js';
 import { pruneWebSessions } from './db/webSessions.js';
 import { createServer } from './web/server.js';
+import { fakeHandleSearch } from './web/handleSearch.js';
 import type { Deps } from './atproto/types.js';
 
 /**
@@ -96,6 +97,8 @@ setInterval(() => {
   pruneWebSessions(db, Date.now());
 }, 60_000);
 
-const app = createServer(deps, auth, { ...env, devLogin: FAKE_PDS });
+const app = createServer(deps, auth, {
+  ...env, devLogin: FAKE_PDS, handleSearch: FAKE_PDS ? fakeHandleSearch : undefined,
+});
 serve({ fetch: app.fetch, port: env.PORT });
 console.log(`letsmeet listening on :${env.PORT} (${env.PUBLIC_URL})`);
