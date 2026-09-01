@@ -10,7 +10,7 @@ Three promises on the landing page: no ads, no account wall for participants, no
 
 1. A real "last mile": finalizing a poll produces ICS/webcal output and a `community.lexicon.calendar.event` record readable by Smoke Signal and other atproto calendar apps.
 2. "If need be" as a second paint state, free (Doodle paywalls it at $11/mo).
-3. Polls and responses are atproto records the participants actually own; the app's database is a disposable index.
+3. Polls and signed-in responses are atproto records the participants themselves own; the app's database is a disposable index.
 4. (v1.1, not v1) A reusable availability profile stored in the user's PDS.
 
 ## Core architectural decisions (settled during brainstorming)
@@ -120,7 +120,7 @@ Recovery property: losing the DB costs host re-logins, any unflushed outbox rows
 ## Stack & hosting
 
 - TypeScript; `@atproto/oauth-client-node` + first-party SDKs.
-- Single light server (Hono or Express), server-rendered pages, small client bundle for the grid (vanilla or Preact). SQLite.
+- Single light server (Hono), server-rendered pages, small Preact island for the grid. SQLite.
 - One process behind Caddy at `poll.wzrdz.cool`; runs on the existing home server or any small VPS. Lexicon DNS records on `wzrdz.cool`.
 
 ## Explicitly out of scope for v1
