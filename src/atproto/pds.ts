@@ -5,6 +5,11 @@ interface DidDoc {
   service?: Array<{ id: string; type: string; serviceEndpoint: string }>;
 }
 
+/** No outbound read may hang a request forever; a PDS that is this slow is down to us. */
+const TIMEOUT_MS = 5_000;
+/** A poll's response collection is capped far below this; more pages means a runaway repo. */
+const MAX_PAGES = 20;
+
 export async function resolvePds(did: string, fetchImpl: typeof fetch = fetch): Promise<string> {
   let url: string;
   if (did.startsWith('did:plc:')) {
@@ -14,7 +19,7 @@ export async function resolvePds(did: string, fetchImpl: typeof fetch = fetch): 
   } else {
     throw new Error(`unsupported DID method: ${did}`);
   }
-  const res = await fetchImpl(url);
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`DID resolution failed for ${did}: ${res.status}`);
   const doc = (await res.json()) as DidDoc;
   const svc = doc.service?.find((s) => s.type === 'AtprotoPersonalDataServer');
@@ -38,8 +43,11 @@ export class PublicPdsReader implements RepoReader {
     u.searchParams.set('repo', did);
     u.searchParams.set('collection', collection);
     u.searchParams.set('rkey', rkey);
-    const res = await this.fetchImpl(u);
-    if (!res.ok) return null;
+    const res = await this.fetchImpl(u, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    // Only a real 404 means "the host withdrew this record" — anything else is our problem,
+    // and must not be mistaken for a deletion by the tombstoning caller.
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`getRecord failed for ${did}: ${res.status}`);
     const body = (await res.json()) as { uri: string; cid: string; value: Record<string, unknown> };
     return { uri: body.uri, cid: body.cid, value: body.value };
   }
@@ -48,13 +56,15 @@ export class PublicPdsReader implements RepoReader {
     const pds = await this.pdsFor(did);
     const out: FoundRecord[] = [];
     let cursor: string | undefined;
+    let pages = 0;
     do {
+      if (++pages > MAX_PAGES) throw new Error(`listRecords exceeded page cap for ${did}`);
       const u = new URL(`${pds}/xrpc/com.atproto.repo.listRecords`);
       u.searchParams.set('repo', did);
       u.searchParams.set('collection', collection);
       u.searchParams.set('limit', '100');
       if (cursor) u.searchParams.set('cursor', cursor);
-      const res = await this.fetchImpl(u);
+      const res = await this.fetchImpl(u, { signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (!res.ok) throw new Error(`listRecords failed for ${did}: ${res.status}`);
       const body = (await res.json()) as { records: FoundRecord[]; cursor?: string };
       out.push(...body.records);

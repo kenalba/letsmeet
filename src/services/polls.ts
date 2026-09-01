@@ -35,13 +35,21 @@ export async function getPollWithRevalidate(deps: Deps, rkey: string): Promise<C
     if (live === null) {
       tombstonePoll(deps.db, rkey);
     } else {
+      let record;
+      try {
+        record = validateScheduleRecord(live.value);
+      } catch (err) {
+        // Worth its own line: a live record we cannot parse is a schema/host problem that
+        // will not fix itself, unlike the read failures the outer catch mostly sees.
+        console.warn(`invalid live schedule record for ${rkey}:`, err);
+        throw err;
+      }
       upsertPollCache(deps.db, {
-        rkey, uri: live.uri, hostDid: cached.hostDid, cid: live.cid,
-        record: validateScheduleRecord(live.value),
+        rkey, uri: live.uri, hostDid: cached.hostDid, cid: live.cid, record,
       });
     }
   } catch {
-    // network trouble: stale cache is fine
+    // read failure or unusable record: stale cache is fine
   }
   return getPollCache(deps.db, rkey);
 }

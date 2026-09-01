@@ -25,10 +25,19 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
       const recs = await deps.reader.listRecords(did, RESPONSE_NSID);
       const mine = recs.find((r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri);
       if (mine) {
-        upsertResponseCache(deps.db, pollRkey, 'account', did, validateResponseRecord(mine.value), false);
+        let record;
+        try {
+          record = validateResponseRecord(mine.value);
+        } catch (err) {
+          // Distinct from a read failure: this participant's record is unusable until they
+          // (or the schema) change, so say so rather than silently keeping the stale row.
+          console.warn(`invalid live response record for ${did}:`, err);
+          throw err;
+        }
+        upsertResponseCache(deps.db, pollRkey, 'account', did, record, false);
       }
     } catch {
-      // stale cache is fine for a read
+      // read failure or unusable record: stale cache is fine for a read
     }
   }
 

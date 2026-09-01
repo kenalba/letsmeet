@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
+import { PublicPdsReader } from '../../src/atproto/pds.js';
 import {
   createPoll, getPollWithRevalidate, updatePollMeta, updatePollTime, parseRkey,
 } from '../../src/services/polls.js';
@@ -56,6 +57,27 @@ describe('getPollWithRevalidate', () => {
       listRecords: async () => [],
     };
     expect((await getPollWithRevalidate(deps, rkey))?.record.title).toBe('Sturdy');
+  });
+  it('serves stale cache, and does not tombstone, when the PDS answers 5xx', async () => {
+    const { deps } = makeDeps();
+    const { rkey } = await createPoll(deps, HOST, { title: 'Sturdy', time });
+    // A real reader against a PDS that is broken rather than empty: the record is still
+    // there, so treating the failure as a deletion would 410 a live poll for everyone.
+    deps.reader = new PublicPdsReader((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://plc.directory/')) {
+        return new Response(JSON.stringify({
+          service: [{
+            id: '#atproto_pds', type: 'AtprotoPersonalDataServer',
+            serviceEndpoint: 'https://pds.example.com',
+          }],
+        }), { status: 200 });
+      }
+      return new Response('upstream is having a day', { status: 503 });
+    }) as typeof fetch);
+    const poll = await getPollWithRevalidate(deps, rkey);
+    expect(poll?.record.title).toBe('Sturdy');
+    expect(poll?.tombstoned).toBe(false);
   });
   it('returns null for an unknown rkey', async () => {
     const { deps } = makeDeps();
