@@ -152,4 +152,19 @@ describe('server', () => {
     expect(res.status).toBe(410);
     expect(await res.text()).toContain('withdrawn by the host');
   });
+
+  it('does not mount /dev/login unless the dev flag is set', async () => {
+    const { app } = await setup();
+    expect((await app.request('/dev/login?did=did:plc:sneaky')).status).toBe(404);
+  });
+
+  it('mounts /dev/login, setting a signed did cookie, when the dev flag is set', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const res = await dev.request('/dev/login?did=did:plc:devguest');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('set-cookie')).toMatch(/^did=did%3Aplc%3Adevguest\./);
+  });
 });
