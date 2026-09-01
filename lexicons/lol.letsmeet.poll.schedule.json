@@ -26,7 +26,7 @@
       "properties": {
         "dates": { "type": "array", "maxLength": 31, "items": { "type": "string" } },
         "window": { "type": "ref", "ref": "#dayWindow" },
-        "slotMinutes": { "type": "integer", "enum": [15, 30, 60] },
+        "slotMinutes": { "type": "integer", "enum": [10, 15, 20, 30, 45, 60, 90, 120] },
         "timezone": { "type": "string", "maxLength": 64 }
       }
     },

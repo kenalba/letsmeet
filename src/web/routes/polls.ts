@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { Deps } from '../../atproto/types.js';
 import type { AuthClient } from '../../atproto/oauthClient.js';
 import type { Interval } from '../../core/intervals.js';
-import type { SpecificDates } from '../../core/slots.js';
+import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
 import { getSessionDid } from './auth.js';
 import { createPoll, getPollWithRevalidate, finalizePoll } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
@@ -46,7 +46,9 @@ export function pollRoutes(
     const time: SpecificDates = {
       dates: String(f.get('dates') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       window: { start: String(f.get('windowStart')), end: String(f.get('windowEnd')) },
-      slotMinutes: Number(f.get('slotMinutes')) as 15 | 30 | 60,
+      // Unchecked cast: the <select> only offers lexicon-legal values, and a hand-rolled
+      // POST carrying anything else is rejected by the lexicon on record build below.
+      slotMinutes: Number(f.get('slotMinutes')) as SlotMinutes,
       timezone: String(f.get('timezone')),
     };
     if (time.dates.length === 0) {

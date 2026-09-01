@@ -1,10 +1,17 @@
 import { DateTime } from 'luxon';
 import type { Interval } from './intervals.js';
 
+/**
+ * Slot granularities the app offers, mirroring the `slotMinutes` enum in
+ * `lexicons/lol.letsmeet.poll.schedule.json` — the two must stay in sync, since a value
+ * this type allows but the lexicon rejects only fails at record-build time.
+ */
+export type SlotMinutes = 10 | 15 | 20 | 30 | 45 | 60 | 90 | 120;
+
 export interface SpecificDates {
   dates: string[];                     // ISO dates, explicit list, non-contiguous OK
   window: { start: string; end: string }; // "HH:MM" in `timezone`
-  slotMinutes: 15 | 30 | 60;
+  slotMinutes: SlotMinutes;
   timezone: string;                    // IANA
 }
 

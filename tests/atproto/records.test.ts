@@ -28,6 +28,18 @@ describe('schedule records', () => {
     const rec = buildScheduleRecord({ title: 'ok', time });
     expect(() => validateScheduleRecord({ ...rec, status: 'meh' })).toThrow();
   });
+  it('accepts every slot granularity the create form offers', () => {
+    for (const slotMinutes of [10, 15, 20, 30, 45, 60, 90, 120] as const) {
+      expect(() => buildScheduleRecord({ title: 'ok', time: { ...time, slotMinutes } }))
+        .not.toThrow();
+    }
+  });
+  it('rejects a slotMinutes outside the lexicon enum', () => {
+    // The form can only submit legal values; this guards the lexicon itself, so the cast
+    // in routes/polls.ts stays backed by a real check on the record-build path.
+    const bogus = { ...time, slotMinutes: 25 as unknown as typeof time.slotMinutes };
+    expect(() => buildScheduleRecord({ title: 'ok', time: bogus })).toThrow();
+  });
   it('rejects more than 31 dates', () => {
     const many = Array.from({ length: 32 }, (_, i) => `2026-10-${String((i % 28) + 1).padStart(2, '0')}`);
     expect(() => buildScheduleRecord({ title: 'ok', time: { ...time, dates: many } })).toThrow();

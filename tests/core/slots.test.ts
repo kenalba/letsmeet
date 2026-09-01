@@ -61,6 +61,28 @@ describe('materializeSlots', () => {
     })).toThrow();
   });
 
+  it('clamps a 45-minute grain that divides the window unevenly', () => {
+    // 10:00-12:00 is 120 minutes: two 45s fit, a third would end at 12:15, past the window.
+    const slots = materializeSlots({
+      dates: ['2026-09-02'], window: { start: '10:00', end: '12:00' },
+      slotMinutes: 45, timezone: 'UTC',
+    });
+    expect(slots).toEqual([
+      { start: '2026-09-02T10:00:00.000Z', end: '2026-09-02T10:45:00.000Z' },
+      { start: '2026-09-02T10:45:00.000Z', end: '2026-09-02T11:30:00.000Z' },
+    ]);
+  });
+
+  it('clamps a 90-minute grain that divides the window unevenly', () => {
+    // 09:00-13:00 is 240 minutes: two 90s fit, a third would end at 13:30.
+    const slots = materializeSlots({
+      dates: ['2026-09-02'], window: { start: '09:00', end: '13:00' },
+      slotMinutes: 90, timezone: 'UTC',
+    });
+    expect(slots).toHaveLength(2);
+    expect(slots[1].end).toBe('2026-09-02T12:00:00.000Z');
+  });
+
   it('drops a trailing partial slot rather than overrunning the window', () => {
     expect(materializeSlots({
       dates: ['2026-09-02'], window: { start: '10:00', end: '10:50' },

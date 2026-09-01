@@ -39,7 +39,7 @@ description  string, optional
 time         union, required → #specificDates:
                dates        string[] of ISO dates, explicit list (non-contiguous OK), ≤31 items
                window       { start: "HH:MM", end: "HH:MM" } in the poll's reference timezone
-               slotMinutes  15 | 30 | 60
+               slotMinutes  10 | 15 | 20 | 30 | 45 | 60 | 90 | 120 (create form default: 30)
                timezone     IANA string — the grid's "home" zone
 status       enum: active | closed | finalized | cancelled, required
 finalized    { start, end } UTC datetimes, optional — set when status becomes finalized
