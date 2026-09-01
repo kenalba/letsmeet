@@ -5,6 +5,8 @@ import { StateStore, SessionStore } from '../db/sessions.js';
 
 export interface AuthClient {
   clientMetadata: Record<string, unknown>;
+  /** Public half of the keyset, served at /oauth/jwks.json. Never contains a private key. */
+  jwks: Record<string, unknown>;
   authorize(handle: string): Promise<URL>;
   callback(params: URLSearchParams): Promise<{ did: string }>;
   restore(did: string): Promise<Agent>;
@@ -59,6 +61,9 @@ export async function createOAuthClient(
 
   return {
     clientMetadata: client.clientMetadata as unknown as Record<string, unknown>,
+    // `client.jwks` is derived from the keyset's *public* JWKs, and is `{ keys: [] }` for the
+    // loopback client, which authenticates with `none` and has no keyset at all.
+    jwks: client.jwks as unknown as Record<string, unknown>,
     async authorize(handle) {
       return client.authorize(handle, { scope: SCOPE });
     },

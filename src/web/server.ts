@@ -19,11 +19,12 @@ export function createServer(
       const did = c.req.query('did') ?? 'did:plc:devhost';
       await setSignedCookie(c, 'did', did, env.COOKIE_SECRET, {
         httpOnly: true, sameSite: 'Lax', path: '/',
+        secure: env.PUBLIC_URL.startsWith('https'),
       });
       return c.redirect('/');
     });
   }
-  app.route('/', authRoutes(auth, env.COOKIE_SECRET));
+  app.route('/', authRoutes(auth, env.COOKIE_SECRET, env.PUBLIC_URL));
   app.route('/', pollRoutes(deps, auth, env));
   return app;
 }

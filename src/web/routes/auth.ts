@@ -1,16 +1,26 @@
 import { Hono, type Context } from 'hono';
 import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
 import type { AuthClient } from '../../atproto/oauthClient.js';
+import { TokenBucket } from '../rateLimit.js';
 
 export async function getSessionDid(c: Context, cookieSecret: string): Promise<string | null> {
   const did = await getSignedCookie(c, cookieSecret, 'did');
   return did || null;
 }
 
-export function authRoutes(auth: AuthClient, cookieSecret: string): Hono {
+export function authRoutes(auth: AuthClient, cookieSecret: string, publicUrl: string): Hono {
   const app = new Hono();
+  // Per-app, not module-global, for the same reason as the guest limiter in polls.ts.
+  // Sign-in is a handle resolution plus an authorization-server round trip: cheap for the
+  // client, not for us, so the budget is small and refills slowly (5 burst, ~1 per 20s).
+  const loginLimiter = new TokenBucket(5, 0.05);
+  const secure = publicUrl.startsWith('https');
 
   app.get('/oauth/client-metadata.json', (c) => c.json(auth.clientMetadata));
+
+  // Advertised as `jwks_uri` by the non-loopback client metadata; the authorization server
+  // fetches it to verify the private_key_jwt assertions this app signs.
+  app.get('/oauth/jwks.json', (c) => c.json(auth.jwks));
 
   app.get('/login', (c) =>
     c.html(
@@ -22,6 +32,12 @@ export function authRoutes(auth: AuthClient, cookieSecret: string): Hono {
   );
 
   app.post('/login', async (c) => {
+    // Same last-hop rule as the guest limiter: our proxy appends the real client.
+    const xff = c.req.header('x-forwarded-for');
+    const ip = xff ? xff.split(',').pop()!.trim() : 'local';
+    if (!loginLimiter.allow(ip, Date.now())) {
+      return c.text('Too many sign-in attempts — try again in a minute.', 429);
+    }
     const form = await c.req.formData();
     const handle = String(form.get('handle') ?? '').trim();
     if (!handle) return c.text('handle required', 400);
@@ -38,7 +54,7 @@ export function authRoutes(auth: AuthClient, cookieSecret: string): Hono {
     try {
       const { did } = await auth.callback(new URL(c.req.url).searchParams);
       await setSignedCookie(c, 'did', did, cookieSecret, {
-        httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 60 * 60 * 24 * 30,
+        httpOnly: true, sameSite: 'Lax', path: '/', secure, maxAge: 60 * 60 * 24 * 30,
       });
       return c.redirect('/');
     } catch (err) {

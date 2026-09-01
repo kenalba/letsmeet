@@ -23,6 +23,30 @@ const env = {
   OAUTH_JWK: process.env.OAUTH_JWK,
 };
 
+/**
+ * The dev defaults above are conveniences, not fallbacks: booting a real deployment on them
+ * would sign cookies with a public string and encrypt OAuth sessions with a published key.
+ * Fake mode is exempt — the e2e rig runs on the defaults deliberately.
+ */
+if (!FAKE_PDS) {
+  const problems: string[] = [];
+  if (env.COOKIE_SECRET === 'dev-cookie-secret') {
+    problems.push('COOKIE_SECRET is unset or still the dev default (openssl rand -base64 32)');
+  }
+  if (!/^[0-9a-f]{64}$/i.test(env.SESSION_ENC_KEY)) {
+    problems.push('SESSION_ENC_KEY must be 64 hex characters (openssl rand -hex 32)');
+  }
+  if (env.SESSION_ENC_KEY === '00'.repeat(32)) {
+    problems.push('SESSION_ENC_KEY is still the all-zero dev default (openssl rand -hex 32)');
+  }
+  if (problems.length) {
+    console.error('refusing to boot without real secrets:');
+    for (const p of problems) console.error(`  - ${p}`);
+    console.error('See docs/deploy.md §1. Set FAKE_PDS=1 only for local dev/e2e.');
+    process.exit(1);
+  }
+}
+
 const db = openDb(env.DB_PATH);
 
 let auth: AuthClient;
@@ -33,6 +57,7 @@ if (FAKE_PDS) {
   const noAuth = () => { throw new Error('fake PDS mode: sign in through /dev/login'); };
   auth = {
     clientMetadata: {},
+    jwks: { keys: [] },
     authorize: async () => noAuth(),
     callback: async () => noAuth(),
     restore: async () => noAuth(),
@@ -51,6 +76,9 @@ if (FAKE_PDS) {
 
 setInterval(() => {
   void flushOutbox(deps).catch((err) => console.error('outbox flush failed:', err));
+  // Authorization requests that never came back leave an encrypted row behind; an hour is
+  // far longer than any real round trip.
+  db.prepare('DELETE FROM oauth_state WHERE created_at < ?').run(Date.now() - 3600_000);
 }, 60_000);
 
 const app = createServer(deps, auth, { ...env, devLogin: FAKE_PDS });

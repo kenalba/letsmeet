@@ -15,6 +15,7 @@ const PAINT = [{ start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T18:00:00.00
 
 const stubAuth: AuthClient = {
   clientMetadata: {},
+  jwks: { keys: [] },
   authorize: async () => new URL('https://pds.example.com/authorize'),
   callback: async () => ({ did: HOST }),
   restore: async () => { throw new Error('not used'); },
