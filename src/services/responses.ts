@@ -1,5 +1,5 @@
 import { TID } from '@atproto/common';
-import type { Deps } from '../atproto/types.js';
+import type { Deps, FoundRecord } from '../atproto/types.js';
 import type { Interval } from '../core/intervals.js';
 import { snapToSlots } from '../core/intervals.js';
 import { materializeSlots } from '../core/slots.js';
@@ -26,6 +26,19 @@ export const GUEST_CAP = 60;
  * most — so 400 is generous for people and useless for a loop.
  */
 export const MAX_PAINT_INTERVALS = 400;
+
+/**
+ * The repo owner's own response to `pollUri` among `recs`, or undefined. A record that
+ * carries `guest` is not theirs: guests' records are written into the host's repo on
+ * their behalf, so a host who answers their own poll has both kinds side by side there,
+ * and taking "any record for this poll" would read — or overwrite — a guest's.
+ */
+export function findOwnResponse(recs: FoundRecord[], pollUri: string): FoundRecord | undefined {
+  return recs.find((r) => {
+    const v = r.value as unknown as ResponseRecord;
+    return v.subject?.uri === pollUri && !v.guest;
+  });
+}
 
 async function loadOpenPoll(deps: Deps, pollRkey: string): Promise<CachedPoll> {
   const poll = await getPollWithRevalidate(deps, pollRkey);
@@ -139,10 +152,8 @@ export async function submitAccountResponse(
   const poll = await loadOpenPoll(deps, pollRkey);
   const snapped = snapPaint(poll, input.available, input.ifNeedBe);
 
-  // find an existing response for this poll in the responder's repo → upsert its rkey
-  const existing = (await deps.reader.listRecords(did, RESPONSE_NSID)).find(
-    (r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri,
-  );
+  // find the responder's existing response for this poll in their repo → upsert its rkey
+  const existing = findOwnResponse(await deps.reader.listRecords(did, RESPONSE_NSID), poll.uri);
   const rkey = existing ? parseRkey(existing.uri) : TID.nextStr();
 
   const record = buildFromPaint(poll, snapped, { timezone: input.timezone, note: input.note });

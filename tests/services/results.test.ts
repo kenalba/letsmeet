@@ -12,6 +12,7 @@ const time = {
   slotMinutes: 30 as const, timezone: 'UTC',
 };
 const PAINT = [{ start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T17:30:00.000Z' }];
+const PAINT2 = [{ start: '2026-09-02T17:30:00.000Z', end: '2026-09-02T18:00:00.000Z' }];
 
 async function setup() {
   const repo = new FakeRepo();
@@ -102,5 +103,36 @@ describe('getResults', () => {
   it('returns null for an unknown poll', async () => {
     const { deps } = await setup();
     expect(await getResults(deps, 'nope')).toBeNull();
+  });
+});
+
+/**
+ * A guest's record is written into the host's repo, so when the host answers their own
+ * poll that repo holds two records for the same subject. Only the one without `guest` is
+ * the host's own; the other is attested on the guest's behalf and must be left alone.
+ */
+describe('host answering their own poll', () => {
+  it('saves alongside an earlier guest record instead of overwriting it', async () => {
+    const { deps, repo, poll } = await setup();
+    await submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT2 });
+    await submitAccountResponse(deps, HOST, poll.rkey, { available: PAINT });
+    const recs = (await repo.listRecords(HOST, 'lol.letsmeet.poll.response'))
+      .map((r) => r.value as { guest?: { name: string }; available: typeof PAINT });
+    expect(recs).toHaveLength(2);
+    expect(recs.find((r) => r.guest)?.available).toEqual(PAINT2);
+    expect(recs.find((r) => !r.guest)?.available).toEqual(PAINT);
+  });
+
+  it('revalidates the host response from their own record, not the guest one beside it', async () => {
+    const { deps, poll } = await setup();
+    await submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT2 });
+    await submitAccountResponse(deps, HOST, poll.rkey, { available: PAINT, handle: 'host.example' });
+    const live: Deps = { ...deps, revalidateTtlMs: 0 };
+    for (let i = 0; i < 2; i++) {
+      const results = await getResults(live, poll.rkey);
+      expect(results?.responses).toHaveLength(2);
+      expect(results?.responses.find((r) => r.who === 'host.example')?.available).toEqual(PAINT);
+      expect(results?.responses.find((r) => r.who === 'Sam')?.available).toEqual(PAINT2);
+    }
   });
 });

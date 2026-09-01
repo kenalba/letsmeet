@@ -2,8 +2,9 @@ import type { Deps } from '../atproto/types.js';
 import type { Interval } from '../core/intervals.js';
 import { materializeSlots } from '../core/slots.js';
 import { rankSlots, type RankedSlot, type ResponseSummary } from '../core/ranking.js';
-import { validateResponseRecord, RESPONSE_NSID, type ResponseRecord } from '../atproto/records.js';
+import { validateResponseRecord, RESPONSE_NSID } from '../atproto/records.js';
 import { getPollWithRevalidate } from './polls.js';
+import { findOwnResponse } from './responses.js';
 import {
   addParticipant, listParticipants, listResponseCache, upsertResponseCache, type CachedPoll,
 } from '../db/cache.js';
@@ -41,8 +42,7 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
           const found = await deps.resolveHandle(did);
           if (found) addParticipant(deps.db, pollRkey, did, found);
         }
-        const recs = await deps.reader.listRecords(did, RESPONSE_NSID);
-        const mine = recs.find((r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri);
+        const mine = findOwnResponse(await deps.reader.listRecords(did, RESPONSE_NSID), poll.uri);
         if (mine) {
           let record;
           try {
