@@ -361,19 +361,214 @@ describe('server', () => {
     expect((await app.request('/dev/login?did=did:plc:sneaky')).status).toBe(404);
   });
 
-  it('mounts /dev/login, setting a signed did cookie, when the dev flag is set', async () => {
+  it('mounts /dev/login, opening a session, when the dev flag is set', async () => {
     const { deps } = await setup();
     const dev = createServer(deps, stubAuth, {
       COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
     });
     const res = await dev.request('/dev/login?did=did:plc:devguest');
     expect(res.status).toBe(302);
-    // The signed value carries the name-binding prefix now (did\x00…), so assert the
-    // cookie round-trips to the right DID rather than pinning its raw encoding.
+    // The cookie is an opaque session id; assert it round-trips to the right DID rather
+    // than pinning its encoding.
     const cookie = res.headers.get('set-cookie')!.split(';')[0];
-    expect(cookie.startsWith('did=')).toBe(true);
+    expect(cookie.startsWith('sid=')).toBe(true);
+    expect(cookie).not.toContain('devguest');
     const landing = await (await dev.request('/', { headers: { cookie } })).text();
     expect(landing).toContain('did:plc:devguest');
+  });
+
+  it('a tampered or foreign session cookie is simply signed out', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const res = await dev.request('/dev/login?did=did:plc:devguest');
+    const cookie = res.headers.get('set-cookie')!.split(';')[0];
+    // Same secret, different cookie name: the name-bound payload must not verify as sid.
+    const renamed = cookie.replace(/^sid=/, 'other=');
+    const flipped = cookie.slice(0, -2) + (cookie.endsWith('AA') ? 'BB' : 'AA');
+    for (const bad of [renamed, flipped, 'sid=garbage']) {
+      const landing = await (await dev.request('/', { headers: { cookie: bad } })).text();
+      expect(landing).not.toContain('did:plc:devguest');
+      expect(landing).toContain('Sign in to create a poll');
+    }
+  });
+});
+
+describe('request hardening', () => {
+  const devServer = (deps: Deps) => createServer(deps, stubAuth, {
+    COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+  });
+  const signIn = async (dev: ReturnType<typeof createServer>, did: string) => {
+    const res = await dev.request(`/dev/login?did=${encodeURIComponent(did)}`);
+    return res.headers.get('set-cookie')!.split(';')[0];
+  };
+
+  it('sends a CSP whose nonce matches every inline script, plus the other headers', async () => {
+    const { app, poll } = await setup();
+    for (const path of ['/', `/p/${poll.rkey}`, '/login']) {
+      const res = await app.request(path);
+      const csp = res.headers.get('content-security-policy')!;
+      const m = csp.match(/script-src 'self' 'nonce-([^']+)'/);
+      expect(m, path).not.toBeNull();
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).toContain("object-src 'none'");
+      expect(csp).toContain("form-action 'self' https:");
+      const body = await res.text();
+      // Every executable inline script carries this response's nonce; none is bare.
+      const inline = body.match(/<script(?![^>]*\bsrc=)(?![^>]*type="application\/json")[^>]*>/g) ?? [];
+      expect(inline.length, path).toBeGreaterThan(0);
+      for (const tag of inline) expect(tag, `${path}: ${tag}`).toContain(`nonce="${m![1]}"`);
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+      expect(res.headers.get('strict-transport-security')).toContain('max-age=31536000');
+    }
+    // Nonces are per response.
+    const a = (await app.request('/')).headers.get('content-security-policy');
+    const b = (await app.request('/')).headers.get('content-security-policy');
+    expect(a).not.toBe(b);
+  });
+
+  it('rejects an oversized body with 413 before any handler runs', async () => {
+    const { app, poll } = await setup();
+    const res = await app.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x'.repeat(300 * 1024), available: PAINT }),
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it('rejects a paint with more intervals than any grid could produce', async () => {
+    const { app, poll } = await setup();
+    const many = Array.from({ length: 401 }, (_, i) => ({
+      start: new Date(Date.UTC(2026, 8, 2, 17, 0, i)).toISOString(),
+      end: new Date(Date.UTC(2026, 8, 2, 17, 0, i + 1)).toISOString(),
+    }));
+    const res = await app.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: many }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/too many intervals/);
+  });
+
+  it('rate-limits a signed-in responder by DID on /respond-auth', async () => {
+    const { deps, poll } = await setup();
+    const dev = devServer(deps);
+    const cookie = await signIn(dev, 'did:plc:sam');
+    let denied = 0;
+    for (let i = 0; i < 15; i++) {
+      const res = await dev.request(`/p/${poll.rkey}/respond-auth`, {
+        method: 'POST',
+        // A different address every time: the key is the account, not the IP.
+        headers: { 'content-type': 'application/json', cookie, 'x-forwarded-for': `10.0.1.${i}` },
+        body: JSON.stringify({ available: PAINT }),
+      });
+      if (res.status === 429) denied++;
+    }
+    expect(denied).toBeGreaterThan(0);
+  });
+
+  it('rate-limits poll creation by DID', async () => {
+    const { deps } = await setup();
+    const dev = devServer(deps);
+    const cookie = await signIn(dev, HOST);
+    let denied = 0;
+    for (let i = 0; i < 15; i++) {
+      const res = await dev.request('/polls', {
+        method: 'POST',
+        headers: { cookie },
+        body: new URLSearchParams({
+          title: `P${i}`, dates: '2026-09-02', windowStart: '17:00', windowEnd: '19:00',
+          slotMinutes: '30', timezone: 'UTC',
+        }),
+      });
+      if (res.status === 429) denied++;
+    }
+    expect(denied).toBeGreaterThan(0);
+  });
+
+  it('refuses a poll whose timezone or date could never render, at creation', async () => {
+    const { deps } = await setup();
+    const dev = devServer(deps);
+    const cookie = await signIn(dev, HOST);
+    for (const bad of [
+      { timezone: 'Eastern' }, { dates: '2026-13-45' }, { windowStart: '17:00', windowEnd: '17:10' },
+    ]) {
+      const res = await dev.request('/polls', {
+        method: 'POST',
+        headers: { cookie },
+        body: new URLSearchParams({
+          title: 'X', dates: '2026-09-02', windowStart: '17:00', windowEnd: '19:00',
+          slotMinutes: '30', timezone: 'UTC', ...bad,
+        }),
+      });
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+      expect(await res.text()).toContain('Could not create poll');
+    }
+    expect(deps.db.prepare('SELECT COUNT(*) AS n FROM poll_cache').get()).toEqual({ n: 1 });
+  });
+
+  it('blocks a cross-site POST while letting same-site and header-less ones through', async () => {
+    const { app, poll } = await setup();
+    const post = (headers: Record<string, string>) => app.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', host: 'localhost:8787', ...headers },
+      body: JSON.stringify({ name: 'Sam', available: PAINT }),
+    });
+    expect((await post({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' })).status).toBe(403);
+    // No Sec-Fetch-Site (an older browser): Origin decides, and `null` is foreign.
+    expect((await post({ origin: 'https://evil.example' })).status).toBe(403);
+    expect((await post({ origin: 'null' })).status).toBe(403);
+    expect((await post({ 'sec-fetch-site': 'same-origin', origin: 'http://localhost:8787' })).status).toBe(200);
+    // Chrome sends `Origin: null` on same-origin form posts under some referrer policies;
+    // Sec-Fetch-Site is the browser's own verdict and wins when present.
+    expect((await post({ 'sec-fetch-site': 'same-origin', origin: 'null' })).status).toBe(200);
+    expect((await post({ 'sec-fetch-site': 'none' })).status).toBe(200);
+    expect((await post({})).status).toBe(200);
+  });
+
+  it('answers an unexpected failure with a generic line, never the internal message', async () => {
+    const { deps, poll } = await setup();
+    deps.writerFor = async () => { throw new Error('secret-internal-detail https://pds.internal/xrpc'); };
+    // Account responses have no outbox: the writer failure surfaces to the route.
+    const dev = devServer(deps);
+    const cookie = await signIn(dev, 'did:plc:sam');
+    const res = await dev.request(`/p/${poll.rkey}/respond-auth`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ available: PAINT }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.text();
+    expect(body).not.toContain('secret-internal-detail');
+    expect(body).not.toContain('pds.internal');
+    // ...while a message written for the person still comes through.
+    const full = await dev.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: [], editToken: 'nope' }),
+    });
+    expect(((await full.json()) as { error: string }).error).toBe('invalid edit link');
+  });
+
+  it('renders the generic error page for a thrown route rather than a stack or bare 500', async () => {
+    const { deps, poll } = await setup();
+    // Corrupt the cached record so the page render itself throws — and take the PDS away
+    // so revalidation cannot quietly repair it first.
+    deps.db.prepare('UPDATE poll_cache SET record_json = ? WHERE rkey = ?').run('{"broken":true}', poll.rkey);
+    deps.reader = { getRecord: async () => { throw new Error('down'); }, listRecords: async () => [] };
+    const res = await createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787',
+    }).request(`/p/${poll.rkey}`);
+    expect(res.status).toBe(500);
+    const body = await res.text();
+    expect(body).toContain('Something went wrong');
+    expect(body).not.toContain('TypeError');
+    expect(body).not.toContain('    at ');
   });
 });
 

@@ -74,7 +74,7 @@ describe('getPollWithRevalidate', () => {
         }), { status: 200 });
       }
       return new Response('upstream is having a day', { status: 503 });
-    }) as typeof fetch);
+    }) as typeof fetch, async () => [{ address: '93.184.216.34', family: 4 }]);
     const poll = await getPollWithRevalidate(deps, rkey);
     expect(poll?.record.title).toBe('Sturdy');
     expect(poll?.tombstoned).toBe(false);

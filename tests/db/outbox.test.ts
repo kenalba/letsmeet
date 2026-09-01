@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import {
-  enqueueOutbox, dueOutbox, markOutboxDone, markOutboxFailed, pendingOutboxCount,
+  enqueueOutbox, dueOutbox, markOutboxDone, markOutboxFailed, pendingOutboxCount, pruneOutbox,
 } from '../../src/db/outbox.js';
 
 const item = {
@@ -41,6 +41,17 @@ describe('outbox', () => {
     for (let i = 0; i < 20; i++) markOutboxFailed(db, id, 'boom', 0);
     expect(dueOutbox(db, 6 * 3600_000 - 1000)).toHaveLength(0);
     expect(dueOutbox(db, 6 * 3600_000 + 1000)).toHaveLength(1);
+    expect(pendingOutboxCount(db, 'did:plc:host')).toBe(1);
+  });
+  it('prunes delivered rows past the cutoff and never a pending one', () => {
+    const db = openDb(':memory:');
+    const old = enqueueOutbox(db, item, 1000);
+    markOutboxDone(db, old);
+    const recent = enqueueOutbox(db, { ...item, rkey: 'r2' }, 5000);
+    markOutboxDone(db, recent);
+    enqueueOutbox(db, { ...item, rkey: 'r3' }, 1000); // pending, old — must survive
+    expect(pruneOutbox(db, 3000)).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM outbox').get()).toEqual({ n: 2 });
     expect(pendingOutboxCount(db, 'did:plc:host')).toBe(1);
   });
 });

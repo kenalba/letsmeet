@@ -1,4 +1,5 @@
 import type { Interval } from '../../core/intervals.js';
+import { useNonce } from '../nonce.js';
 import type { SpecificDates } from '../../core/slots.js';
 import type { PollResults } from '../../services/results.js';
 import { scriptJson } from '../scriptJson.js';
@@ -163,7 +164,7 @@ export function PollPage(data: PollPageData) {
             </CardContent>
           </Card>
         ) : null}
-        <script dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
+        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );

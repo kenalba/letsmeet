@@ -4,6 +4,8 @@ import { createOAuthClient, type AuthClient } from './atproto/oauthClient.js';
 import { PublicPdsReader, writerForAgent } from './atproto/pds.js';
 import { FakeRepo } from './atproto/fakeRepo.js';
 import { flushOutbox } from './services/responses.js';
+import { pruneOutbox } from './db/outbox.js';
+import { pruneWebSessions } from './db/webSessions.js';
 import { createServer } from './web/server.js';
 import type { Deps } from './atproto/types.js';
 
@@ -13,6 +15,14 @@ import type { Deps } from './atproto/types.js';
  * in a deployment, so it is opt-in via an env var and shouts on boot.
  */
 const FAKE_PDS = process.env.FAKE_PDS === '1';
+
+// The production image sets NODE_ENV=production. Whatever else is in the environment,
+// fake mode cannot come up there: the flag would otherwise be one typo in a .env away
+// from a password-free sign-in on the public site.
+if (FAKE_PDS && process.env.NODE_ENV === 'production') {
+  console.error('FAKE_PDS=1 is refused when NODE_ENV=production.');
+  process.exit(1);
+}
 
 const env = {
   PORT: Number(process.env.PORT ?? 8787),
@@ -32,6 +42,8 @@ if (!FAKE_PDS) {
   const problems: string[] = [];
   if (env.COOKIE_SECRET === 'dev-cookie-secret') {
     problems.push('COOKIE_SECRET is unset or still the dev default (openssl rand -base64 32)');
+  } else if (env.COOKIE_SECRET.length < 32) {
+    problems.push('COOKIE_SECRET is too short: use at least 32 characters (openssl rand -base64 32)');
   }
   if (!/^[0-9a-f]{64}$/i.test(env.SESSION_ENC_KEY)) {
     problems.push('SESSION_ENC_KEY must be 64 hex characters (openssl rand -hex 32)');
@@ -79,6 +91,9 @@ setInterval(() => {
   // Authorization requests that never came back leave an encrypted row behind; an hour is
   // far longer than any real round trip.
   db.prepare('DELETE FROM oauth_state WHERE created_at < ?').run(Date.now() - 3600_000);
+  // Delivered outbox rows are history, not state; expired browser sessions are dead weight.
+  pruneOutbox(db, Date.now() - 7 * 24 * 3600_000);
+  pruneWebSessions(db, Date.now());
 }, 60_000);
 
 const app = createServer(deps, auth, { ...env, devLogin: FAKE_PDS });

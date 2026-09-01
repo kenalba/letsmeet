@@ -56,3 +56,13 @@ export function pendingOutboxCount(db: Database.Database, hostDid: string): numb
   ).get(hostDid) as { n: number };
   return row.n;
 }
+
+/**
+ * Delivered (or superseded) rows are audit trail, not state: every guest repaint enqueues
+ * a fresh row and marks the old one done, so without this the table grows with every
+ * edit forever. Rows still pending are never touched — they are the work queue.
+ */
+export function pruneOutbox(db: Database.Database, olderThanMs: number): number {
+  const res = db.prepare('DELETE FROM outbox WHERE done = 1 AND created_at < ?').run(olderThanMs);
+  return res.changes;
+}

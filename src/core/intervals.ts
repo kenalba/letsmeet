@@ -1,3 +1,5 @@
+import { UserError } from './errors.js';
+
 export interface Interval {
   start: string; // UTC ISO, normalized
   end: string;   // UTC ISO, normalized; end > start
@@ -5,15 +7,23 @@ export interface Interval {
 
 export function normalizeIso(s: string): string {
   const d = new Date(s);
-  if (Number.isNaN(d.getTime())) throw new Error(`invalid datetime: ${s}`);
+  if (Number.isNaN(d.getTime())) throw new UserError(`invalid datetime: ${s}`);
   return d.toISOString();
 }
 
 /** Sort, validate, and merge overlapping/touching intervals. Pure. */
 export function mergeIntervals(ivs: Interval[]): Interval[] {
-  const norm = ivs.map((i) => ({ start: normalizeIso(i.start), end: normalizeIso(i.end) }));
+  // Client JSON: anything that is not an array of {start,end} strings is a bad request,
+  // not a crash. `normalizeIso` rejects non-dates; this rejects non-objects.
+  if (!Array.isArray(ivs)) throw new UserError('intervals must be an array');
+  const norm = ivs.map((i) => {
+    if (typeof i !== 'object' || i === null || typeof i.start !== 'string' || typeof i.end !== 'string') {
+      throw new UserError('each interval needs a start and an end');
+    }
+    return { start: normalizeIso(i.start), end: normalizeIso(i.end) };
+  });
   for (const i of norm) {
-    if (i.end <= i.start) throw new Error(`invalid interval: ${i.start}..${i.end}`);
+    if (i.end <= i.start) throw new UserError(`invalid interval: ${i.start}..${i.end}`);
   }
   norm.sort((a, b) => a.start.localeCompare(b.start));
   const out: Interval[] = [];

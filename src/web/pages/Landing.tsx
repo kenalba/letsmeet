@@ -1,4 +1,5 @@
 import { Layout } from './Layout.js';
+import { useNonce } from '../nonce.js';
 import { Badge } from '../ui/badge.js';
 import { Button, buttonVariants } from '../ui/button.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
@@ -149,7 +150,7 @@ export function LandingPage({ did, handle, polls = [] }: {
             )}
           </CardContent>
         </Card>
-        <script dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
+        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );

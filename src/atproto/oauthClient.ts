@@ -2,6 +2,7 @@ import { NodeOAuthClient, JoseKey } from '@atproto/oauth-client-node';
 import { Agent } from '@atproto/api';
 import type { Database } from '../db/db.js';
 import { StateStore, SessionStore } from '../db/sessions.js';
+import { resolveHandle } from './pds.js';
 
 export interface AuthClient {
   clientMetadata: Record<string, unknown>;
@@ -14,7 +15,12 @@ export interface AuthClient {
    * responsible for validating every field on the way back; this layer just carries it.
    */
   authorize(handle: string, state?: string): Promise<URL>;
-  callback(params: URLSearchParams): Promise<{ did: string; state?: string }>;
+  /**
+   * `handle` is the one the authenticated DID's document declares — resolved after the
+   * fact, never the value the visitor typed (that was only a login hint) — or null when
+   * the document has none or could not be read. For display only.
+   */
+  callback(params: URLSearchParams): Promise<{ did: string; handle?: string | null; state?: string }>;
   restore(did: string): Promise<Agent>;
 }
 
@@ -75,7 +81,7 @@ export async function createOAuthClient(
     },
     async callback(params) {
       const { session, state } = await client.callback(params);
-      return { did: session.did, state: state ?? undefined };
+      return { did: session.did, handle: await resolveHandle(session.did), state: state ?? undefined };
     },
     async restore(did) {
       const session = await client.restore(did);

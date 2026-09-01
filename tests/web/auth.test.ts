@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { authRoutes } from '../../src/web/routes/auth.js';
+import { openDb } from '../../src/db/db.js';
+import { getWebSession } from '../../src/db/webSessions.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
 
 /** A real ES256 *public* JWK: the served JWKS must never grow a `d` (private) member. */
@@ -12,10 +14,14 @@ const stub: AuthClient = {
   clientMetadata: { client_id: 'https://poll.example/oauth/client-metadata.json' },
   jwks: { keys: [publicJwk] },
   authorize: async () => new URL('https://pds.example.com/authorize?x=1'),
-  callback: async () => ({ did: 'did:plc:host' }),
+  callback: async () => ({ did: 'did:plc:host', handle: 'ken.wzrdz.cool' }),
   restore: async () => { throw new Error('not used here'); },
 };
-const app = authRoutes(stub, 'test-cookie-secret', 'https://poll.example');
+const env = (publicUrl = 'https://poll.example') => ({
+  db: openDb(':memory:'), cookieSecret: 'test-cookie-secret', publicUrl,
+  secure: publicUrl.startsWith('https'),
+});
+const app = authRoutes(stub, env());
 
 const failingStub: AuthClient = {
   clientMetadata: { client_id: 'https://poll.example/oauth/client-metadata.json' },
@@ -24,7 +30,9 @@ const failingStub: AuthClient = {
   callback: async () => { throw new Error('secret-internal-detail'); },
   restore: async () => { throw new Error('not used here'); },
 };
-const failingApp = authRoutes(failingStub, 'test-cookie-secret', 'https://poll.example');
+const failingApp = authRoutes(failingStub, env());
+
+const cookieOf = (res: Response) => res.headers.get('set-cookie')!.split(';')[0];
 
 describe('auth routes', () => {
   it('serves client metadata as JSON', async () => {
@@ -44,20 +52,23 @@ describe('auth routes', () => {
     for (const k of body.keys) expect(k).not.toHaveProperty('d');
   });
 
-  it('marks the session cookie Secure on an https origin', async () => {
+  it('marks the session cookie Secure, HttpOnly and Lax on an https origin', async () => {
     const res = await app.request('/oauth/callback?code=abc&state=xyz');
-    expect(res.headers.get('set-cookie')).toContain('Secure');
+    const sc = res.headers.get('set-cookie')!;
+    expect(sc).toContain('Secure');
+    expect(sc).toContain('HttpOnly');
+    expect(sc).toContain('SameSite=Lax');
   });
 
   it('leaves the session cookie non-Secure on a plain-http origin', async () => {
-    const http = authRoutes(stub, 'test-cookie-secret', 'http://localhost:8787');
+    const http = authRoutes(stub, env('http://localhost:8787'));
     const res = await http.request('/oauth/callback?code=abc&state=xyz');
     expect(res.headers.get('set-cookie')).not.toContain('Secure');
   });
 
   it('rate-limits a burst of sign-in attempts from one IP', async () => {
     // A fresh app so the shared module-level one keeps its full budget.
-    const limited = authRoutes(stub, 'test-cookie-secret', 'https://poll.example');
+    const limited = authRoutes(stub, env());
     let denied = 0;
     for (let i = 0; i < 6; i++) {
       const res = await limited.request('/login', {
@@ -78,15 +89,54 @@ describe('auth routes', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('pds.example.com/authorize');
   });
-  it('callback sets a signed did cookie and redirects home', async () => {
-    const res = await app.request('/oauth/callback?code=abc&state=xyz');
-    expect(res.status).toBe(302);
-    expect(res.headers.get('set-cookie')).toContain('did=');
+  it('the login page points people without an account at Bluesky and selfhosted.social', async () => {
+    const body = await (await app.request('/login')).text();
+    expect(body).toContain('https://bsky.app/');
+    expect(body).toContain('https://selfhosted.social/');
   });
-  it('logout clears the cookie', async () => {
-    const res = await app.request('/logout', { method: 'POST' });
+  it('callback opens a server-side session and redirects home', async () => {
+    const e = env();
+    const a = authRoutes(stub, e);
+    const res = await a.request('/oauth/callback?code=abc&state=xyz');
     expect(res.status).toBe(302);
-    expect(res.headers.get('set-cookie')).toContain('did=;');
+    expect(res.headers.get('set-cookie')).toContain('sid=');
+    // The cookie is an opaque id; the DID and handle live in the row it points at.
+    expect(res.headers.get('set-cookie')).not.toContain('did:plc:host');
+    const rows = e.db.prepare('SELECT sid, did, handle FROM web_session').all() as
+      Array<{ sid: string; did: string; handle: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].did).toBe('did:plc:host');
+    expect(rows[0].handle).toBe('ken.wzrdz.cool');
+  });
+  it('the displayed handle comes from the callback (the authenticated DID), not the typed one', async () => {
+    const e = env();
+    const a = authRoutes({ ...stub, callback: async () => ({ did: 'did:plc:host', handle: null }) }, e);
+    await a.request('/login', {
+      method: 'POST', body: new URLSearchParams({ handle: 'someone.else.example' }),
+    });
+    await a.request('/oauth/callback?code=abc&state=xyz');
+    const row = e.db.prepare('SELECT handle FROM web_session').get() as { handle: string | null };
+    expect(row.handle).toBeNull();
+  });
+  it('logout revokes the session row, so a copied cookie is dead afterwards', async () => {
+    const e = env();
+    const a = authRoutes(stub, e);
+    const login = await a.request('/oauth/callback?code=abc&state=xyz');
+    const cookie = cookieOf(login);
+    const sid = e.db.prepare('SELECT sid FROM web_session').get() as { sid: string };
+    expect(getWebSession(e.db, sid.sid, Date.now())).not.toBeNull();
+    const res = await a.request('/logout', { method: 'POST', headers: { cookie } });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('set-cookie')).toContain('sid=;');
+    expect(getWebSession(e.db, sid.sid, Date.now())).toBeNull();
+  });
+  it('a session expires server-side after 30 days whatever the cookie claims', async () => {
+    const e = env();
+    const a = authRoutes(stub, e);
+    await a.request('/oauth/callback?code=abc&state=xyz');
+    const sid = (e.db.prepare('SELECT sid FROM web_session').get() as { sid: string }).sid;
+    const thirtyOneDays = Date.now() + 31 * 24 * 3600_000;
+    expect(getWebSession(e.db, sid, thirtyOneDays)).toBeNull();
   });
   it('POST /login does not leak internal error details when authorize() throws', async () => {
     const res = await failingApp.request('/login', {
@@ -108,7 +158,7 @@ describe('auth routes', () => {
 describe('returnTo round trip', () => {
   const withState = (state?: string): AuthClient => ({
     ...stub,
-    callback: async () => ({ did: 'did:plc:host', state }),
+    callback: async () => ({ did: 'did:plc:host', handle: 'ken.wzrdz.cool', state }),
   });
 
   it('renders a validated returnTo as a hidden form field', async () => {
@@ -132,34 +182,34 @@ describe('returnTo round trip', () => {
     }
   });
 
-  it('callback lands on the state envelope\'s returnTo and stores the handle', async () => {
-    const rt = authRoutes(
-      withState(JSON.stringify({ returnTo: '/p/abc123', handle: 'ken.letsmeet.lol' })),
-      'test-cookie-secret', 'https://poll.example',
-    );
+  it('callback lands on the state envelope\'s returnTo', async () => {
+    const rt = authRoutes(withState(JSON.stringify({ returnTo: '/p/abc123' })), env());
     const res = await rt.request('/oauth/callback?code=x&state=y');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/p/abc123');
-    expect(res.headers.get('set-cookie')).toContain('handle=');
+    expect(res.headers.get('set-cookie')).toContain('sid=');
   });
 
   it('callback refuses an off-site returnTo from the state and lands on /', async () => {
-    const rt = authRoutes(
-      withState(JSON.stringify({ returnTo: 'https://evil.example/', handle: 'bad<name>' })),
-      'test-cookie-secret', 'https://poll.example',
-    );
+    const rt = authRoutes(withState(JSON.stringify({ returnTo: 'https://evil.example/' })), env());
     const res = await rt.request('/oauth/callback?code=x&state=y');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/');
-    // The malformed handle is dropped too — only [a-zA-Z0-9.-] survives into the cookie.
-    expect(res.headers.get('set-cookie')).not.toContain('handle=');
+  });
+
+  it('a malformed handle from the callback is dropped rather than stored', async () => {
+    const e = env();
+    const rt = authRoutes({ ...stub, callback: async () => ({ did: 'did:plc:host', handle: 'bad<name>' }) }, e);
+    await rt.request('/oauth/callback?code=x&state=y');
+    const row = e.db.prepare('SELECT handle FROM web_session').get() as { handle: string | null };
+    expect(row.handle).toBeNull();
   });
 
   it('callback with no state still signs in and lands on /', async () => {
-    const rt = authRoutes(withState(undefined), 'test-cookie-secret', 'https://poll.example');
+    const rt = authRoutes(withState(undefined), env());
     const res = await rt.request('/oauth/callback?code=x&state=y');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/');
-    expect(res.headers.get('set-cookie')).toContain('did=');
+    expect(res.headers.get('set-cookie')).toContain('sid=');
   });
 });

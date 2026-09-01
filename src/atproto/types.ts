@@ -13,4 +13,6 @@ export interface Deps {
   reader: RepoReader;
   writerFor(did: string): Promise<RepoWriter>;
   now(): Date;
+  /** Override the PDS revalidation window (ms); tests set 0 to force live reads. */
+  revalidateTtlMs?: number;
 }

@@ -7,6 +7,11 @@ import { getPollWithRevalidate } from './polls.js';
 import {
   listParticipants, listResponseCache, upsertResponseCache, type CachedPoll,
 } from '../db/cache.js';
+import { freshnessFor, mapLimit } from './freshness.js';
+
+/** Participant PDS reads in flight at once, and the wall-clock budget for all of them. */
+const FANOUT_CONCURRENCY = 4;
+const FANOUT_BUDGET_MS = 8_000;
 
 export interface PollResults {
   poll: CachedPoll;
@@ -19,26 +24,36 @@ export async function getResults(deps: Deps, pollRkey: string): Promise<PollResu
   const poll = await getPollWithRevalidate(deps, pollRkey);
   if (!poll) return null;
 
-  // revalidate account responses straight from each participant's PDS
-  for (const did of listParticipants(deps.db, pollRkey)) {
-    try {
-      const recs = await deps.reader.listRecords(did, RESPONSE_NSID);
-      const mine = recs.find((r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri);
-      if (mine) {
-        let record;
-        try {
-          record = validateResponseRecord(mine.value);
-        } catch (err) {
-          // Distinct from a read failure: this participant's record is unusable until they
-          // (or the schema) change, so say so rather than silently keeping the stale row.
-          console.warn(`invalid live response record for ${did}:`, err);
-          throw err;
+  // Revalidate account responses straight from each participant's PDS — but at most once
+  // per TTL per poll, a few at a time, and never past a fixed budget. Unbounded, this loop
+  // was N sequential outbound reads per anonymous page view: a self-DoS and a reflector.
+  const fresh = freshnessFor(deps);
+  const key = `responses:${pollRkey}`;
+  const nowMs = deps.now().getTime();
+  if (!fresh.isFresh(key, nowMs)) {
+    fresh.mark(key, nowMs);
+    const participants = listParticipants(deps.db, pollRkey);
+    await mapLimit(participants, FANOUT_CONCURRENCY, Date.now() + FANOUT_BUDGET_MS, async (did) => {
+      try {
+        const recs = await deps.reader.listRecords(did, RESPONSE_NSID);
+        const mine = recs.find((r) => (r.value as unknown as ResponseRecord).subject?.uri === poll.uri);
+        if (mine) {
+          let record;
+          try {
+            record = validateResponseRecord(mine.value);
+          } catch (err) {
+            // Distinct from a read failure: this participant's record is unusable until
+            // they (or the schema) change, so say so rather than silently keeping the
+            // stale row.
+            console.warn(`invalid live response record for ${did}:`, err);
+            throw err;
+          }
+          upsertResponseCache(deps.db, pollRkey, 'account', did, record, false);
         }
-        upsertResponseCache(deps.db, pollRkey, 'account', did, record, false);
+      } catch {
+        // read failure or unusable record: stale cache is fine for a read
       }
-    } catch {
-      // read failure or unusable record: stale cache is fine for a read
-    }
+    });
   }
 
   const rows = listResponseCache(deps.db, pollRkey);

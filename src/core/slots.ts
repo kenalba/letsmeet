@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import type { Interval } from './intervals.js';
+import { UserError } from './errors.js';
 
 /**
  * Slot granularities the app offers, mirroring the `slotMinutes` enum in
@@ -22,7 +23,7 @@ export function materializeSlots(t: SpecificDates): Interval[] {
     let cur = DateTime.fromISO(`${date}T${t.window.start}`, { zone: t.timezone });
     let end = DateTime.fromISO(`${date}T${t.window.end}`, { zone: t.timezone });
     if (!cur.isValid || !end.isValid) {
-      throw new Error(`invalid date/window/timezone: ${date} ${JSON.stringify(t.window)} ${t.timezone}`);
+      throw new UserError(`invalid date/window/timezone: ${date} ${JSON.stringify(t.window)} ${t.timezone}`);
     }
     if (end <= cur) end = end.plus({ days: 1 }); // window crosses midnight
     while (cur < end) {

@@ -47,6 +47,25 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                 <Button type="submit">Sign in</Button>
               </div>
             </form>
+            <p className="text-sm text-muted-foreground">
+              Don't have an atproto account?{' '}
+              <a
+                href="https://bsky.app/"
+                className="text-primary underline underline-offset-4"
+                rel="noopener"
+              >
+                Create one on Bluesky
+              </a>
+              , or{' '}
+              <a
+                href="https://selfhosted.social/"
+                className="text-primary underline underline-offset-4"
+                rel="noopener"
+              >
+                host your own at selfhosted.social
+              </a>
+              . Any account works here — you sign in with its handle.
+            </p>
           </CardContent>
         </Card>
       </div>

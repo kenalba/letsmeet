@@ -15,22 +15,37 @@ import {
   upsertResponseCache, listResponseCache, countResponses, addParticipant,
 } from '../db/cache.js';
 import type { CachedPoll } from '../db/cache.js';
+import { UserError } from '../core/errors.js';
 
 export const GUEST_CAP = 60;
+/**
+ * Hard ceiling on painted intervals per submission, checked before any interval math. The
+ * lexicon caps a *stored* response, but snapping runs first and costs slots × intervals:
+ * a hand-rolled POST of ~15k one-minute intervals was ~67M comparisons on the one thread
+ * this server has. A real grid paint is one interval per contiguous run — a few dozen at
+ * most — so 400 is generous for people and useless for a loop.
+ */
+export const MAX_PAINT_INTERVALS = 400;
 
 async function loadOpenPoll(deps: Deps, pollRkey: string): Promise<CachedPoll> {
   const poll = await getPollWithRevalidate(deps, pollRkey);
-  if (!poll || poll.tombstoned) throw new Error('poll not found');
-  if (poll.record.status !== 'active') throw new Error('poll is not open for responses');
+  if (!poll || poll.tombstoned) throw new UserError('poll not found');
+  if (poll.record.status !== 'active') throw new UserError('poll is not open for responses');
   return poll;
 }
 
 function snapPaint(poll: CachedPoll, available: Interval[], ifNeedBe?: Interval[]) {
+  if (!Array.isArray(available) || (ifNeedBe !== undefined && !Array.isArray(ifNeedBe))) {
+    throw new UserError('intervals must be an array');
+  }
+  if (available.length + (ifNeedBe?.length ?? 0) > MAX_PAINT_INTERVALS) {
+    throw new UserError(`too many intervals (max ${MAX_PAINT_INTERVALS})`);
+  }
   const slots = materializeSlots(poll.record.time);
   const snappedAvailable = available.length ? snapToSlots(available, slots) : [];
   const snappedIfNeedBe = ifNeedBe?.length ? snapToSlots(ifNeedBe, slots) : [];
   if (snappedAvailable.length === 0 && snappedIfNeedBe.length === 0) {
-    throw new Error('no valid availability painted');
+    throw new UserError('no valid availability painted');
   }
   return { snappedAvailable, snappedIfNeedBe };
 }
@@ -68,9 +83,9 @@ export async function submitGuestResponse(
 ): Promise<{ editToken: string; pending: boolean }> {
   const poll = await loadOpenPoll(deps, pollRkey);
   const existingRkey = input.editToken ? lookupEditSecret(deps.db, poll.uri, input.editToken) : null;
-  if (input.editToken && !existingRkey) throw new Error('invalid edit link');
+  if (input.editToken && !existingRkey) throw new UserError('invalid edit link');
   if (!existingRkey && countResponses(deps.db, pollRkey) >= GUEST_CAP) {
-    throw new Error('this poll is full');
+    throw new UserError('this poll is full');
   }
   const snapped = snapPaint(poll, input.available, input.ifNeedBe);
   const record = buildFromPaint(poll, snapped, {

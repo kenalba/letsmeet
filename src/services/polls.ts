@@ -8,6 +8,20 @@ import {
 } from '../db/cache.js';
 import { materializeSlots } from '../core/slots.js';
 import type { Interval } from '../core/intervals.js';
+import { UserError } from '../core/errors.js';
+import { freshnessFor } from './freshness.js';
+
+/**
+ * A poll whose geometry cannot be materialized — a made-up timezone, a malformed date —
+ * used to be writable and then 500 on every view, with no way to edit or delete it. The
+ * lexicon only checks shapes (a string ≤ 64 chars is a "timezone"), so materialize once
+ * here, before anything is written, and refuse what the grid could never render.
+ */
+function assertRenderable(time: SpecificDates): void {
+  if (materializeSlots(time).length === 0) {
+    throw new UserError('the daily window is shorter than one slot');
+  }
+}
 
 export function parseRkey(uri: string): string {
   const rkey = uri.split('/').pop();
@@ -19,6 +33,7 @@ export async function createPoll(
   deps: Deps, hostDid: string,
   input: { title: string; description?: string; time: SpecificDates },
 ): Promise<{ rkey: string; uri: string; cid: string }> {
+  assertRenderable(input.time);
   const record = buildScheduleRecord(input);
   const writer = await deps.writerFor(hostDid);
   const ref = await writer.createRecord(hostDid, SCHEDULE_NSID, record);
@@ -30,6 +45,12 @@ export async function createPoll(
 export async function getPollWithRevalidate(deps: Deps, rkey: string): Promise<CachedPoll | null> {
   const cached = getPollCache(deps.db, rkey);
   if (!cached) return null;
+  // One live read per poll per TTL, not per page view (see freshness.ts).
+  const fresh = freshnessFor(deps);
+  const key = `poll:${rkey}`;
+  const nowMs = deps.now().getTime();
+  if (fresh.isFresh(key, nowMs)) return cached;
+  fresh.mark(key, nowMs);
   try {
     const live = await deps.reader.getRecord(cached.hostDid, SCHEDULE_NSID, rkey);
     if (live === null) {
@@ -64,8 +85,8 @@ async function putUpdated(
 
 function loadOwned(deps: Deps, hostDid: string, rkey: string): CachedPoll {
   const poll = getPollCache(deps.db, rkey);
-  if (!poll) throw new Error(`unknown poll: ${rkey}`);
-  if (poll.hostDid !== hostDid) throw new Error('only the host may edit a poll');
+  if (!poll) throw new UserError(`unknown poll: ${rkey}`);
+  if (poll.hostDid !== hostDid) throw new UserError('only the host may edit a poll');
   return poll;
 }
 
@@ -83,8 +104,9 @@ export async function updatePollTime(
 ): Promise<void> {
   const poll = loadOwned(deps, hostDid, rkey);
   if (countResponses(deps.db, rkey) > 0) {
-    throw new Error('geometry is frozen once responses exist');
+    throw new UserError('geometry is frozen once responses exist');
   }
+  assertRenderable(time);
   const next = validateScheduleRecord({
     ...poll.record,
     time: { $type: `${SCHEDULE_NSID}#specificDates`, ...time },
@@ -98,10 +120,10 @@ export async function finalizePoll(
   deps: Deps, hostDid: string, rkey: string, slot: Interval,
 ): Promise<void> {
   const poll = loadOwned(deps, hostDid, rkey);
-  if (poll.record.status === 'finalized') throw new Error('poll is already finalized');
+  if (poll.record.status === 'finalized') throw new UserError('poll is already finalized');
   const slots = materializeSlots(poll.record.time);
   const winning = slots.some((s) => s.start === slot.start && s.end === slot.end);
-  if (!winning) throw new Error('not a slot of this poll');
+  if (!winning) throw new UserError('not a slot of this poll');
 
   const next = validateScheduleRecord({ ...poll.record, status: 'finalized', finalized: slot });
   await putUpdated(deps, hostDid, rkey, next);

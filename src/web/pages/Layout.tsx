@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useNonce } from '../nonce.js';
 import { Moon, Sun, SunMoon } from 'lucide-react';
 import { buttonVariants } from '../ui/button.js';
 
@@ -65,13 +66,14 @@ const THEME_TOGGLE = "(function(){var b=document.getElementById('theme-toggle');
  * the `[data-theme]` rules in app.css override that with a single `color-scheme`.
  */
 export function Layout({ title, children, scripts, signInHref }: LayoutProps) {
+  const nonce = useNonce();
   return (
     <html lang="en" className="scheme-light-dark">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         <link rel="stylesheet" href="/assets/app.css" />
       </head>
       <body className="min-h-screen bg-background text-foreground">
@@ -111,7 +113,7 @@ export function Layout({ title, children, scripts, signInHref }: LayoutProps) {
         </header>
         <main className="mx-auto w-full max-w-4xl px-4 py-8">{children}</main>
         {scripts?.map((src) => <script key={src} type="module" src={src} />)}
-        <script dangerouslySetInnerHTML={{ __html: THEME_TOGGLE }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_TOGGLE }} />
       </body>
     </html>
   );

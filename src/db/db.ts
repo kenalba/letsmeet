@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS response_cache (
   updated_at INTEGER NOT NULL, PRIMARY KEY (poll_rkey, source, key));
 CREATE TABLE IF NOT EXISTS participant (
   poll_rkey TEXT NOT NULL, did TEXT NOT NULL, PRIMARY KEY (poll_rkey, did));
+CREATE TABLE IF NOT EXISTS web_session (
+  sid TEXT PRIMARY KEY, did TEXT NOT NULL, handle TEXT,
+  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS web_session_did ON web_session (did);
 `;
 
 export type { Database };
