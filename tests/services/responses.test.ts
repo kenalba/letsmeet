@@ -6,6 +6,7 @@ import {
   submitGuestResponse, submitAccountResponse, flushOutbox, GUEST_CAP,
 } from '../../src/services/responses.js';
 import { listResponseCache, listParticipants } from '../../src/db/cache.js';
+import { dueOutbox } from '../../src/db/outbox.js';
 import { RESPONSE_NSID, SCHEDULE_NSID } from '../../src/atproto/records.js';
 import type { Deps } from '../../src/atproto/types.js';
 
@@ -63,6 +64,26 @@ describe('submitGuestResponse', () => {
     });
     expect(await repo.listRecords(HOST, RESPONSE_NSID)).toHaveLength(1);
     expect(listResponseCache(deps.db, poll.rkey)).toHaveLength(1);
+  });
+
+  it('a resubmit of identical paint is a no-op: no new record, no new outbox row', async () => {
+    const { deps, repo, poll } = await setup();
+    const { editToken } = await submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT });
+    const before = (await repo.listRecords(HOST, RESPONSE_NSID))[0];
+
+    const again = await submitGuestResponse(deps, poll.rkey, {
+      name: 'Sam', editToken, available: PAINT,
+    });
+    expect(again.editToken).toBe(editToken);
+    expect(again.pending).toBe(false);
+
+    const after = await repo.listRecords(HOST, RESPONSE_NSID);
+    expect(after).toHaveLength(1);
+    // Same cid means the record was never rewritten — createdAt would have moved otherwise.
+    expect(after[0].cid).toBe(before.cid);
+    expect(deps.db.prepare('SELECT COUNT(*) AS n FROM outbox').get()).toEqual({ n: 1 });
+    deps.now = () => new Date('2027-01-01T00:00:00Z');
+    expect(dueOutbox(deps.db, deps.now().getTime())).toHaveLength(0);
   });
 
   it('rejects paint that snaps to nothing', async () => {

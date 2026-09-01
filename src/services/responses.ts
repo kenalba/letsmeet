@@ -11,7 +11,9 @@ import { createEditSecret, lookupEditSecret } from '../db/editSecrets.js';
 import {
   enqueueOutbox, dueOutbox, markOutboxDone, markOutboxFailed,
 } from '../db/outbox.js';
-import { upsertResponseCache, countResponses, addParticipant } from '../db/cache.js';
+import {
+  upsertResponseCache, listResponseCache, countResponses, addParticipant,
+} from '../db/cache.js';
 import type { CachedPoll } from '../db/cache.js';
 
 export const GUEST_CAP = 60;
@@ -46,6 +48,17 @@ function buildFromPaint(
   });
 }
 
+/**
+ * Everything that identifies a response except `createdAt`, which is stamped fresh on every
+ * build: repainting the same cells must not churn the host's repo or the outbox.
+ */
+function paintIdentity(r: ResponseRecord): string {
+  return JSON.stringify({
+    subject: r.subject, available: r.available, ifNeedBe: r.ifNeedBe,
+    guest: r.guest, timezone: r.timezone, note: r.note,
+  });
+}
+
 export async function submitGuestResponse(
   deps: Deps, pollRkey: string,
   input: {
@@ -63,6 +76,14 @@ export async function submitGuestResponse(
   const record = buildFromPaint(poll, snapped, {
     guestName: input.name, timezone: input.timezone, note: input.note,
   });
+
+  if (existingRkey) {
+    const cached = listResponseCache(deps.db, pollRkey)
+      .find((r) => r.source === 'guest' && r.key === existingRkey);
+    if (cached && paintIdentity(cached.record) === paintIdentity(record)) {
+      return { editToken: input.editToken!, pending: cached.pending };
+    }
+  }
 
   const rkey = existingRkey ?? TID.nextStr();
   const now = deps.now().getTime();

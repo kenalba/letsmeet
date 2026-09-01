@@ -109,13 +109,20 @@ export async function finalizePoll(
   // NOTE for the implementer: before first deploy, diff these fields against the published
   // community.lexicon.calendar.event schema at https://github.com/lexicon-community/lexicon
   // and adjust names to match exactly. The test asserts only `name`.
-  const writer = await deps.writerFor(hostDid);
-  await writer.createRecord(hostDid, EVENT_NSID, {
-    $type: EVENT_NSID,
-    name: poll.record.title,
-    ...(poll.record.description ? { description: poll.record.description } : {}),
-    startsAt: slot.start,
-    endsAt: slot.end,
-    createdAt: deps.now().toISOString(),
-  });
+  //
+  // Best effort: the poll is already finalized in the host's repo and in our cache, so a
+  // failure here costs a calendar record, not the decision.
+  try {
+    const writer = await deps.writerFor(hostDid);
+    await writer.createRecord(hostDid, EVENT_NSID, {
+      $type: EVENT_NSID,
+      name: poll.record.title,
+      ...(poll.record.description ? { description: poll.record.description } : {}),
+      startsAt: slot.start,
+      endsAt: slot.end,
+      createdAt: deps.now().toISOString(),
+    });
+  } catch (err) {
+    console.error('community event write failed:', err);
+  }
 }

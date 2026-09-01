@@ -72,6 +72,15 @@ export function pollRoutes(
           name: row.record.guest?.name,
         };
       }
+    } else if (viewerDid) {
+      // A signed-in responder needs no edit link: their own row is keyed by their DID, so
+      // they come back to the grid they painted rather than a blank one. No name — an
+      // account response carries no guest name.
+      const row = listResponseCache(deps.db, rkey)
+        .find((r) => r.source === 'account' && r.key === viewerDid);
+      if (row) {
+        prefill = { available: row.record.available, ifNeedBe: row.record.ifNeedBe ?? [] };
+      }
     }
     const isHost = viewerDid === results.poll.hostDid;
     return c.html(pollPage({

@@ -154,6 +154,29 @@ describe('server', () => {
     expect(await res.text()).toContain('withdrawn by the host');
   });
 
+  it('prefills the grid for a signed-in responder without an edit link', async () => {
+    const { deps, poll } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request('/dev/login?did=did:plc:sam');
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+
+    const posted = await dev.request(`/p/${poll.rkey}/respond-auth`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ available: PAINT }),
+    });
+    expect(posted.status).toBe(200);
+
+    const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(body).toContain('"prefill"');
+    expect(body).toContain(PAINT[0].start);
+    // ...and a signed-out visitor still gets a blank grid.
+    const anon = await (await dev.request(`/p/${poll.rkey}`)).text();
+    expect(anon).not.toContain('"prefill"');
+  });
+
   it('does not mount /dev/login unless the dev flag is set', async () => {
     const { app } = await setup();
     expect((await app.request('/dev/login?did=did:plc:sneaky')).status).toBe(404);

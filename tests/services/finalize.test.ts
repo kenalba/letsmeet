@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
 import { createPoll, finalizePoll, getPollWithRevalidate, EVENT_NSID } from '../../src/services/polls.js';
@@ -34,6 +34,28 @@ describe('finalizePoll', () => {
     expect((events[0].value as { name: string }).name).toBe('T');
     expect((await getPollWithRevalidate(deps, poll.rkey))?.record.status).toBe('finalized');
   });
+  it('still finalizes when the calendar-event write fails', async () => {
+    const { deps, repo, poll } = await setup();
+    // Everything but the event write passes through to the repo.
+    deps.writerFor = async () => ({
+      createRecord: async (r, collection, record) => {
+        if (collection === EVENT_NSID) throw new Error('event collection rejected');
+        return repo.createRecord(r, collection, record);
+      },
+      putRecord: (r, collection, rkey, record) => repo.putRecord(r, collection, rkey, record),
+    });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(finalizePoll(deps, HOST, poll.rkey, SLOT)).resolves.toBeUndefined();
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+    const updated = await repo.getRecord(HOST, SCHEDULE_NSID, poll.rkey);
+    expect((updated?.value as { status: string }).status).toBe('finalized');
+    expect(await repo.listRecords(HOST, EVENT_NSID)).toHaveLength(0);
+  });
+
   it('rejects a slot that is not one of the poll slots', async () => {
     const { deps, poll } = await setup();
     await expect(finalizePoll(deps, HOST, poll.rkey, {
