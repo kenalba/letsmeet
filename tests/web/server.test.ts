@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
@@ -597,8 +598,9 @@ describe('page chrome', () => {
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     // The licence travels with the file: OFL asks for it, and it costs nothing.
     expect((await app.request('/fonts/DepartureMono-LICENSE.txt')).status).toBe(200);
-    // ...and the stylesheet actually asks for it from there.
-    const css = await (await app.request('/assets/app.css')).text();
+    // ...and the stylesheet actually asks for it from there. The *source* sheet: CI runs
+    // these tests before the client build, so /assets/app.css does not exist yet there.
+    const css = readFileSync('src/web/styles/app.css', 'utf8');
     expect(css).toContain('/fonts/DepartureMono-Regular.woff2');
   });
 
