@@ -100,41 +100,61 @@ origin the app itself sees) still has to be `127.0.0.1` for the round trip to
 line up. Opening `localhost:8787` in the browser while `PUBLIC_URL` is set to
 `127.0.0.1` (or vice versa) produces a session cookie the callback can't see.
 
-## 2. systemd unit
+## 2. Docker + CI/CD (the Linode box)
 
-Run as an unprivileged user, restart on failure, load secrets from an
-`EnvironmentFile`:
+The deployment unit is the Docker image built by `Dockerfile`: a multi-stage
+build that runs `npm ci` + `npm run build:client` (so `/assets/*` is baked
+in — the "Before you build" section above is satisfied by the image itself),
+prunes to production deps, and runs `npx tsx src/index.ts` as the
+unprivileged `node` user. The SQLite file lives at `/data/letsmeet.db`
+inside the container, mounted from the host.
 
-```ini
-[Unit]
-Description=letsmeet
-After=network-online.target
+The pipeline (`.github/workflows/deploy.yml`) runs on every push to `main`:
 
-[Service]
-WorkingDirectory=/opt/letsmeet
-EnvironmentFile=/opt/letsmeet/.env
-ExecStart=/usr/bin/npx tsx src/index.ts
-Restart=on-failure
-User=letsmeet
+1. **test** — typecheck, the vitest suite, and the full Playwright matrix
+   (chromium, firefox, tz-kolkata, mobile).
+2. **build** — builds the image and pushes `ghcr.io/kenalba/letsmeet:latest`
+   (plus a `:<sha>` tag for rollbacks) using the workflow's own
+   `GITHUB_TOKEN`; no registry secret needed.
+3. **deploy** — SSHes to the box and runs
+   `docker compose pull && docker compose up -d`.
 
-[Install]
-WantedBy=multi-user.target
-```
+The deploy job needs three repository secrets (Settings → Secrets →
+Actions): `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_SSH_KEY` (a private key
+whose public half is in the deploy user's `authorized_keys`; make a
+dedicated keypair, don't reuse a personal one).
 
-Deploy steps for a new release, in order:
+**One-time setup on the box:**
 
 ```bash
-sudo -u letsmeet git -C /opt/letsmeet pull
-sudo -u letsmeet bash -c 'cd /opt/letsmeet && npm ci && npm run build:client'
-sudo systemctl restart letsmeet
-sudo systemctl status letsmeet --no-pager
+mkdir -p ~/letsmeet/data
+sudo chown 1000:1000 ~/letsmeet/data   # the container's `node` uid writes here
+# copy compose.yaml from this repo into ~/letsmeet/
+# create ~/letsmeet/.env with the §1 secrets:
+#   PUBLIC_URL=https://letsmeet.lol
+#   COOKIE_SECRET=...  SESSION_ENC_KEY=...  OAUTH_JWK=...
+chmod 600 ~/letsmeet/.env
+cd ~/letsmeet && docker compose up -d
 ```
 
-`/opt/letsmeet/.env` holds `PUBLIC_URL`, `DB_PATH`, `COOKIE_SECRET`,
-`SESSION_ENC_KEY`, `OAUTH_JWK`, and `PORT` if you don't want the default.
-Leave `FAKE_PDS` unset. Make sure `DB_PATH` points somewhere that survives a
-`git pull` (e.g. outside the working tree, or listed in `.gitignore`, which
-`*.db`/`*.db-*` already cover for the default in-tree path).
+If the GitHub repo is private, the box also needs a one-time
+`docker login ghcr.io` with a read-only personal access token
+(`read:packages`) before `compose pull` works.
+
+Leave `FAKE_PDS` unset and don't set `DB_PATH` in `.env` — the image pins it
+to `/data/letsmeet.db`, and compose mounts `~/letsmeet/data` there. That
+directory is the thing §0 told you to back up:
+
+```bash
+docker compose exec letsmeet node -e "require('better-sqlite3')('/data/letsmeet.db').backup('/data/backup-$(date +%F).db')"
+```
+
+(or just snapshot/copy the host-side `~/letsmeet/data` while traffic is low —
+it's a tiny file).
+
+**Rollback:** edit `compose.yaml` on the box to pin
+`ghcr.io/kenalba/letsmeet:<known-good sha>` and `docker compose up -d`;
+revert to `:latest` once main is fixed.
 
 ## 3. Caddy
 

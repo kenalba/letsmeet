@@ -1,0 +1,13 @@
+node_modules
+public/assets
+*.db
+*.db-*
+.env
+.git
+docs
+e2e
+tests
+test-results
+playwright-report
+.superpowers
+.playwright-mcp

@@ -1,0 +1,22 @@
+# The production compose file for the Linode box. Lives in ~/letsmeet there, next to a
+# .env holding the secrets (docs/deploy.md §1) and a ./data directory owned by uid 1000
+# (the container's `node` user) for the SQLite file — the one path that needs backups.
+services:
+  letsmeet:
+    image: ghcr.io/kenalba/letsmeet:latest
+    restart: unless-stopped
+    # Loopback only: Caddy (or whatever fronts the box) terminates TLS for letsmeet.lol
+    # and proxies here. Never publish 8787 to the world — PUBLIC_URL's origin is what
+    # OAuth trusts, and the app itself speaks plain HTTP.
+    ports:
+      - "127.0.0.1:8787:8787"
+    env_file: .env
+    volumes:
+      - ./data:/data
+    healthcheck:
+      # The slim image has no curl/wget; node's global fetch does the job.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8787/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
