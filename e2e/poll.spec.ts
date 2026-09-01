@@ -162,7 +162,7 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   await guest.fill('.name input', 'Sam');
   await expect(guest.locator('button.save')).toBeEnabled();
   await guest.click('button.save');
-  await expect(guest.getByText('keep this link')).toBeVisible();
+  await expect(guest.locator('.edit-link')).toBeVisible();
   await guestContext.close();
 
   // host sees the response and finalizes the top slot
@@ -192,6 +192,8 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   await guest.click('button.save');
   const editLink = await guest.locator('.edit-link code').textContent();
   expect(editLink).toBeTruthy();
+  // The address bar already carries it, so history and bookmarks do too.
+  await expect(guest).toHaveURL(editLink!);
 
   await guest.goto(editLink!);
   await expect(guest.locator('.name input')).toHaveValue('Ana');
@@ -200,6 +202,24 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   await expect(guest.locator('button.save')).toBeDisabled();
   await guest.locator('#grid-root [data-slot]').nth(1).click();
   await expect(guest.locator('button.save')).toBeEnabled();
+
+  // The plain share link, on this device, comes back to the response: nobody keeps the link.
+  await guest.goto(pollUrl);
+  await expect(guest).toHaveURL(editLink!);
+  await expect(guest.locator('.name input')).toHaveValue('Ana');
+  // A different device sees a blank grid.
+  const { context: otherContext, page: elsewhere } = await newGuest(browser);
+  await elsewhere.goto(pollUrl);
+  await expect(elsewhere).toHaveURL(pollUrl);
+  await expect(elsewhere.locator('.name input')).toHaveValue('');
+  await otherContext.close();
+  // A remembered secret that no longer works is forgotten, and the address put back.
+  const storageKey = `letsmeet.edit.${pollUrl.split('/').pop()}`;
+  await guest.evaluate((k) => localStorage.setItem(k, 'stale'), storageKey);
+  await guest.goto(pollUrl);
+  await expect(guest).toHaveURL(pollUrl);
+  await expect(guest.locator('.name input')).toHaveValue('');
+  expect(await guest.evaluate((k) => localStorage.getItem(k), storageKey)).toBeNull();
   await guestContext.close();
 });
 

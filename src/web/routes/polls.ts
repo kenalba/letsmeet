@@ -136,6 +136,10 @@ export function pollRoutes(
     // The viewer's own name in the results, when they have answered before: the grid
     // subtracts that answer from the tallies it shows while they repaint.
     let self: string | undefined;
+    // Only a token that still resolves reaches the page. An edit link that no longer works
+    // renders as the plain poll: the island forgets any copy it kept of it, and a save files
+    // a fresh response instead of failing on "invalid edit link".
+    let resolvedToken: string | undefined;
     if (editToken) {
       const respRkey = lookupEditSecret(deps.db, results.poll.uri, editToken);
       const row = respRkey
@@ -148,6 +152,7 @@ export function pollRoutes(
           name: row.record.guest?.name,
         };
         self = results.responses.find((r) => r.source === 'guest' && r.key === respRkey)?.who;
+        resolvedToken = editToken;
       }
     } else if (viewerDid) {
       // A signed-in responder needs no edit link: their own row is keyed by their DID, so
@@ -173,7 +178,7 @@ export function pollRoutes(
       isHost,
       prefill,
       self,
-      editToken,
+      editToken: resolvedToken,
       pendingCount: isHost ? pendingOutboxCount(deps.db, results.poll.hostDid) : 0,
       publicUrl: env.PUBLIC_URL,
     }));

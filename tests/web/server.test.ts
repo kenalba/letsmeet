@@ -230,6 +230,16 @@ describe('server', () => {
     const body = (await res.json()) as { editToken: string; pending: boolean };
     expect(body.editToken).toBeTruthy();
     expect(await repo.listRecords(HOST, 'lol.letsmeet.poll.response')).toHaveLength(1);
+
+    // The edit link renders the response with its token embedded for the island; a token
+    // that no longer resolves renders the plain poll, with none (the island forgets any copy
+    // it kept, and a save files a fresh response instead of failing on "invalid edit link").
+    const live = await (await app.request(`/p/${poll.rkey}/e/${body.editToken}`)).text();
+    expect(live).toContain(`"editToken":"${body.editToken}"`);
+    expect(live).toContain('"name":"Sam"');
+    const dead = await app.request(`/p/${poll.rkey}/e/no-such-token`);
+    expect(dead.status).toBe(200);
+    expect(await dead.text()).not.toContain('"editToken"');
   });
 
   it('returns 400 for a malformed JSON body instead of throwing', async () => {

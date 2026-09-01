@@ -114,7 +114,7 @@ function Grid({ data }: { data: PollData }) {
   const [mode, setMode] = useState<PaintMode>('available');
   const [name, setName] = useState(data.prefill?.name ?? '');
   const [status, setStatus] = useState<string | null>(null);
-  const [editLink, setEditLink] = useState<string | null>(null);
+  const [editLink, setEditLink] = useState<{ url: string; remembered: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   // What the server already has for this viewer; the save button lights up only when the
   // grid (or a guest's name) differs from it.
@@ -273,8 +273,13 @@ function Grid({ data }: { data: PollData }) {
       // `saving` deliberately stays true afterwards — re-saving without an edit token would
       // file a second, separate response rather than update this one.
       const fresh = out.editToken && out.editToken !== data.editToken ? out.editToken : null;
-      if (fresh) setEditLink(`${location.origin}/p/${data.rkey}/e/${fresh}`);
-      else setTimeout(() => location.reload(), 1200);
+      if (fresh) {
+        const remembered = writeEditSecret(data.rkey, fresh);
+        // The address bar now carries the edit link, so history, autocomplete and any
+        // bookmark keep it too, and "show results" reloads into it.
+        history.replaceState(null, '', editPath(data.rkey, fresh));
+        setEditLink({ url: `${location.origin}${editPath(data.rkey, fresh)}`, remembered });
+      } else setTimeout(() => location.reload(), 1200);
     } catch {
       setStatus('couldn’t reach the server. try again?');
       setSaving(false);
@@ -429,7 +434,12 @@ function Grid({ data }: { data: PollData }) {
       )}
       {status && <p className="status" role="status">{status}</p>}
       {editLink && (
-        <p className="edit-link">keep this link to edit your response later:<br /><code>{editLink}</code></p>
+        <p className="edit-link">
+          {editLink.remembered
+            ? 'this browser will remember your response. on another device, use this link to edit it:'
+            : 'keep this link to edit your response later:'}
+          <br /><code>{editLink.url}</code>
+        </p>
       )}
       {editLink && (
         <button
@@ -442,8 +452,44 @@ function Grid({ data }: { data: PollData }) {
   );
 }
 
+/**
+ * A guest's edit secret, kept on this device so the plain share link brings them back to
+ * their own response: nobody keeps the link. Storage that is off or full just means the
+ * link is the only way back, as before.
+ */
+const editKey = (rkey: string) => `letsmeet.edit.${rkey}`;
+const editPath = (rkey: string, token: string) => `/p/${rkey}/e/${token}`;
+function readEditSecret(rkey: string): string | null {
+  try { return localStorage.getItem(editKey(rkey)); } catch { return null; }
+}
+/** True when the secret is now stored (or cleared); false when this browser won't keep it. */
+function writeEditSecret(rkey: string, token: string | null): boolean {
+  try {
+    if (token) localStorage.setItem(editKey(rkey), token);
+    else localStorage.removeItem(editKey(rkey));
+    return true;
+  } catch { return false; }
+}
+
 const dataEl = document.getElementById('poll-data');
 const mount = document.getElementById('grid-root');
 if (dataEl?.textContent && mount) {
-  createRoot(mount).render(<Grid data={JSON.parse(dataEl.textContent) as PollData} />);
+  const data = JSON.parse(dataEl.textContent) as PollData;
+  const onEditUrl = /\/e\/[^/]+$/.test(location.pathname);
+  // The plain share link, on a device that answered before, signed out: straight to that
+  // response, without painting a blank grid first.
+  const kept = data.editToken || data.viewerDid || onEditUrl ? null : readEditSecret(data.rkey);
+  if (kept) {
+    location.replace(editPath(data.rkey, kept));
+  } else {
+    if (data.editToken) {
+      // Arrived by a working edit link (pasted, bookmarked, or sent here above): keep it.
+      writeEditSecret(data.rkey, data.editToken);
+    } else if (onEditUrl) {
+      // An edit link that no longer resolves: forget it, and show the plain address.
+      writeEditSecret(data.rkey, null);
+      history.replaceState(null, '', `/p/${data.rkey}`);
+    }
+    createRoot(mount).render(<Grid data={data} />);
+  }
 }
