@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { Hono } from 'hono';
 import type { Deps } from '../../atproto/types.js';
 import type { AuthClient } from '../../atproto/oauthClient.js';
@@ -12,7 +13,11 @@ import { listResponseCache } from '../../db/cache.js';
 import { pendingOutboxCount } from '../../db/outbox.js';
 import { buildIcs } from '../../core/ics.js';
 import { TokenBucket } from '../rateLimit.js';
-import { landingPage, createFormPage, pollPage, decidedPage, tombstonePage } from '../views.js';
+import { renderPage } from '../render.js';
+import { LandingPage } from '../pages/Landing.js';
+import { DecidedPage } from '../pages/Decided.js';
+import { TombstonePage } from '../pages/Tombstone.js';
+import { createFormPage, pollPage } from '../views.js';
 
 export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
@@ -21,7 +26,10 @@ export function pollRoutes(
   // Per-app, not module-global: two servers in one process must not share a budget.
   const guestLimiter = new TokenBucket(10, 0.1);
 
-  app.get('/', async (c) => c.html(landingPage(await getSessionDid(c, env.COOKIE_SECRET))));
+  app.get('/', async (c) => {
+    const did = await getSessionDid(c, env.COOKIE_SECRET);
+    return c.html(renderPage(createElement(LandingPage, { did })));
+  });
 
   app.get('/new', async (c) => {
     const did = await getSessionDid(c, env.COOKIE_SECRET);
@@ -54,10 +62,12 @@ export function pollRoutes(
   const renderPoll = async (c: import('hono').Context, rkey: string, editToken?: string) => {
     const results = await getResults(deps, rkey);
     if (!results) return c.notFound();
-    if (results.poll.tombstoned) return c.html(tombstonePage(), 410);
+    if (results.poll.tombstoned) return c.html(renderPage(createElement(TombstonePage)), 410);
     const viewerDid = await getSessionDid(c, env.COOKIE_SECRET);
     if (results.poll.record.status === 'finalized' && results.poll.record.finalized) {
-      return c.html(decidedPage(rkey, results.poll.record, env.PUBLIC_URL));
+      return c.html(renderPage(createElement(DecidedPage, {
+        rkey, record: results.poll.record, publicUrl: env.PUBLIC_URL,
+      })));
     }
     let prefill;
     if (editToken) {

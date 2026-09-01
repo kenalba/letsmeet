@@ -1,7 +1,10 @@
+import { createElement } from 'react';
 import { Hono, type Context } from 'hono';
 import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
 import type { AuthClient } from '../../atproto/oauthClient.js';
 import { TokenBucket } from '../rateLimit.js';
+import { renderPage } from '../render.js';
+import { LoginPage, SignInFailedPage } from '../pages/Login.js';
 
 export async function getSessionDid(c: Context, cookieSecret: string): Promise<string | null> {
   const did = await getSignedCookie(c, cookieSecret, 'did');
@@ -22,31 +25,30 @@ export function authRoutes(auth: AuthClient, cookieSecret: string, publicUrl: st
   // fetches it to verify the private_key_jwt assertions this app signs.
   app.get('/oauth/jwks.json', (c) => c.json(auth.jwks));
 
-  app.get('/login', (c) =>
-    c.html(
-      `<form method="post" action="/login">
-         <label>Your handle <input name="handle" placeholder="you.bsky.social" required></label>
-         <button>Sign in</button>
-       </form>`,
-    ),
-  );
+  app.get('/login', (c) => c.html(renderPage(createElement(LoginPage))));
+
+  /** Every sign-in failure is the same page with the handler's own sanitized string. */
+  const loginError = (c: Context, message: string, status: 400 | 429) =>
+    c.html(renderPage(createElement(LoginPage, { error: message })), status);
 
   app.post('/login', async (c) => {
     // Same last-hop rule as the guest limiter: our proxy appends the real client.
     const xff = c.req.header('x-forwarded-for');
     const ip = xff ? xff.split(',').pop()!.trim() : 'local';
     if (!loginLimiter.allow(ip, Date.now())) {
-      return c.text('Too many sign-in attempts — try again in a minute.', 429);
+      return loginError(c, 'Too many sign-in attempts — try again in a minute.', 429);
     }
     const form = await c.req.formData();
     const handle = String(form.get('handle') ?? '').trim();
-    if (!handle) return c.text('handle required', 400);
+    if (!handle) return loginError(c, 'handle required', 400);
     try {
       const url = await auth.authorize(handle);
       return c.redirect(url.toString());
     } catch (err) {
       console.error('login authorize failed:', err);
-      return c.text(`Could not start sign-in for "${handle}". Check the handle and try again.`, 400);
+      return loginError(
+        c, `Could not start sign-in for "${handle}". Check the handle and try again.`, 400,
+      );
     }
   });
 
@@ -59,7 +61,7 @@ export function authRoutes(auth: AuthClient, cookieSecret: string, publicUrl: st
       return c.redirect('/');
     } catch (err) {
       console.error('oauth callback failed:', err);
-      return c.html('<p>Sign-in failed or was cancelled. <a href="/login">Try again</a></p>', 400);
+      return c.html(renderPage(createElement(SignInFailedPage)), 400);
     }
   });
 

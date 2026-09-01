@@ -3,8 +3,12 @@ import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Interval } from '../core/intervals.js';
 import type { SpecificDates } from '../core/slots.js';
-import type { ScheduleRecord } from '../atproto/records.js';
 import type { PollResults } from '../services/results.js';
+import { scriptJson } from './scriptJson.js';
+
+// The poll page still lives here (Task 5 ports it); it needs the same escaping rule, which
+// now has its own module so the React pages can share it. Re-exported for existing importers.
+export { scriptJson };
 
 /** What `html` actually returns; every view returns one of these. */
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -137,30 +141,10 @@ export function createFormPage(): Html {
   return layout('New poll — letsmeet', html`<h1>New poll</h1>${createForm()}`);
 }
 
-export function landingPage(loggedInDid: string | null): Html {
-  const body = loggedInDid
-    ? html`<h1>New poll</h1>
-<p class="hint">Signed in as <code>${loggedInDid}</code>.</p>
-${createForm()}`
-    : html`<h1>Pick a time, together</h1>
-<p>Polls live in your own atproto repo. Guests can answer without an account.</p>
-<p><a href="/login">Sign in to create a poll</a></p>`;
-  return layout('letsmeet', body);
-}
-
 function fmtRange(slot: Interval, zone: string): string {
   const s = DateTime.fromISO(slot.start, { zone });
   const e = DateTime.fromISO(slot.end, { zone });
   return `${s.toFormat('HH:mm')}–${e.toFormat('HH:mm')} ${s.toFormat('ccc LLL d')}`;
-}
-
-/**
- * JSON safe to drop inside a <script> element. Escaping every `<` is the only sound rule:
- * escaping just `</` still lets `<!--<script>` flip the tokenizer into script-data-escaped
- * state and swallow the rest of the document as script text.
- */
-function scriptJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
 export function pollPage(data: PollPageData): Html {
@@ -226,26 +210,4 @@ ${isActive
 </section>`;
 
   return layout(`${data.title} — letsmeet`, body);
-}
-
-export function decidedPage(rkey: string, record: ScheduleRecord, publicUrl: string): Html {
-  const zone = record.time.timezone;
-  const slot = record.finalized;
-  const base = publicUrl.replace(/\/$/, '');
-  const icsPath = `/p/${rkey}/ics`;
-  const webcal = `webcal://${base.replace(/^https?:\/\//, '')}${icsPath}`;
-  const body = html`<h1>${record.title}</h1>
-${record.description ? html`<p class="description">${record.description}</p>` : null}
-<h2>Decided</h2>
-<p class="chosen">${slot ? fmtRange(slot, zone) : 'a time'} (${zone})</p>
-<p><a href="${icsPath}" class="ics">Download .ics</a> ·
-   <a href="${webcal}" class="webcal">Add to calendar (webcal)</a></p>
-<p class="hint">Responses are closed. The event also lives in the host's atproto repo.</p>`;
-  return layout(`${record.title} — letsmeet`, body);
-}
-
-export function tombstonePage(): Html {
-  return layout('Poll withdrawn — letsmeet', html`<h1>Poll withdrawn</h1>
-<p>This poll was withdrawn by the host.</p>
-<p><a href="/">Back to letsmeet</a></p>`);
 }

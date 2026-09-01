@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
 import { createServer } from '../../src/web/server.js';
+import { scriptJson } from '../../src/web/scriptJson.js';
 import { createPoll } from '../../src/services/polls.js';
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
@@ -39,7 +40,40 @@ describe('server', () => {
     const { app } = await setup();
     const res = await app.request('/');
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('letsmeet');
+    const body = await res.text();
+    expect(body).toContain('letsmeet');
+    // The built Tailwind sheet is the only stylesheet the migrated pages carry.
+    expect(body).toContain('rel="stylesheet"');
+    expect(body).toContain('/assets/app.css');
+    expect(body).toContain('Sign in to create a poll');
+  });
+
+  it('shows the signed-in DID in exactly one <code> element on the landing page', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request('/dev/login?did=did:plc:sam');
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const body = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(body).toContain('/assets/app.css');
+    expect(body).toMatch(/<code[^>]*>did:plc:sam<\/code>/);
+    // The e2e suite locates the DID with a bare `code` locator, which is strict-mode:
+    // a second <code> anywhere on this page would break it.
+    expect(body.match(/<code[\s>]/g)).toHaveLength(1);
+    // ...and the create form the e2e helper fills is still here, field names intact.
+    expect(body).toMatch(/<form [^>]*class="create[ "]/);
+    expect(body).toContain('name="slotMinutes"');
+  });
+
+  it('serves a full sign-in page at GET /login', async () => {
+    const { app } = await setup();
+    const res = await app.request('/login');
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('action="/login"');
+    expect(body).toContain('name="handle"');
+    expect(body).toContain('/assets/app.css');
   });
 
   it('renders a poll page with embedded grid data', async () => {
@@ -151,7 +185,24 @@ describe('server', () => {
     repo.delete(HOST, 'lol.letsmeet.poll.schedule', poll.rkey);
     const res = await app.request(`/p/${poll.rkey}`);
     expect(res.status).toBe(410);
-    expect(await res.text()).toContain('withdrawn by the host');
+    const body = await res.text();
+    expect(body).toContain('withdrawn by the host');
+    expect(body).toContain('Back to letsmeet');
+  });
+
+  it('renders the decided page with .ics and webcal links once finalized', async () => {
+    const { app, deps, poll } = await setup();
+    const { finalizePoll } = await import('../../src/services/polls.js');
+    await finalizePoll(deps, HOST, poll.rkey, {
+      start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T17:30:00.000Z',
+    });
+    const res = await app.request(`/p/${poll.rkey}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('Decided');
+    expect(body).toMatch(new RegExp(`<a href="/p/${poll.rkey}/ics" class="ics[ "]`));
+    expect(body).toContain('webcal://localhost:8787');
+    expect(body).toContain('/assets/app.css');
   });
 
   it('prefills the grid for a signed-in responder without an edit link', async () => {
@@ -190,5 +241,15 @@ describe('server', () => {
     const res = await dev.request('/dev/login?did=did:plc:devguest');
     expect(res.status).toBe(302);
     expect(res.headers.get('set-cookie')).toMatch(/^did=did%3Aplc%3Adevguest\./);
+  });
+});
+
+describe('scriptJson', () => {
+  it('escapes every < so an embedded value cannot flip the script tokenizer', () => {
+    // Same rule the poll page's #poll-data block depends on, asserted against the module
+    // that now owns it (views.ts only re-exports it until the poll page ports).
+    const out = scriptJson({ name: '<!--<script>' });
+    expect(out).toBe('{"name":"\\u003c!--\\u003cscript>"}');
+    expect(out).not.toContain('<');
   });
 });
