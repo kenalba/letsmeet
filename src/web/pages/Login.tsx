@@ -1,4 +1,4 @@
-import { Layout } from './Layout.js';
+import { Layout, pageTitle } from './Layout.js';
 import { Button } from '../ui/button.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { Input } from '../ui/input.js';
@@ -10,7 +10,7 @@ import { Label } from '../ui/label.js';
  */
 export function LoginPage({ error, returnTo }: { error?: string; returnTo?: string }) {
   return (
-    <Layout title="Sign in — letsmeet">
+    <Layout title={pageTitle('Sign in')}>
       <div className="mx-auto grid max-w-md gap-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <Card>
@@ -76,7 +76,7 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
 /** The OAuth callback's failure page: same copy and same "Try again" link as before. */
 export function SignInFailedPage() {
   return (
-    <Layout title="Sign-in failed — letsmeet">
+    <Layout title={pageTitle('Sign-in failed')}>
       <div className="mx-auto grid max-w-md gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Sign-in failed</h1>
         <p className="text-muted-foreground">

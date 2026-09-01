@@ -572,6 +572,41 @@ describe('request hardening', () => {
   });
 });
 
+describe('page chrome', () => {
+  it('serves the icons and links them from every page', async () => {
+    const { app, poll } = await setup();
+    for (const [path, type] of [
+      ['/favicon.ico', 'image/x-icon'], ['/favicon.svg', 'image/svg+xml'],
+      ['/favicon-32.png', 'image/png'], ['/apple-touch-icon.png', 'image/png'],
+    ]) {
+      const res = await app.request(path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('content-type'), path).toContain(type);
+      expect(res.headers.get('cache-control'), path).toContain('max-age=86400');
+    }
+    const body = await (await app.request(`/p/${poll.rkey}`)).text();
+    expect(body).toContain('rel="icon" href="/favicon.svg" type="image/svg+xml"');
+    expect(body).toContain('rel="apple-touch-icon" href="/apple-touch-icon.png"');
+  });
+
+  it('titles every page uniformly and describes it for link previews', async () => {
+    const { app, poll } = await setup();
+    const home = await (await app.request('/')).text();
+    expect(home).toContain('<title>letsmeet.lol · Pick a time, together</title>');
+    expect(home).toContain('property="og:site_name" content="letsmeet.lol"');
+    expect(home).toMatch(/<meta name="description" content="[^"]+"/);
+
+    const page = await (await app.request(`/p/${poll.rkey}`)).text();
+    expect(page).toContain('<title>Movie night · letsmeet.lol</title>');
+    expect(page).toContain('property="og:title" content="Movie night · letsmeet.lol"');
+    expect(page).toContain(`property="og:url" content="http://localhost:8787/p/${poll.rkey}"`);
+    expect(page).toMatch(/property="og:description" content="30-minute slots · 0 responses so far[^"]*"/);
+
+    const login = await (await app.request('/login')).text();
+    expect(login).toContain('<title>Sign in · letsmeet.lol</title>');
+  });
+});
+
 describe('scriptJson', () => {
   it('escapes every < so an embedded value cannot flip the script tokenizer', () => {
     // Same rule the poll page's #poll-data block depends on.

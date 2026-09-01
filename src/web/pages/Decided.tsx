@@ -1,6 +1,6 @@
 import type { ScheduleRecord } from '../../atproto/records.js';
 import { fmtRange } from '../lib/fmtRange.js';
-import { Layout } from './Layout.js';
+import { Layout, pageTitle } from './Layout.js';
 import { Card, CardContent, CardDescription, CardHeader } from '../ui/card.js';
 
 export function DecidedPage(
@@ -14,7 +14,11 @@ export function DecidedPage(
   const linkClass = 'text-primary underline underline-offset-4';
 
   return (
-    <Layout title={`${record.title} — letsmeet`}>
+    <Layout
+      title={pageTitle(record.title)}
+      description={record.description ?? 'Decided — the time that works is set.'}
+      canonical={`${base}/p/${rkey}`}
+    >
       <div className="grid gap-6">
         <div className="grid gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{record.title}</h1>

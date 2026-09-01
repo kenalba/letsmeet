@@ -1,4 +1,4 @@
-import { Layout } from './Layout.js';
+import { Layout, pageTitle } from './Layout.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { CreatePollForm, CREATE_FORM_SCRIPTS } from './CreatePollForm.js';
 
@@ -9,7 +9,7 @@ import { CreatePollForm, CREATE_FORM_SCRIPTS } from './CreatePollForm.js';
  */
 export function NewPollPage() {
   return (
-    <Layout title="New poll — letsmeet" scripts={CREATE_FORM_SCRIPTS}>
+    <Layout title={pageTitle('New poll')} scripts={CREATE_FORM_SCRIPTS}>
       <div className="grid gap-6">
         <h1 className="text-2xl font-semibold tracking-tight">New poll</h1>
         <Card>

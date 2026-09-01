@@ -7,7 +7,7 @@ import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { buttonVariants } from '../ui/button.js';
 import { Card, CardHeader, CardContent } from '../ui/card.js';
-import { Layout } from './Layout.js';
+import { Layout, pageTitle } from './Layout.js';
 
 export interface PollPageData {
   rkey: string;
@@ -21,6 +21,8 @@ export interface PollPageData {
   isHost: boolean;
   prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
   editToken?: string;
+  /** The site origin, for the link-preview URL; absent in tests that don't care. */
+  publicUrl?: string;
   /** Guest responses still queued for the host's PDS; drives the "still syncing" banner. */
   pendingCount?: number;
 }
@@ -65,7 +67,11 @@ export function PollPage(data: PollPageData) {
   const path = `/p/${data.rkey}`;
   return (
     <Layout
-      title={`${data.title} — letsmeet`}
+      title={pageTitle(data.title)}
+      description={data.description ?? `${fmtSlotLength(data.time.slotMinutes)} slots · ${
+        data.results.responses.length === 1 ? '1 response' : `${data.results.responses.length} responses`
+      } so far. Paint the times you're free.`}
+      canonical={data.publicUrl ? `${data.publicUrl}${path}` : undefined}
       scripts={GRID_SCRIPTS}
       signInHref={data.viewerDid ? undefined : `/login?returnTo=${encodeURIComponent(path)}`}
     >

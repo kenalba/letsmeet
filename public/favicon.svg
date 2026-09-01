@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- letsmeet.lol: the availability grid, one column lit — the time that works. -->
+  <rect width="64" height="64" rx="14" fill="#2b8a5f"/>
+  <g fill="#ffffff" fill-opacity="0.55">
+    <rect x="11" y="11" width="12" height="12" rx="3"/>
+    <rect x="41" y="11" width="12" height="12" rx="3"/>
+    <rect x="11" y="26" width="12" height="12" rx="3"/>
+    <rect x="41" y="26" width="12" height="12" rx="3"/>
+    <rect x="11" y="41" width="12" height="12" rx="3"/>
+    <rect x="41" y="41" width="12" height="12" rx="3"/>
+  </g>
+  <g fill="#ffffff">
+    <rect x="26" y="11" width="12" height="12" rx="3"/>
+    <rect x="26" y="26" width="12" height="12" rx="3"/>
+    <rect x="26" y="41" width="12" height="12" rx="3"/>
+  </g>
+</svg>

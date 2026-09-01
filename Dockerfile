@@ -14,6 +14,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY lexicons ./lexicons
+# The tracked static files (icons); public/assets is excluded by .dockerignore and
+# written by the build below.
+COPY public ./public
 COPY src ./src
 # public/assets is gitignored build output; baking it here is what makes the image
 # self-contained (see docs/deploy.md "Before you build").

@@ -3,8 +3,16 @@ import { useNonce } from '../nonce.js';
 import { Moon, Sun, SunMoon } from 'lucide-react';
 import { buttonVariants } from '../ui/button.js';
 
+export const SITE = 'letsmeet.lol';
+const DEFAULT_DESCRIPTION = 'Pick a time, together. Availability polls that live in your own atproto account.';
+
 export interface LayoutProps {
+  /** The full document title. Pages pass `pageTitle(...)` so the suffix is uniform. */
   title: string;
+  /** One line for search results and link previews; the site's own line when omitted. */
+  description?: string;
+  /** The page's public URL, for the link-preview `og:url`. Omitted for pages nobody shares. */
+  canonical?: string;
   children: ReactNode;
   /**
    * Module scripts appended after <main>, so an island's mount point is in the DOM by the
@@ -65,14 +73,33 @@ const THEME_TOGGLE = "(function(){var b=document.getElementById('theme-toggle');
  * theme the token block in app.css is currently resolving to; when the viewer pins a theme,
  * the `[data-theme]` rules in app.css override that with a single `color-scheme`.
  */
-export function Layout({ title, children, scripts, signInHref }: LayoutProps) {
+/** `"Movie night · letsmeet.lol"` — one shape for every tab and link preview. */
+export function pageTitle(name: string): string {
+  return `${name} · ${SITE}`;
+}
+
+export function Layout({ title, description, canonical, children, scripts, signInHref }: LayoutProps) {
   const nonce = useNonce();
+  const desc = description ?? DEFAULT_DESCRIPTION;
   return (
     <html lang="en" className="scheme-light-dark">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
+        <meta name="description" content={desc} />
+        <meta name="theme-color" content="#2b8a5f" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        {/* Link previews: a poll link pasted into a chat shows its title, not a bare URL. */}
+        <meta property="og:site_name" content={SITE} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={desc} />
+        {canonical ? <meta property="og:url" content={canonical} /> : null}
+        {canonical ? <link rel="canonical" href={canonical} /> : null}
+        <meta name="twitter:card" content="summary" />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         <link rel="stylesheet" href="/assets/app.css" />
       </head>

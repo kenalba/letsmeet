@@ -159,6 +159,7 @@ export function pollRoutes(
       prefill,
       editToken,
       pendingCount: isHost ? pendingOutboxCount(deps.db, results.poll.hostDid) : 0,
+      publicUrl: env.PUBLIC_URL,
     }));
   };
 

@@ -1,4 +1,4 @@
-import { Layout } from './Layout.js';
+import { Layout, SITE, pageTitle } from './Layout.js';
 import { useNonce } from '../nonce.js';
 import { Badge } from '../ui/badge.js';
 import { Button, buttonVariants } from '../ui/button.js';
@@ -54,7 +54,7 @@ export function LandingPage({ did, handle, polls = [] }: {
 }) {
   if (!did) {
     return (
-      <Layout title="letsmeet" signInHref="/login">
+      <Layout title={`${SITE} · Pick a time, together`} signInHref="/login">
         <div className="grid gap-10">
           <section className="grid gap-4">
             <h1 className="text-3xl font-semibold tracking-tight">Pick a time, together</h1>
@@ -91,7 +91,7 @@ export function LandingPage({ did, handle, polls = [] }: {
   }
 
   return (
-    <Layout title="letsmeet">
+    <Layout title={pageTitle('Your polls')}>
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1">

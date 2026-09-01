@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders, NONCE } from 'hono/secure-headers';
@@ -115,14 +115,23 @@ export function createServer(
     }), 500);
   });
 
+  /**
+   * Cache policy for static files, applied to the finished response. (The node adapter's
+   * serveStatic calls `onFound` only after it has already built its Response, so headers
+   * set there never ship — this wrapper is the reliable way.)
+   */
+  const cacheControl = (value: string): MiddlewareHandler => async (c, next) => {
+    await next();
+    if (c.res.ok) c.res.headers.set('Cache-Control', value);
+  };
+  // Icons live at the root (browsers ask for /favicon.ico unprompted). A day's cache:
+  // they change rarely, and a stale icon for a day costs nothing.
+  for (const icon of ['favicon.ico', 'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png']) {
+    app.get(`/${icon}`, cacheControl('public, max-age=86400'), serveStatic({ path: `./public/${icon}` }));
+  }
   // Bundle filenames are stable across deploys (no content hash), so tell browsers to
   // revalidate every load rather than cache a stale build indefinitely.
-  app.use('/assets/*', serveStatic({
-    root: './public',
-    onFound: (_path, c) => {
-      c.header('Cache-Control', 'no-cache');
-    },
-  }));
+  app.use('/assets/*', cacheControl('no-cache'), serveStatic({ root: './public' }));
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';

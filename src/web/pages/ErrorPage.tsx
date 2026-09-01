@@ -1,4 +1,4 @@
-import { Layout } from './Layout.js';
+import { Layout, pageTitle } from './Layout.js';
 
 export interface ErrorPageProps {
   /** Shown as the page's <h1> — pick something status-appropriate ("Not found", "Could not create poll"). */
@@ -14,7 +14,7 @@ export interface ErrorPageProps {
  */
 export function ErrorPage({ heading, message }: ErrorPageProps) {
   return (
-    <Layout title={`${heading} — letsmeet`}>
+    <Layout title={pageTitle(heading)}>
       <div className="mx-auto grid max-w-md gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
         <p className="text-muted-foreground">{message}</p>
