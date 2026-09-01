@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Keeps the commit pins in deploy.yml current — the pins are what make a retagged
+  # action harmless, and Dependabot is what keeps pinned-at-a-commit from meaning stale.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

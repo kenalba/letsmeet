@@ -2,9 +2,8 @@
 
 letsmeet is a single Node process (Hono, server-rendered pages + a couple of
 React islands — the availability grid and the create-form date picker)
-backed by SQLite. It is designed to run behind Caddy at
-`letsmeet.lol`, on the same home server that hosts the rest of the letsmeet.lol
-stack, or on any small VPS.
+backed by SQLite. It runs as a Docker container behind nginx at
+`letsmeet.lol` on the Linode box (§2–3), or on any small VPS.
 
 The one thing worth internalizing before you deploy: **`DB_PATH` needs real
 backups.** The records survive without it; the app does not.
@@ -25,6 +24,7 @@ loss, not cache eviction.
 On top of the share links, a lost DB also costs:
 
 - Host OAuth sessions (hosts have to sign in again — no data loss).
+- Browser sessions (everyone is signed out — no data loss).
 - Any outbox rows that hadn't yet flushed to a PDS (normally ~zero at any
   instant; see the outbox note in the environment table below).
 - Guest edit-link tokens (a guest who lost their link submits fresh; no
@@ -42,7 +42,7 @@ All configuration is via environment variables, read once at boot in
 
 | Variable | Required in prod | Default | Notes |
 |---|---|---|---|
-| `PORT` | no | `8787` | TCP port the Node process listens on. Caddy proxies to this. |
+| `PORT` | no | `8787` | TCP port the Node process listens on. nginx proxies to this (§3). |
 | `PUBLIC_URL` | **yes** | `http://localhost:8787` | The externally-visible origin, no trailing slash — e.g. `https://letsmeet.lol`. Used to build the OAuth `redirect_uri`, `client_id`, and `jwks_uri`, and to render share links. Leaving this at the `localhost` default in production breaks OAuth and produces poll links nobody outside the box can open. |
 | `DB_PATH` | no | `./letsmeet.db` | Path to the SQLite file. Point this at a persistent volume outside the deploy directory if you ever redeploy by replacing `/opt/letsmeet` wholesale. |
 | `COOKIE_SECRET` | **yes** | `dev-cookie-secret` | Signs the session cookie (`hono/cookie`'s signed-cookie HMAC). Use a random string, 32+ characters — e.g. `openssl rand -base64 32`. The insecure default is fine for local dev only, and the server refuses to boot on it (see below). |
@@ -55,20 +55,33 @@ All configuration is via environment variables, read once at boot in
 
 Generate the two secrets and the JWK once, keep them in whatever secrets
 store you use (a `.env` file with restrictive permissions is fine for a
-single-host deploy), and never commit them — `.gitignore` already excludes
-`.env` and `*.db*`.
+single-host deploy), and never commit them — `.gitignore` excludes `.env*`
+(the glob, so an editor's `.env.save` or a `.env.bak` can't slip in) and
+`*.db*`.
 
 ```bash
+umask 077                   # everything below is created readable by you alone
 openssl rand -base64 32     # -> COOKIE_SECRET
 openssl rand -hex 32        # -> SESSION_ENC_KEY
-npx tsx scripts/genJwk.ts   # -> OAUTH_JWK (prints one line of JSON)
+# The JWK is a private key: write it straight into the env file rather than
+# letting it land in a terminal scrollback.
+printf 'OAUTH_JWK=%s\n' "$(npx tsx scripts/genJwk.ts)" >> .env
 ```
 
-Unless `FAKE_PDS=1`, `src/index.ts` checks these two at boot and exits 1 with
-a list of what's wrong if `COOKIE_SECRET` is still `dev-cookie-secret`, or if
-`SESSION_ENC_KEY` isn't 64 hex characters or is still all zeroes. A unit that
-won't start with "refusing to boot without real secrets:" in the journal is
-missing its `EnvironmentFile`, not broken.
+**`.env` is backup-critical, not just secret.** `SESSION_ENC_KEY` encrypts the
+OAuth session rows in the database and `OAUTH_JWK` is the key the
+authorization servers know this client by: a restored database without the
+matching `.env` has no usable host sessions, and a new JWK means every host
+signs in again. Keep a copy of `.env` wherever you keep the database backup.
+
+Unless `FAKE_PDS=1`, `src/index.ts` checks these at boot and exits 1 with a
+list of what's wrong if `COOKIE_SECRET` is still `dev-cookie-secret` or
+shorter than 32 characters, or if `SESSION_ENC_KEY` isn't 64 hex characters
+or is still all zeroes. A container that won't start with "refusing to boot
+without real secrets:" in its logs is missing its `.env`, not broken. And
+`FAKE_PDS=1` is refused outright when `NODE_ENV=production` (which the image
+sets), so the fake repo and `/dev/login` cannot be switched on in a
+deployment by a stray env line.
 
 ### Before you build
 
@@ -105,103 +118,135 @@ line up. Opening `localhost:8787` in the browser while `PUBLIC_URL` is set to
 The deployment unit is the Docker image built by `Dockerfile`: a multi-stage
 build that runs `npm ci` + `npm run build:client` (so `/assets/*` is baked
 in — the "Before you build" section above is satisfied by the image itself),
-prunes to production deps, and runs `npx tsx src/index.ts` as the
-unprivileged `node` user. The SQLite file lives at `/data/letsmeet.db`
-inside the container, mounted from the host.
+prunes to production deps, and runs `tsx src/index.ts` as the unprivileged
+`node` user under `tini`. The base image is pinned by digest (Dependabot
+proposes bumps). The SQLite file lives at `/data/letsmeet.db` inside the
+container, mounted from the host.
 
-The pipeline (`.github/workflows/deploy.yml`) runs on every push to `main`:
+The pipeline (`.github/workflows/deploy.yml`) runs on every push to `main`,
+and once a week on a schedule so the image is rebuilt on a current base even
+when the code hasn't changed:
 
-1. **test** — typecheck, the vitest suite, and the full Playwright matrix
-   (chromium, firefox, tz-kolkata, mobile).
-2. **build** — builds the image and pushes `ghcr.io/kenalba/letsmeet:latest`
-   (plus a `:<sha>` tag for rollbacks) using the workflow's own
-   `GITHUB_TOKEN`; no registry secret needed.
-3. **deploy** — SSHes to the box and runs
-   `docker compose pull && docker compose up -d`.
+1. **test** — `npm audit` (production deps, high+), typecheck, the vitest
+   suite, and the full Playwright matrix (chromium, firefox, tz-kolkata,
+   mobile).
+2. **build** — builds the image and pushes `ghcr.io/kenalba/letsmeet:<sha>`
+   (plus `:latest`) using the workflow's own `GITHUB_TOKEN`. Only runs for
+   `main`: a `workflow_dispatch` from another branch tests and stops.
+3. **deploy** — SSHes to the box with plain OpenSSH (host key pinned, no
+   third-party action holding the key) and sends exactly one line:
+   `deploy <sha>`. Runs are serialized per branch, so two quick pushes land
+   in order.
 
-The deploy job needs three repository secrets (Settings → Secrets →
-Actions): `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_SSH_KEY` (a private key
-whose public half is in the deploy user's `authorized_keys`; make a
-dedicated keypair, don't reuse a personal one).
+Every action in the workflow is pinned to a commit SHA, the workflow has
+`permissions: contents: read` at the top (the build job raises `packages`
+for itself; deploy has none), and checkouts don't persist credentials — the
+test job runs third-party dev dependencies and must not be able to push.
+
+The deploy job needs four repository secrets (Settings → Secrets → Actions):
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (a dedicated private key —
+never a personal one), and `DEPLOY_KNOWN_HOSTS` (the box's host-key line,
+from `ssh-keyscan -t ed25519 <host>`, cross-checked against a session you
+trust).
+
+**What the deploy key can do.** Its public half is in `authorized_keys` on
+the box with a forced command and `restrict`:
+
+```
+restrict,command="/home/doceon/letsmeet/deploy.sh" ssh-ed25519 AAAA… letsmeet-deploy
+```
+
+Whatever the client sends is never executed — `deploy/deploy.sh` (this
+repo's copy; installed at `~/letsmeet/deploy.sh`) reads it from
+`SSH_ORIGINAL_COMMAND`, accepts only `deploy <40-hex commit>`, writes
+`IMAGE_TAG=<sha>` into `~/letsmeet/.env` (which `compose.yaml` interpolates,
+so any later `docker compose up` on the box means that commit, never a
+moving `:latest`), pulls, starts, waits for the healthcheck (a build that
+boots and dies fails the job instead of restart-looping), and removes older
+letsmeet images. No pty, no forwarding, nothing else. The key is still a
+member of the `docker` group's power by proxy — that is why the script is
+the only thing it can invoke.
 
 **One-time setup on the box:**
 
 ```bash
-mkdir -p ~/letsmeet/data
-sudo chown 1000:1000 ~/letsmeet/data   # the container's `node` uid writes here
-# copy compose.yaml from this repo into ~/letsmeet/
-# create ~/letsmeet/.env with the §1 secrets:
+mkdir -p ~/letsmeet/data && chmod 700 ~/letsmeet ~/letsmeet/data
+# uid 1000 is the container's `node` user; on this box that is also the login user.
+# copy compose.yaml, deploy/deploy.sh and deploy/backup.sh from this repo into ~/letsmeet/
+chmod 700 ~/letsmeet/deploy.sh ~/letsmeet/backup.sh
+# create ~/letsmeet/.env (umask 077) with the §1 secrets:
 #   PUBLIC_URL=https://letsmeet.lol
 #   COOKIE_SECRET=...  SESSION_ENC_KEY=...  OAUTH_JWK=...
-chmod 600 ~/letsmeet/.env
-cd ~/letsmeet && docker compose up -d
+# add the forced-command line above to ~/.ssh/authorized_keys
+# nightly backup, keeps 14:
+( crontab -l; echo "17 4 * * * $HOME/letsmeet/backup.sh >> $HOME/letsmeet/backup.log 2>&1" ) | crontab -
 ```
 
-If the GitHub repo is private, the box also needs a one-time
-`docker login ghcr.io` with a read-only personal access token
-(`read:packages`) before `compose pull` works.
+`~/letsmeet` is mode 700 because the box hosts other things: the SQLite file
+holds poll titles, guest names and DIDs, and nothing else on the machine
+needs to read it. The repo is public, so no `docker login` is needed to pull.
 
-Leave `FAKE_PDS` unset and don't set `DB_PATH` in `.env` — the image pins it
-to `/data/letsmeet.db`, and compose mounts `~/letsmeet/data` there. That
-directory is the thing §0 told you to back up:
+**The container runs locked down** (`compose.yaml`): read-only root
+filesystem with a tmpfs `/tmp`, all capabilities dropped,
+`no-new-privileges`, 512 MB memory and 256 pids, rotated json logs, and
+`tini` as PID 1 so a `docker compose stop` is a clean shutdown (the outbox
+flushes on its own timer; nothing is lost either way, but a clean stop is
+the polite one). Leave `FAKE_PDS` unset and don't set `DB_PATH` in `.env` —
+the image pins it to `/data/letsmeet.db`, and compose mounts
+`~/letsmeet/data` there.
+
+**Backups.** `backup.sh` takes an online SQLite backup through the running
+container into `~/letsmeet/backups/letsmeet-<date>.db`, nightly, keeping the
+last 14. That lands on the same disk as the live file, which covers a bad
+deploy or a fat-fingered delete but not a lost VM — pull the newest one
+somewhere else too. From any machine with SSH access to the box:
 
 ```bash
-docker compose exec letsmeet node -e "require('better-sqlite3')('/data/letsmeet.db').backup('/data/backup-$(date +%F).db')"
+scp box:letsmeet/backups/letsmeet-$(date +%F).db ~/Backups/letsmeet/
+scp box:letsmeet/.env ~/Backups/letsmeet/env   # once, and again whenever it changes
 ```
 
-(or just snapshot/copy the host-side `~/letsmeet/data` while traffic is low —
-it's a tiny file).
+(§0 explains why the database matters; §1 explains why `.env` goes with it.)
 
-**Rollback:** edit `compose.yaml` on the box to pin
-`ghcr.io/kenalba/letsmeet:<known-good sha>` and `docker compose up -d`;
-revert to `:latest` once main is fixed.
+**Rollback:** set `IMAGE_TAG=<known-good sha>` in `~/letsmeet/.env` and
+`docker compose up -d`; the next successful deploy overwrites it.
 
 ## 3. nginx
 
 The box fronts everything with nginx + certbot (not Caddy — the rest of the
 box's vhosts already live in `/etc/nginx/sites-available/`). The letsmeet
-vhost, as deployed at `/etc/nginx/sites-available/letsmeet.lol`:
+vhost is `deploy/nginx-letsmeet.lol.conf` in this repo, installed at
+`/etc/nginx/sites-available/letsmeet.lol`; the TLS lines in it are certbot's
+(`sudo certbot --nginx -d letsmeet.lol` once DNS resolves to the box), the
+rest is ours:
 
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name letsmeet.lol;
+- **Security headers** (HSTS, `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy`), set with `always` and with the app's own copies hidden
+  via `proxy_hide_header`, so every response — including a 413, 502 or 503
+  nginx generates itself — carries exactly one set. The Content-Security-Policy
+  stays with the app: it carries a per-response nonce (`src/web/server.ts`).
+- **`client_max_body_size 256k`**, matching `MAX_BODY_BYTES` in the app.
+- **`limit_req`** at 20 req/s per address with a burst of 40, ahead of the
+  app's own per-IP and per-DID token buckets.
+- **Proxy hygiene:** HTTP/1.1 keepalive to the upstream, 5s connect and 30s
+  read/send timeouts, so a stalled client or upstream can't hold a worker.
 
-    location / {
-        proxy_pass http://127.0.0.1:8787;
-        proxy_set_header Host $host;
-        # Append the real client as the last hop: the app's guest rate limiter
-        # keys on the final X-Forwarded-For entry (see below).
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+Static assets need no dedicated nginx location — Node itself serves
+`/assets/*` straight out of `public/assets/` (baked into the image), so
+`proxy_pass` alone covers it.
 
-Once DNS resolves to the box, `sudo certbot --nginx -d letsmeet.lol` adds the
-TLS listener and the HTTP→HTTPS redirect in place, same as every other vhost
-on the box. Static assets need no dedicated nginx location — Node itself
-serves `/assets/*` straight out of `public/assets/` (baked into the image),
-so `proxy_pass` alone covers it.
-
-The `X-Forwarded-For` header matters concretely: the guest-submission rate
-limiter in `src/web/routes/polls.ts` (`app.post('/p/:rkey/respond', ...)`)
-reads `x-forwarded-for`, splits on commas, and takes the **last** entry as
-the client IP:
-
-```ts
-const xff = c.req.header('x-forwarded-for');
-const ip = xff ? xff.split(',').pop()!.trim() : 'local';
-```
-
-`$proxy_add_x_forwarded_for` appends the real client IP as the last hop
-rather than trusting whatever a client sent, so a request forged with a fake
-`X-Forwarded-For` prefix can't rotate the rate-limit bucket key — the
-limiter only ever sees the hop nginx itself added. If you ever put another
-proxy in front of nginx, confirm it preserves this "append, don't replace"
-behavior, or the limiter degrades to keying everything under whatever the
-outer proxy sends.
+**The `X-Forwarded-For` contract.** The app's rate limiters
+(`src/web/clientIp.ts`) take the **last** entry of `X-Forwarded-For` as the
+client, and `$proxy_add_x_forwarded_for` appends the real client as the last
+hop rather than trusting whatever a client sent — so a request forged with a
+fake prefix can't rotate its bucket key. This holds because the app's port
+is bound to `127.0.0.1` and only nginx reaches it from outside; anything
+else running *on the box* could talk to `:8787` directly and set that header
+to anything, which is a reason to keep the box's other services honest, not
+something the app can check. Without the header at all (a direct local
+call), the limiter keys on the socket's peer address. If you ever put
+another proxy in front of nginx, confirm it preserves the "append, don't
+replace" behavior.
 
 ## 4. Publishing the lexicons
 

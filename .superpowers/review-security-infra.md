@@ -69,3 +69,20 @@ sensitive can reach the image (no COPY . .); loopback port binding; env by
 reference; healthcheck sane; boot-time secret validation; edit tokens hashed
 and OAuth rows encrypted at rest; XFF last-hop contract correct via nginx;
 §5 JWKS pre-flight is a genuinely good control.
+
+## Status (2026-09-01, later the same day)
+
+Addressed in the infra commit that follows `076aaa5`: actions pinned to SHAs
+with Dependabot (H1); plain OpenSSH with a pinned host key and a forced
+command on the box accepting only `deploy <sha>` (H2, L4, M2); top-level
+`permissions: contents: read`, `permissions: {}` on deploy,
+`persist-credentials: false` (H3); build/deploy gated to `main` (M1);
+FAKE_PDS refused under NODE_ENV=production (M3); read-only/cap-drop/limits/
+log rotation/tini (M4, L3); base image pinned by digest, weekly rebuild,
+`npm audit` in CI (M5, N3); nightly online backup + `.env` documented as
+backup-critical, off-box copy documented as the operator's step (M6);
+`~/letsmeet` and data 700/600 (M7); headers at nginx with `always` (M8);
+XFF trust documented (M9); `.env*` ignored (L1); vhost hygiene + limit_req
+(L2); genJwk umask/redirect documented (L5); Caddy references gone (N4).
+No docker login on the box (N5 n/a). N1: `route_localnet=0` confirmed, and
+nothing is published beyond loopback.

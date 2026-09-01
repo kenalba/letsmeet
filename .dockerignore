@@ -2,7 +2,7 @@ node_modules
 public/assets
 *.db
 *.db-*
-.env
+.env*
 .git
 docs
 e2e

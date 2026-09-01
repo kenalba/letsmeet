@@ -56,3 +56,12 @@ server-side in loadOwned (finalize/edit), isHost is presentation-only;
 finalize re-derives slots and blocks double-finalize; guest rkey never
 client-supplied; serveStatic traversal-safe; /dev/login gated on FAKE_PDS;
 JWKS public-only; rate limiter internals bounded; materializeSlots hard-capped.
+
+## Status (2026-09-01, later the same day)
+
+Every finding above is addressed in `076aaa5` (app) — H1/M1 earlier in
+`85158fc`. Residuals worth knowing: DNS rebinding after the pre-connect check
+(M3) is narrowed, not closed — it needs a pinned-address dispatcher; edit
+tokens still travel in the URL path by design (L7), now with a referrer
+policy that never sends the path cross-origin; CSRF (L4) is
+Sec-Fetch-Site-first with an Origin fallback and SameSite=Lax underneath.
