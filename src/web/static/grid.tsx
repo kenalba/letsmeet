@@ -145,8 +145,14 @@ function Grid({ data }: { data: PollData }) {
       setStatus(out.pending
         ? 'Saved — syncing to the host’s account in the background.'
         : 'Saved!');
-      if (out.editToken) setEditLink(`${location.origin}/p/${data.rkey}/e/${out.editToken}`);
-      setTimeout(() => location.reload(), out.editToken ? 4000 : 1200);
+      // A token the guest does not already hold is the one thing on this page they cannot get
+      // back: show it and let them reload on their own terms. Every other path (signed-in
+      // submits, and edits made through a link they already have) reloads on a short timer.
+      // `saving` deliberately stays true afterwards — re-saving without an edit token would
+      // file a second, separate response rather than update this one.
+      const fresh = out.editToken && out.editToken !== data.editToken ? out.editToken : null;
+      if (fresh) setEditLink(`${location.origin}/p/${data.rkey}/e/${fresh}`);
+      else setTimeout(() => location.reload(), 1200);
     } catch {
       setStatus('Could not reach the server — try again.');
       setSaving(false);
@@ -276,6 +282,13 @@ function Grid({ data }: { data: PollData }) {
       {status && <p class="status" role="status">{status}</p>}
       {editLink && (
         <p class="edit-link">Keep this link to edit your response later:<br /><code>{editLink}</code></p>
+      )}
+      {editLink && (
+        <button
+          type="button"
+          class="show-results secondary"
+          onClick={() => location.reload()}
+        >Show results</button>
       )}
     </div>
   );
