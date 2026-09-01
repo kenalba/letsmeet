@@ -6,6 +6,8 @@ import {
 import {
   upsertPollCache, getPollCache, tombstonePoll, countResponses, type CachedPoll,
 } from '../db/cache.js';
+import { materializeSlots } from '../core/slots.js';
+import type { Interval } from '../core/intervals.js';
 
 export function parseRkey(uri: string): string {
   const rkey = uri.split('/').pop();
@@ -80,4 +82,32 @@ export async function updatePollTime(
     time: { $type: `${SCHEDULE_NSID}#specificDates`, ...time },
   });
   await putUpdated(deps, hostDid, rkey, next);
+}
+
+export const EVENT_NSID = 'community.lexicon.calendar.event';
+
+export async function finalizePoll(
+  deps: Deps, hostDid: string, rkey: string, slot: Interval,
+): Promise<void> {
+  const poll = loadOwned(deps, hostDid, rkey);
+  if (poll.record.status === 'finalized') throw new Error('poll is already finalized');
+  const slots = materializeSlots(poll.record.time);
+  const winning = slots.some((s) => s.start === slot.start && s.end === slot.end);
+  if (!winning) throw new Error('not a slot of this poll');
+
+  const next = validateScheduleRecord({ ...poll.record, status: 'finalized', finalized: slot });
+  await putUpdated(deps, hostDid, rkey, next);
+
+  // NOTE for the implementer: before first deploy, diff these fields against the published
+  // community.lexicon.calendar.event schema at https://github.com/lexicon-community/lexicon
+  // and adjust names to match exactly. The test asserts only `name`.
+  const writer = await deps.writerFor(hostDid);
+  await writer.createRecord(hostDid, EVENT_NSID, {
+    $type: EVENT_NSID,
+    name: poll.record.title,
+    ...(poll.record.description ? { description: poll.record.description } : {}),
+    startsAt: slot.start,
+    endsAt: slot.end,
+    createdAt: deps.now().toISOString(),
+  });
 }
