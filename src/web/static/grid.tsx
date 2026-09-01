@@ -1,3 +1,4 @@
+/** @jsxImportSource preact */
 import { render } from 'preact';
 import type { JSX } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';

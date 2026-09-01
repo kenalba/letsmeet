@@ -11,7 +11,7 @@ export default defineConfig({
     timezoneId: 'UTC',
   },
   webServer: {
-    command: 'npm run build:grid && FAKE_PDS=1 npx tsx src/index.ts',
+    command: 'npm run build:client && FAKE_PDS=1 npx tsx src/index.ts',
     port: 8787,
     reuseExistingServer: false,
     timeout: 120_000,

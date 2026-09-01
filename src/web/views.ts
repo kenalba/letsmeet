@@ -199,7 +199,7 @@ ${isActive
   <small>Shown publicly on this poll</small>.</p>
 <div id="grid-root"></div>
 <script id="poll-data" type="application/json">${raw(scriptJson(gridData))}</script>
-<script type="module" src="/grid.js"></script>
+<script type="module" src="/assets/grid.js"></script>
 
 <section class="results">
   <h2>Results</h2>

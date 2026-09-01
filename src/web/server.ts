@@ -13,7 +13,7 @@ export function createServer(
   env: { COOKIE_SECRET: string; PUBLIC_URL: string; devLogin?: boolean },
 ): Hono {
   const app = new Hono();
-  app.use('/grid.js', serveStatic({ root: './public', rewriteRequestPath: () => '/grid.js' }));
+  app.use('/assets/*', serveStatic({ root: './public' }));
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';

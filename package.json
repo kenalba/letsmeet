@@ -10,7 +10,9 @@
     "test": "vitest run",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build:grid": "esbuild src/web/static/grid.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=preact --outfile=public/grid.js"
+    "build:grid": "esbuild src/web/static/grid.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=preact --outfile=public/assets/grid.js",
+    "build:css": "tailwindcss -i src/web/styles/app.css -o public/assets/app.css --minify",
+    "build:client": "npm run build:grid && npm run build:css"
   },
   "keywords": [],
   "author": "",
@@ -26,14 +28,20 @@
     "better-sqlite3": "^13.0.3",
     "hono": "^4.13.5",
     "luxon": "^3.7.2",
-    "preact": "^10.29.8"
+    "preact": "^10.29.8",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@tailwindcss/cli": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/luxon": "^3.7.5",
     "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
