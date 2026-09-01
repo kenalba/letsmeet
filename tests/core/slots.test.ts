@@ -60,4 +60,15 @@ describe('materializeSlots', () => {
       slotMinutes: 30, timezone: 'Mars/Olympus_Mons',
     })).toThrow();
   });
+
+  it('drops a trailing partial slot rather than overrunning the window', () => {
+    expect(materializeSlots({
+      dates: ['2026-09-02'], window: { start: '10:00', end: '10:50' },
+      slotMinutes: 60, timezone: 'UTC',
+    })).toEqual([]);
+    expect(materializeSlots({
+      dates: ['2026-09-02'], window: { start: '10:00', end: '11:20' },
+      slotMinutes: 30, timezone: 'UTC',
+    })).toHaveLength(2);
+  });
 });

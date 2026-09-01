@@ -20,6 +20,7 @@ export function materializeSlots(t: SpecificDates): Interval[] {
     if (end <= cur) end = end.plus({ days: 1 }); // window crosses midnight
     while (cur < end) {
       const nxt = cur.plus({ minutes: t.slotMinutes });
+      if (nxt > end) break; // drop a trailing slot the window can't fully contain
       out.push({ start: cur.toUTC().toISO()!, end: nxt.toUTC().toISO()! });
       cur = nxt;
     }
