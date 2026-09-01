@@ -64,6 +64,41 @@ describe('server', () => {
     // ...and the create form the e2e helper fills is still here, field names intact.
     expect(body).toMatch(/<form [^>]*class="create[ "]/);
     expect(body).toContain('name="slotMinutes"');
+    // ...and it is the same shared form, island script included, that /new renders.
+    expect(body).toContain('class="dates-fallback"');
+    expect(body).toContain('id="create-dates"');
+    expect(body).toContain('/assets/createForm.js');
+  });
+
+  it('serves the create form with the calendar island at GET /new', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request('/dev/login?did=did:plc:sam');
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const res = await dev.request('/new', { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // No-JS still gets the frozen text input, still required until the island mounts.
+    expect(body).toContain('name="dates"');
+    expect(body).toContain('class="dates-fallback"');
+    expect(body).toContain('required');
+    // The island's mount point, plus the two window fields as real time pickers.
+    expect(body).toContain('id="create-dates"');
+    expect(body.match(/type="time"/g)).toHaveLength(2);
+    expect(body).toContain('name="timezone"');
+    expect(body).toContain('value="UTC"');
+    expect(body).toContain('name="slotMinutes"');
+    expect(body).toContain('/assets/createForm.js');
+    expect(body).toContain('/assets/app.css');
+  });
+
+  it('sends a signed-out visitor at /new to sign in', async () => {
+    const { app } = await setup();
+    const res = await app.request('/new');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login');
   });
 
   it('serves a full sign-in page at GET /login', async () => {

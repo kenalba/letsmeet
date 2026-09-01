@@ -119,28 +119,6 @@ export function layout(title: string, body: Html | string): Html {
 </html>`;
 }
 
-function createForm(): Html {
-  return html`<form method="post" action="/polls" class="create">
-  <label>Title <input name="title" required placeholder="Movie night"></label>
-  <label>Description <input name="description" placeholder="Optional"></label>
-  <label>Dates <input name="dates" required placeholder="2026-09-02,2026-09-03">
-    <small>Comma-separated ISO dates.</small></label>
-  <label>Window start <input name="windowStart" required placeholder="17:00"></label>
-  <label>Window end <input name="windowEnd" required placeholder="19:00"></label>
-  <label>Slot length <select name="slotMinutes">
-    <option value="15">15 minutes</option>
-    <option value="30" selected>30 minutes</option>
-    <option value="60">60 minutes</option>
-  </select></label>
-  <label>Timezone <input name="timezone" required value="UTC" placeholder="America/New_York"></label>
-  <button type="submit">Create poll</button>
-</form>`;
-}
-
-export function createFormPage(): Html {
-  return layout('New poll — letsmeet', html`<h1>New poll</h1>${createForm()}`);
-}
-
 function fmtRange(slot: Interval, zone: string): string {
   const s = DateTime.fromISO(slot.start, { zone });
   const e = DateTime.fromISO(slot.end, { zone });

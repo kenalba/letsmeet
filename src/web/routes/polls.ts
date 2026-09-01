@@ -17,7 +17,8 @@ import { renderPage } from '../render.js';
 import { LandingPage } from '../pages/Landing.js';
 import { DecidedPage } from '../pages/Decided.js';
 import { TombstonePage } from '../pages/Tombstone.js';
-import { createFormPage, pollPage } from '../views.js';
+import { NewPollPage } from '../pages/NewPoll.js';
+import { pollPage } from '../views.js';
 
 export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
@@ -34,7 +35,7 @@ export function pollRoutes(
   app.get('/new', async (c) => {
     const did = await getSessionDid(c, env.COOKIE_SECRET);
     if (!did) return c.redirect('/login');
-    return c.html(createFormPage());
+    return c.html(renderPage(createElement(NewPollPage)));
   });
 
   app.post('/polls', async (c) => {

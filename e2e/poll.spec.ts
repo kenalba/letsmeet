@@ -1,11 +1,25 @@
 import { test, expect, type Page } from '@playwright/test';
 
+/**
+ * Click one day in the calendar island, paging forward until its cell exists. The island
+ * mounts on today's month, so a date a few months out needs a few hops; 12 is a year, past
+ * which the date is wrong rather than far away.
+ */
+async function pickDate(page: Page, iso: string): Promise<void> {
+  for (let hop = 0; hop < 12; hop++) {
+    const day = page.locator(`button[data-date="${iso}"]`);
+    if (await day.count()) { await day.click(); return; }
+    await page.click('button.cal-next');
+  }
+  throw new Error(`date ${iso} not reachable in calendar`);
+}
+
 /** Fill the create form the landing page shows to a signed-in host, and submit it. */
 async function createPoll(page: Page, fields: {
   title: string; dates: string; windowStart: string; windowEnd: string; slotMinutes: string;
 }): Promise<string> {
   await page.fill('input[name=title]', fields.title);
-  await page.fill('input[name=dates]', fields.dates);
+  for (const d of fields.dates.split(',')) await pickDate(page, d);
   await page.fill('input[name=windowStart]', fields.windowStart);
   await page.fill('input[name=windowEnd]', fields.windowEnd);
   await page.selectOption('select[name=slotMinutes]', fields.slotMinutes);

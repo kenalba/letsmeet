@@ -11,8 +11,9 @@
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "build:grid": "esbuild src/web/static/grid.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=preact --outfile=public/assets/grid.js",
+    "build:createform": "esbuild src/web/islands/createForm.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=react --outfile=public/assets/createForm.js",
     "build:css": "tailwindcss -i src/web/styles/app.css -o public/assets/app.css --minify",
-    "build:client": "npm run build:grid && npm run build:css"
+    "build:client": "npm run build:grid && npm run build:createform && npm run build:css"
   },
   "keywords": [],
   "author": "",
