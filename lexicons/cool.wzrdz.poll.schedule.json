@@ -1,0 +1,50 @@
+{
+  "lexicon": 1,
+  "id": "cool.wzrdz.poll.schedule",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An availability poll: date range, daily window, granularity.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["title", "time", "status", "createdAt"],
+        "properties": {
+          "title": { "type": "string", "maxGraphemes": 200, "maxLength": 800 },
+          "description": { "type": "string", "maxGraphemes": 2000, "maxLength": 8000 },
+          "time": { "type": "union", "refs": ["#specificDates"] },
+          "status": { "type": "string", "enum": ["active", "closed", "finalized", "cancelled"] },
+          "finalized": { "type": "ref", "ref": "#interval" },
+          "closesAt": { "type": "string", "format": "datetime" },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "specificDates": {
+      "type": "object",
+      "required": ["dates", "window", "slotMinutes", "timezone"],
+      "properties": {
+        "dates": { "type": "array", "maxLength": 31, "items": { "type": "string" } },
+        "window": { "type": "ref", "ref": "#dayWindow" },
+        "slotMinutes": { "type": "integer", "enum": [15, 30, 60] },
+        "timezone": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "dayWindow": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "maxLength": 5 },
+        "end": { "type": "string", "maxLength": 5 }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "datetime" },
+        "end": { "type": "string", "format": "datetime" }
+      }
+    }
+  }
+}

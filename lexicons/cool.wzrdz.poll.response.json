@@ -1,0 +1,39 @@
+{
+  "lexicon": 1,
+  "id": "cool.wzrdz.poll.response",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "One person's availability for a poll. Lives in the respondent's repo, or the host's repo (with `guest`) for host-attested guest responses.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "available", "createdAt"],
+        "properties": {
+          "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
+          "available": { "type": "array", "maxLength": 200, "items": { "type": "ref", "ref": "#interval" } },
+          "ifNeedBe": { "type": "array", "maxLength": 200, "items": { "type": "ref", "ref": "#interval" } },
+          "guest": { "type": "ref", "ref": "#guestInfo" },
+          "timezone": { "type": "string", "maxLength": 64 },
+          "note": { "type": "string", "maxGraphemes": 300, "maxLength": 1200 },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "guestInfo": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "maxGraphemes": 64, "maxLength": 256 }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "datetime" },
+        "end": { "type": "string", "format": "datetime" }
+      }
+    }
+  }
+}
