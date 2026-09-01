@@ -145,14 +145,14 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   await expect(guest.locator('.cell.available')).toHaveCount(2);
   await guest.fill('.name input', 'Sam');
   await guest.click('button.save');
-  await expect(guest.getByText('Keep this link')).toBeVisible();
+  await expect(guest.getByText('keep this link')).toBeVisible();
   await guestContext.close();
 
   // host sees the response and finalizes the top slot
   await page.reload();
   await expect(page.locator('.responders').getByText('Sam')).toBeVisible();
   await page.locator('form[action$="/finalize"] button').first().click();
-  await expect(page.getByText(/decided|finalized/i)).toBeVisible();
+  await expect(page.getByText(/happening|decided|finalized/i)).toBeVisible();
   await expect(page.locator('a.ics[href$="/ics"]')).toBeVisible();
 });
 

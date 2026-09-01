@@ -97,12 +97,12 @@ export function createServer(
 
   app.use('*', bodyLimit({
     maxSize: MAX_BODY_BYTES,
-    onError: (c) => c.json({ error: 'Request body too large.' }, 413),
+    onError: (c) => c.json({ error: 'request body too large.' }, 413),
   }));
 
   app.notFound((c) => page(c, createElement(ErrorPage, {
-    heading: 'Not found',
-    message: "That page doesn't exist.",
+    heading: 'not found',
+    message: 'no page here. check the link, or ask whoever sent it to send it again.',
   }), 404));
 
   /**
@@ -117,7 +117,7 @@ export function createServer(
       || c.req.header('content-type')?.includes('application/json');
     if (wantsJson) return c.json({ error: GENERIC_ERROR }, 500);
     return page(c, createElement(ErrorPage, {
-      heading: 'Something went wrong', message: GENERIC_ERROR,
+      heading: 'something broke', message: GENERIC_ERROR,
     }), 500);
   });
 
@@ -138,6 +138,9 @@ export function createServer(
   // Bundle filenames are stable across deploys (no content hash), so tell browsers to
   // revalidate every load rather than cache a stale build indefinitely.
   app.use('/assets/*', cacheControl('no-cache'), serveStatic({ root: './public' }));
+  // Self-hosted type (Departure Mono, OFL). The file never changes under its name, so it
+  // can be cached hard; the CSP's `font-src 'self'` is what lets the browser load it.
+  app.use('/fonts/*', cacheControl('public, max-age=31536000, immutable'), serveStatic({ root: './public' }));
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';

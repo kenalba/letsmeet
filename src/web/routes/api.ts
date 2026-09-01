@@ -14,7 +14,7 @@ export function apiRoutes(search: HandleSearch, now: () => Date): Hono {
 
   app.get('/api/handles', async (c) => {
     if (!limiter.allow(clientIp(c), now().getTime())) {
-      return c.json({ error: 'Too many requests.' }, 429);
+      return c.json({ error: 'easy there.' }, 429);
     }
     const q = (c.req.query('q') ?? '').trim();
     if (q.length === 0 || q.length > MAX_QUERY) {

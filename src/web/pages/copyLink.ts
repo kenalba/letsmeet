@@ -10,7 +10,7 @@ export const COPY_LINK_SCRIPT = "(function(){var bs=document.querySelectorAll('b
   + 'for(var i=0;i<bs.length;i++)(function(b){b.hidden=false;var t=b.textContent;'
   + "var url=location.origin+b.getAttribute('data-copy-path');"
   + "b.addEventListener('click',function(){"
-  + "var done=function(){b.textContent='Copied!';setTimeout(function(){b.textContent=t},1500)};"
-  + "var ask=function(){window.prompt('Copy this link:',url)};"
+  + "var done=function(){b.textContent='copied.';setTimeout(function(){b.textContent=t},1500)};"
+  + "var ask=function(){window.prompt('copy this link:',url)};"
   + 'if(navigator.clipboard&&navigator.clipboard.writeText){'
   + 'navigator.clipboard.writeText(url).then(done,ask)}else{ask()}})})(bs[i])})()';

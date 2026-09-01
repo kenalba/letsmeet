@@ -1,7 +1,7 @@
 import { Layout, pageTitle } from './Layout.js';
 
 export interface ErrorPageProps {
-  /** Shown as the page's <h1> — pick something status-appropriate ("Not found", "Could not create poll"). */
+  /** Shown as the page's <h1> — pick something status-appropriate ("not found", "could not create poll"). */
   heading: string;
   message: string;
 }
@@ -16,11 +16,11 @@ export function ErrorPage({ heading, message }: ErrorPageProps) {
   return (
     <Layout title={pageTitle(heading)}>
       <div className="mx-auto grid max-w-md gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
+        <h1 className="pixel-heading text-lol">{heading}</h1>
         <p className="text-muted-foreground">{message}</p>
         <p className="text-sm">
           <a href="/" className="text-primary underline underline-offset-4">
-            Back to letsmeet
+            back home
           </a>
         </p>
       </div>

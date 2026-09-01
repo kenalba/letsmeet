@@ -9,14 +9,14 @@ import { CreatePollForm, CREATE_FORM_SCRIPTS } from './CreatePollForm.js';
  */
 export function NewPollPage() {
   return (
-    <Layout title={pageTitle('New poll')} scripts={CREATE_FORM_SCRIPTS}>
+    <Layout title={pageTitle('new poll')} scripts={CREATE_FORM_SCRIPTS}>
       <div className="grid gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">New poll</h1>
+        <h1 className="pixel-heading">new poll</h1>
         <Card>
           <CardHeader>
-            <CardTitle>Poll details</CardTitle>
+            <CardTitle>the details</CardTitle>
             <CardDescription>
-              Times are interpreted in the poll's timezone; guests see their own.
+              times are read in the poll's timezone. guests see their own.
             </CardDescription>
           </CardHeader>
           <CardContent>

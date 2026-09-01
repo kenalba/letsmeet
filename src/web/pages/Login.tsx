@@ -13,14 +13,15 @@ import { Label } from '../ui/label.js';
  */
 export function LoginPage({ error, returnTo }: { error?: string; returnTo?: string }) {
   return (
-    <Layout title={pageTitle('Sign in')} scripts={LOGIN_SCRIPTS}>
+    <Layout title={pageTitle('sign in')} scripts={LOGIN_SCRIPTS}>
       <div className="mx-auto grid max-w-md gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+        <h1 className="pixel-heading">sign in</h1>
         <Card>
           <CardHeader>
-            <CardTitle>Your atproto account</CardTitle>
+            <CardTitle>your atproto account</CardTitle>
             <CardDescription>
-              Polls you create are written to your own repo. Answering one needs no account.
+              polls write to your pds, guests either sign in via atproto or stay anonymous, i don't
+              know, i'm not a cop.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -37,7 +38,7 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                   state after it) can put the visitor back where they came from. */}
               {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               <div className="grid gap-2">
-                <Label htmlFor="handle">Your handle</Label>
+                <Label htmlFor="handle">your handle</Label>
                 <Input
                   id="handle"
                   name="handle"
@@ -49,17 +50,17 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                 />
               </div>
               <div>
-                <Button type="submit">Sign in</Button>
+                <Button type="submit">sign in</Button>
               </div>
             </form>
             <p className="text-sm text-muted-foreground">
-              Don't have an atproto account?{' '}
+              don't have an atproto account?{' '}
               <a
                 href="https://bsky.app/"
                 className="text-primary underline underline-offset-4"
                 rel="noopener"
               >
-                Create one on Bluesky
+                make one on bluesky
               </a>
               , or{' '}
               <a
@@ -69,7 +70,7 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
               >
                 host your own at selfhosted.social
               </a>
-              . Any account works here — you sign in with its handle.
+              . any account works here. you sign in with its handle.
             </p>
           </CardContent>
         </Card>
@@ -81,13 +82,13 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
 /** The OAuth callback's failure page: same copy and same "Try again" link as before. */
 export function SignInFailedPage() {
   return (
-    <Layout title={pageTitle('Sign-in failed')}>
+    <Layout title={pageTitle('sign-in failed')}>
       <div className="mx-auto grid max-w-md gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign-in failed</h1>
+        <h1 className="pixel-heading">sign-in failed</h1>
         <p className="text-muted-foreground">
-          Sign-in failed or was cancelled.{' '}
+          sign-in failed or got cancelled.{' '}
           <a href="/login" className="text-primary underline underline-offset-4">
-            Try again
+            try again
           </a>
         </p>
       </div>

@@ -55,7 +55,7 @@ export function authRoutes(auth: AuthClient, env: AuthEnv): Hono {
 
   app.post('/login', async (c) => {
     if (!loginLimiter.allow(clientIp(c), now().getTime())) {
-      return loginError(c, 'Too many sign-in attempts — try again in a minute.', 429);
+      return loginError(c, 'easy there. try again in a minute.', 429);
     }
     const form = await c.req.formData();
     const handle = String(form.get('handle') ?? '').trim();

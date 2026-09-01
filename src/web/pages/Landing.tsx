@@ -2,13 +2,13 @@ import { Layout, SITE, pageTitle } from './Layout.js';
 import { useNonce } from '../nonce.js';
 import { Badge } from '../ui/badge.js';
 import { Button, buttonVariants } from '../ui/button.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
+import { Card, CardContent } from '../ui/card.js';
 import { COPY_LINK_SCRIPT } from './copyLink.js';
 
 const STEPS = [
-  'Sign in with your atproto handle — the poll is a record in your own repo.',
-  'Pick the dates and the daily window you want to meet in.',
-  'Share the link. Guests paint their availability without an account; you pick the winner.',
+  "sign in with your atproto handle. the poll is a record in your own repo, so it's yours, not ours.",
+  "pick the days and times you're willing to be a person.",
+  "share a link with your friends. they say when they can make it (they don't have to log in, don't worry). you get the results. easy.",
 ];
 
 /** What the landing needs to list a poll — a projection of the cache row, not the row. */
@@ -54,50 +54,46 @@ export function LandingPage({ did, handle, polls = [] }: {
 }) {
   if (!did) {
     return (
-      <Layout title={`${SITE} · Pick a time, together`} signInHref="/login">
+      <Layout title={`${SITE} · does tuesday work?`} signInHref="/login">
         <div className="grid gap-10">
           <section className="grid gap-4">
-            <h1 className="text-3xl font-semibold tracking-tight">Pick a time, together</h1>
-            <p className="max-w-prose text-muted-foreground">
-              Polls live in your own atproto repo. Guests can answer without an account.
+            <h1 className="pixel-display text-balance">
+              let's meet, <span className="text-lol">lol.</span>
+              <span className="cursor" aria-hidden="true" />
+            </h1>
+            <p className="max-w-prose text-lg text-muted-foreground">
+              as if it were ever that easy. paint when you're free, share one link, find the hour that actually works.
             </p>
             <div>
               <Button asChild>
-                <a href="/login">Sign in to create a poll</a>
+                <a href="/login">sign in to make a poll</a>
               </Button>
             </div>
           </section>
-          <Card>
-            <CardHeader>
-              <CardTitle>How it works</CardTitle>
-              <CardDescription>Three steps, no accounts for your guests.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ol className="grid gap-3 text-sm">
-                {STEPS.map((step, i) => (
-                  <li key={step} className="flex gap-3">
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
-                      {i + 1}
-                    </span>
-                    <span className="text-muted-foreground">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
+          <section className="grid gap-4">
+            <div className="rule pixel-label text-muted-foreground">=== how it works ===</div>
+            <ol className="grid gap-3">
+              {STEPS.map((step, i) => (
+                <li key={step} className="grid grid-cols-[33px_1fr] gap-2">
+                  <span className="pixel-heading leading-6 text-lol">{i + 1}</span>
+                  <span className="max-w-prose text-muted-foreground">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
         </div>
       </Layout>
     );
   }
 
   return (
-    <Layout title={pageTitle('Your polls')}>
+    <Layout title={pageTitle('your polls')}>
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Your polls</h1>
+            <h1 className="pixel-heading">your polls</h1>
             <p className="text-sm text-muted-foreground">
-              Signed in as{' '}
+              signed in as{' '}
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
                 {handle ?? did}
               </code>
@@ -105,11 +101,11 @@ export function LandingPage({ did, handle, polls = [] }: {
           </div>
           <div className="flex items-center gap-2">
             <Button asChild size="sm">
-              <a href="/new">New poll</a>
+              <a href="/new">new poll</a>
             </Button>
             <form method="post" action="/logout">
               <Button type="submit" variant="outline" size="sm">
-                Sign out
+                sign out
               </Button>
             </form>
           </div>
@@ -118,7 +114,8 @@ export function LandingPage({ did, handle, polls = [] }: {
           <CardContent>
             {polls.length === 0 ? (
               <p className="hint text-sm text-muted-foreground">
-                No polls yet — <a href="/new" className="text-primary underline underline-offset-4">create your first</a>.
+                no events planned yet. nobody needs anything from you, thank goodness.{' '}
+                <a href="/new" className="text-primary underline underline-offset-4">make some obligations!</a>
               </p>
             ) : (
               <ul className="polls divide-y">
@@ -131,7 +128,7 @@ export function LandingPage({ did, handle, polls = [] }: {
                       <span className="block truncate text-sm font-medium hover:text-primary">
                         {p.title}
                       </span>
-                      <span className="block text-xs text-muted-foreground">{pollMeta(p)}</span>
+                      <span className="pixel-label block text-muted-foreground">{pollMeta(p)}</span>
                     </a>
                     <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
                       {p.status}
@@ -142,7 +139,7 @@ export function LandingPage({ did, handle, polls = [] }: {
                       hidden
                       className={buttonVariants({ variant: 'outline', size: 'sm' })}
                     >
-                      Copy link
+                      copy link
                     </button>
                   </li>
                 ))}

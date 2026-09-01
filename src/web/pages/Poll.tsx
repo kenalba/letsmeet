@@ -70,7 +70,7 @@ export function PollPage(data: PollPageData) {
       title={pageTitle(data.title)}
       description={data.description ?? `${fmtSlotLength(data.time.slotMinutes)} slots · ${
         data.results.responses.length === 1 ? '1 response' : `${data.results.responses.length} responses`
-      } so far. Paint the times you're free.`}
+      } so far. paint the times you're free.`}
       canonical={data.publicUrl ? `${data.publicUrl}${path}` : undefined}
       scripts={GRID_SCRIPTS}
       signInHref={data.viewerDid ? undefined : `/login?returnTo=${encodeURIComponent(path)}`}
@@ -78,7 +78,7 @@ export function PollPage(data: PollPageData) {
       <div className="flex flex-col gap-6">
         {pending > 0 ? (
           <p className="banner rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-            {`${pending} responses are still syncing to your account. If this persists for more than a day, sign in again to reconnect.`}
+            {`${pending} responses are still syncing to your account. if this keeps up for more than a day, sign in again to reconnect.`}
           </p>
         ) : null}
 
@@ -91,25 +91,25 @@ export function PollPage(data: PollPageData) {
               hidden
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
-              Copy share link
+              copy share link
             </button>
           </div>
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
-          <p className="hint text-sm text-muted-foreground">
+          <p className="hint pixel-label text-muted-foreground">
             {`${fmtSlotLength(data.time.slotMinutes)} slots · grid times are shown in your timezone · listed times are in the poll's timezone (${zone}).`}
           </p>
           {isActive ? null : (
             <p className="hint text-sm text-muted-foreground">
-              {`This poll is ${data.status} — responses are closed.`}
+              {`this poll is ${data.status}. responses are closed.`}
             </p>
           )}
         </div>
 
         <div className="flex flex-col gap-3">
           <p className="name-note text-sm text-muted-foreground">
-            Guests are asked for a name when they save. Shown publicly on this poll.
+            guests get asked for a name when they save. it's shown on this poll.
           </p>
           <div id="grid-root" />
           <script
@@ -126,25 +126,25 @@ export function PollPage(data: PollPageData) {
         {data.isHost ? (
           <Card className="results">
             <CardHeader>
-              <h2 className="text-lg font-semibold tracking-tight">Finalize</h2>
+              <h2 className="pixel-heading">pick the winner</h2>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {responses.length === 0 ? (
-                <p className="hint text-sm text-muted-foreground">No responses yet — share this page.</p>
+                <p className="hint text-sm text-muted-foreground">no responses yet. share this page around.</p>
               ) : null}
               {responses.length > 0 ? (
                 <ol className="ranked list-decimal space-y-2 pl-5 text-sm">
                   {ranked.slice(0, 5).map((r) => (
                     <li key={r.slot.start}>
                       <span className="slot font-medium tabular-nums">{fmtRange(r.slot, zone)}</span>
-                      {` — ${r.available.length} available + ${r.ifNeedBe.length} if needed`}
+                      {` · ${r.available.length} available + ${r.ifNeedBe.length} if need be`}
                       {r.missing.length ? `, missing: ${r.missing.join(', ')}` : null}
                       {isActive ? (
                         <form method="post" action={`/p/${data.rkey}/finalize`} className="ml-2 inline">
                           <input type="hidden" name="start" value={r.slot.start} />
                           <input type="hidden" name="end" value={r.slot.end} />
                           <button type="submit" className={buttonVariants({ size: 'sm' })}>
-                            Pick this time
+                            pick this time
                           </button>
                         </form>
                       ) : null}
@@ -154,7 +154,7 @@ export function PollPage(data: PollPageData) {
               ) : null}
               {responses.length > 0 ? (
                 <>
-                  <h3 className="text-sm font-semibold tracking-tight">Responses</h3>
+                  <h3 className="text-sm font-semibold tracking-tight">responses</h3>
                   <ul className="responders text-sm">
                     {responses.map((r, i) => (
                       <li

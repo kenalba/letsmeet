@@ -46,7 +46,7 @@ describe('server', () => {
     // The built Tailwind sheet is the only stylesheet the migrated pages carry.
     expect(body).toContain('rel="stylesheet"');
     expect(body).toContain('/assets/app.css');
-    expect(body).toContain('Sign in to create a poll');
+    expect(body).toContain('sign in to make a poll');
   });
 
   it('states the slot length on the poll page', async () => {
@@ -98,7 +98,7 @@ describe('server', () => {
     const otherCookie = other.headers.get('set-cookie')!.split(';')[0];
     const otherBody = await (await dev.request('/', { headers: { cookie: otherCookie } })).text();
     expect(otherBody).not.toContain(`/p/${poll.rkey}`);
-    expect(otherBody).toContain('No polls yet');
+    expect(otherBody).toContain('no events planned yet');
   });
 
   it('serves the create form with the calendar island at GET /new', async () => {
@@ -160,7 +160,7 @@ describe('server', () => {
     expect(res.status).toBe(200);
     expect(body).toContain('Movie night');
     expect(body).toContain('poll-data');
-    expect(body).toContain('Shown publicly on this poll');
+    expect(body).toContain('shown on this poll');
     // The island's mount point, its data block and its bundle are one contract: drop any
     // one of them and the grid silently never appears.
     expect(body).toContain('id="grid-root"');
@@ -193,10 +193,10 @@ describe('server', () => {
     expect(body).toContain('class="responders');
     expect(body).toMatch(/class="responders[^"]*">\s*<li[^>]*>Sam</);
     expect(body).toContain(`action="/p/${poll.rkey}/finalize"`);
-    expect(body).toContain('Pick this time');
+    expect(body).toContain('pick this time');
     expect(body).toContain(
       '1 responses are still syncing to your account. '
-      + 'If this persists for more than a day, sign in again to reconnect.',
+      + 'if this keeps up for more than a day, sign in again to reconnect.',
     );
 
     // ...and a guest sees neither the finalize form nor the host's sync banner.
@@ -314,8 +314,8 @@ describe('server', () => {
     const res = await app.request(`/p/${poll.rkey}`);
     expect(res.status).toBe(410);
     const body = await res.text();
-    expect(body).toContain('withdrawn by the host');
-    expect(body).toContain('Back to letsmeet');
+    expect(body).toContain('called it off');
+    expect(body).toContain('back home');
   });
 
   it('renders the decided page with .ics and webcal links once finalized', async () => {
@@ -327,7 +327,7 @@ describe('server', () => {
     const res = await app.request(`/p/${poll.rkey}`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain('Decided');
+    expect(body).toContain('happening');
     expect(body).toMatch(new RegExp(`<a href="/p/${poll.rkey}/ics" class="ics[ "]`));
     expect(body).toContain('webcal://localhost:8787');
     expect(body).toContain('/assets/app.css');
@@ -390,7 +390,7 @@ describe('server', () => {
     for (const bad of [renamed, flipped, 'sid=garbage']) {
       const landing = await (await dev.request('/', { headers: { cookie: bad } })).text();
       expect(landing).not.toContain('did:plc:devguest');
-      expect(landing).toContain('Sign in to create a poll');
+      expect(landing).toContain('sign in to make a poll');
     }
   });
 });
@@ -507,7 +507,7 @@ describe('request hardening', () => {
         }),
       });
       expect(res.status, JSON.stringify(bad)).toBe(400);
-      expect(await res.text()).toContain('Could not create poll');
+      expect(await res.text()).toContain('could not create poll');
     }
     expect(deps.db.prepare('SELECT COUNT(*) AS n FROM poll_cache').get()).toEqual({ n: 1 });
   });
@@ -566,7 +566,7 @@ describe('request hardening', () => {
     }).request(`/p/${poll.rkey}`);
     expect(res.status).toBe(500);
     const body = await res.text();
-    expect(body).toContain('Something went wrong');
+    expect(body).toContain('something broke');
     expect(body).not.toContain('TypeError');
     expect(body).not.toContain('    at ');
   });
@@ -589,10 +589,23 @@ describe('page chrome', () => {
     expect(body).toContain('rel="apple-touch-icon" href="/apple-touch-icon.png"');
   });
 
+  it('serves the display face from its own origin, cached hard', async () => {
+    const { app } = await setup();
+    const res = await app.request('/fonts/DepartureMono-Regular.woff2');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('woff2');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    // The licence travels with the file: OFL asks for it, and it costs nothing.
+    expect((await app.request('/fonts/DepartureMono-LICENSE.txt')).status).toBe(200);
+    // ...and the stylesheet actually asks for it from there.
+    const css = await (await app.request('/assets/app.css')).text();
+    expect(css).toContain('/fonts/DepartureMono-Regular.woff2');
+  });
+
   it('titles every page uniformly and describes it for link previews', async () => {
     const { app, poll } = await setup();
     const home = await (await app.request('/')).text();
-    expect(home).toContain('<title>letsmeet.lol · Pick a time, together</title>');
+    expect(home).toContain('<title>letsmeet.lol · does tuesday work?</title>');
     expect(home).toContain('property="og:site_name" content="letsmeet.lol"');
     expect(home).toMatch(/<meta name="description" content="[^"]+"/);
 
@@ -603,7 +616,7 @@ describe('page chrome', () => {
     expect(page).toMatch(/property="og:description" content="30-minute slots · 0 responses so far[^"]*"/);
 
     const login = await (await app.request('/login')).text();
-    expect(login).toContain('<title>Sign in · letsmeet.lol</title>');
+    expect(login).toContain('<title>sign in · letsmeet.lol</title>');
   });
 });
 

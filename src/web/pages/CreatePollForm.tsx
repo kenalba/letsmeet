@@ -37,18 +37,18 @@ export function CreatePollForm() {
   return (
     <form method="post" action="/polls" className="create grid gap-5">
       <div className="grid gap-2">
-        <Label htmlFor="poll-title">Title</Label>
-        <Input id="poll-title" name="title" required placeholder="Movie night" />
+        <Label htmlFor="poll-title">title</Label>
+        <Input id="poll-title" name="title" required placeholder="movie night" />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="poll-description">Description</Label>
-        <Input id="poll-description" name="description" placeholder="Optional" />
+        <Label htmlFor="poll-description">description</Label>
+        <Input id="poll-description" name="description" placeholder="optional" />
       </div>
       <div className="grid gap-3">
         <div id="create-dates" hidden className="grid gap-3" />
         <label className="dates-fallback">
           <span className="grid gap-2">
-            <span className="text-sm leading-none font-medium">Dates</span>
+            <span className="text-sm leading-none font-medium">dates</span>
             <Input name="dates" required placeholder="2026-09-02,2026-09-03" />
             <span className="text-xs text-muted-foreground">
               Comma-separated ISO dates — or use the picker.
@@ -58,19 +58,19 @@ export function CreatePollForm() {
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor="poll-window-start">Window start</Label>
+          <Label htmlFor="poll-window-start">window start</Label>
           <Input id="poll-window-start" type="time" name="windowStart" required />
           <span id="window-start-field" hidden className="contents" />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="poll-window-end">Window end</Label>
+          <Label htmlFor="poll-window-end">window end</Label>
           <Input id="poll-window-end" type="time" name="windowEnd" required />
           <span id="window-end-field" hidden className="contents" />
         </div>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor="poll-slot-minutes">Slot length</Label>
+          <Label htmlFor="poll-slot-minutes">slot length</Label>
           <select
             id="poll-slot-minutes"
             name="slotMinutes"
@@ -88,7 +88,7 @@ export function CreatePollForm() {
           </select>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="poll-timezone">Timezone</Label>
+          <Label htmlFor="poll-timezone">timezone</Label>
           {/* Server-rendered "UTC"; the island swaps in the viewer's zone if it is untouched. */}
           <Input
             id="poll-timezone"
@@ -100,7 +100,7 @@ export function CreatePollForm() {
         </div>
       </div>
       <div>
-        <Button type="submit">Create poll</Button>
+        <Button type="submit">create poll</Button>
       </div>
     </form>
   );

@@ -4,7 +4,7 @@ import { Moon, Sun, SunMoon } from 'lucide-react';
 import { buttonVariants } from '../ui/button.js';
 
 export const SITE = 'letsmeet.lol';
-const DEFAULT_DESCRIPTION = 'Pick a time, together. Availability polls that live in your own atproto account.';
+const DEFAULT_DESCRIPTION = 'does tuesday work? availability polls that live in your own atproto account.';
 
 export interface LayoutProps {
   /** The full document title. Pages pass `pageTitle(...)` so the suffix is uniform. */
@@ -103,19 +103,22 @@ export function Layout({ title, description, canonical, children, scripts, signI
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         <link rel="stylesheet" href="/assets/app.css" />
       </head>
-      <body className="min-h-screen bg-background text-foreground">
+      <body className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="border-b">
           <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4">
             <a
-              className="brand text-sm font-semibold tracking-tight no-underline hover:text-primary"
+              className="brand pixel-heading no-underline hover:text-primary"
               href="/"
             >
-              letsmeet.lol
+              letsmeet<span className="inline-block origin-bottom-left -translate-y-px -rotate-6 text-lol">.lol</span>
             </a>
             <div className="ml-auto flex items-center gap-2">
               {signInHref ? (
-                <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={signInHref}>
-                  Sign in
+                <a
+                  className="prompt pixel-label mr-2 text-muted-foreground no-underline hover:text-foreground"
+                  href={signInHref}
+                >
+                  sign in
                 </a>
               ) : null}
               {/*
@@ -138,7 +141,20 @@ export function Layout({ title, description, canonical, children, scripts, signI
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-4xl px-4 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">{children}</main>
+        <footer className="border-t">
+          <div className="pixel-label mx-auto flex max-w-4xl flex-wrap gap-x-6 px-4 py-6 text-muted-foreground">
+            <span>made on atproto with love and mild optimism</span>
+            <a
+              href="https://github.com/kenalba/letsmeet"
+              className="prompt no-underline hover:text-foreground"
+              rel="noopener"
+            >
+              source
+            </a>
+            <span>type: departure mono by helena zhang</span>
+          </div>
+        </footer>
         {scripts?.map((src) => <script key={src} type="module" src={src} />)}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_TOGGLE }} />
       </body>

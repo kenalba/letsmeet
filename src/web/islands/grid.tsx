@@ -192,13 +192,13 @@ function Grid({ data }: { data: PollData }) {
       const out = (await res.json().catch(() => ({}))) as
         { editToken?: string; pending?: boolean; error?: string };
       if (!res.ok) {
-        setStatus(out.error ?? 'Something went wrong.');
+        setStatus(out.error ?? 'something broke. try again?');
         setSaving(false);
         return;
       }
       setStatus(out.pending
-        ? 'Saved — syncing to the host’s account in the background.'
-        : 'Saved!');
+        ? 'response stored. syncing to the host’s repo behind the scenes.'
+        : 'response stored.');
       // A token the guest does not already hold is the one thing on this page they cannot get
       // back: show it and let them reload on their own terms. Every other path (signed-in
       // submits, and edits made through a link they already have) reloads on a short timer.
@@ -208,7 +208,7 @@ function Grid({ data }: { data: PollData }) {
       if (fresh) setEditLink(`${location.origin}/p/${data.rkey}/e/${fresh}`);
       else setTimeout(() => location.reload(), 1200);
     } catch {
-      setStatus('Could not reach the server — try again.');
+      setStatus('couldn’t reach the server. try again?');
       setSaving(false);
     }
   };
@@ -258,7 +258,7 @@ function Grid({ data }: { data: PollData }) {
   return (
     <div>
       <div className="toolbar">
-        <div className="modes" role="group" aria-label="Paint mode">
+        <div className="modes" role="group" aria-label="paint mode">
           <button
             type="button"
             className={cn(
@@ -268,7 +268,7 @@ function Grid({ data }: { data: PollData }) {
             aria-pressed={mode === 'available'}
             disabled={locked}
             onClick={() => setMode('available')}
-          >Available</button>
+          >available</button>
           <button
             type="button"
             className={cn(
@@ -278,17 +278,17 @@ function Grid({ data }: { data: PollData }) {
             aria-pressed={mode === 'ifNeedBe'}
             disabled={locked}
             onClick={() => setMode('ifNeedBe')}
-          >If need be</button>
+          >if need be</button>
         </div>
         <button
           type="button"
           className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
           disabled={!canSwitchZone}
           title={canSwitchZone
-            ? `Switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`
-            : "Your timezone matches the poll's"}
+            ? `switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`
+            : "your timezone matches the poll's"}
           onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
-        >Times shown in {zone}{canSwitchZone ? ' — switch' : ''}</button>
+        >times shown in {zone}{canSwitchZone ? ' · switch' : ''}</button>
       </div>
       <div
         className={cn('grid', locked && 'readonly')}
@@ -324,14 +324,14 @@ function Grid({ data }: { data: PollData }) {
       </div>
       {responders > 0 && (
         <p className="hint">
-          {`Blue shading counts how many of the ${responders} `
+          {`blue shading counts how many of the ${responders} `
             + `${responders === 1 ? 'response' : 'responses'} can make each slot`}
           {locked ? '.' : '; green is your own selection.'}
         </p>
       )}
       {!data.viewerDid && !locked && (
         <label className="name">
-          Your name <span className="note">(shown publicly on this poll)</span>
+          your name <span className="note">(shown on this poll)</span>
           {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
           <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
         </label>
@@ -342,18 +342,18 @@ function Grid({ data }: { data: PollData }) {
           type="button"
           onClick={submit}
           disabled={saving || (!data.viewerDid && !name.trim())}
-        >Save availability</button>
+        >save availability</button>
       )}
       {status && <p className="status" role="status">{status}</p>}
       {editLink && (
-        <p className="edit-link">Keep this link to edit your response later:<br /><code>{editLink}</code></p>
+        <p className="edit-link">keep this link to edit your response later:<br /><code>{editLink}</code></p>
       )}
       {editLink && (
         <button
           type="button"
           className={cn(buttonVariants({ variant: 'secondary' }), 'show-results secondary')}
           onClick={() => location.reload()}
-        >Show results</button>
+        >show results</button>
       )}
     </div>
   );

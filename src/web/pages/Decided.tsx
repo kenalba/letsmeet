@@ -16,7 +16,7 @@ export function DecidedPage(
   return (
     <Layout
       title={pageTitle(record.title)}
-      description={record.description ?? 'Decided — the time that works is set.'}
+      description={record.description ?? "it's happening. the time is set."}
       canonical={`${base}/p/${rkey}`}
     >
       <div className="grid gap-6">
@@ -28,8 +28,8 @@ export function DecidedPage(
         </div>
         <Card>
           <CardHeader>
-            <h2 className="leading-none font-semibold">Decided</h2>
-            <CardDescription>The host picked a time.</CardDescription>
+            <h2 className="pixel-heading text-primary">it's happening.</h2>
+            <CardDescription>the host picked a time. put it in your calendar before anyone changes their mind.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <p className="chosen text-xl font-medium tabular-nums">
@@ -37,17 +37,17 @@ export function DecidedPage(
             </p>
             <p className="text-sm">
               <a href={icsPath} className={`ics ${linkClass}`}>
-                Download .ics
+                download .ics
               </a>{' '}
               ·{' '}
               <a href={webcal} className={`webcal ${linkClass}`}>
-                Add to calendar (webcal)
+                add to calendar (webcal)
               </a>
             </p>
           </CardContent>
         </Card>
         <p className="hint text-sm text-muted-foreground">
-          Responses are closed. The event also lives in the host's atproto repo.
+          responses are closed. the event also lives in the host's atproto repo.
         </p>
       </div>
     </Layout>

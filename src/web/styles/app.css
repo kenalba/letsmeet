@@ -10,6 +10,20 @@
 @import "tailwindcss";
 
 /*
+ * Departure Mono — the display face (wordmark, page headings, status lines, meta labels).
+ * Monospaced pixel font by Helena Zhang, SIL OFL; the licence ships beside the file. Served
+ * from our own origin so the CSP's `font-src 'self'` holds. It is pixel-perfect only at
+ * multiples of 11px, so every use goes through the `.pixel-*` classes below (11 / 22 / 44).
+ */
+@font-face {
+  font-family: "Departure Mono";
+  src: url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
  * Tailwind's stock `dark:` is a bare `prefers-color-scheme: dark` media query, which would
  * ignore the theme toggle. Redefine it to the same three-state logic the token blocks below
  * use: OS-dark unless the viewer pinned Light, plus an unconditional match under a pinned
@@ -78,8 +92,16 @@
   --chart-5: oklch(0.769 0.104 91.2);
 
   /* Grid island's "if need be" hatch stripes — see the `@layer island` block below. */
-  --grid-hatch-a: #9fd6bd;
-  --grid-hatch-b: #d8efe4;
+  /* "lol" amber — Departure Mono's own accent. --lol is text-safe on the ground (darkened
+     for contrast on white, the pure amber on dark); --lol-bright is the fill colour and is
+     the same in both themes: the cursor block, the wordmark's tilt, focus rings. */
+  --lol: #c4610a;
+  --lol-bright: #ffa133;
+
+  /* "if need be" hatch: the amber family, so the two paint states read as two hues rather
+     than two greens. --grid-hatch-a is the stripe, -b the gap. */
+  --grid-hatch-a: #ffd39a;
+  --grid-hatch-b: #ffe9c9;
 }
 
 /*
@@ -120,8 +142,9 @@
     /* Muted desaturated greens — the light pair (#9fd6bd/#d8efe4) reads as barely-there on
        a dark --card, so dark mode gets its own values that still land between --card and
        the solid "available" green in perceived lightness (verified via a luminance probe). */
-    --grid-hatch-a: oklch(0.46 0.06 160);
-    --grid-hatch-b: oklch(0.33 0.045 160);
+    --lol: #ffa133;
+    --grid-hatch-a: oklch(0.55 0.12 60);
+    --grid-hatch-b: oklch(0.40 0.09 60);
   }
 }
 
@@ -157,8 +180,9 @@
   /* Muted desaturated greens — the light pair (#9fd6bd/#d8efe4) reads as barely-there on
      a dark --card, so dark mode gets its own values that still land between --card and
      the solid "available" green in perceived lightness (verified via a luminance probe). */
-  --grid-hatch-a: oklch(0.46 0.06 160);
-  --grid-hatch-b: oklch(0.33 0.045 160);
+  --lol: #ffa133;
+  --grid-hatch-a: oklch(0.55 0.12 60);
+  --grid-hatch-b: oklch(0.40 0.09 60);
 }
 
 /* Native controls (selects, time inputs, scrollbars) follow a pinned theme too. With no pin,
@@ -186,6 +210,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-lol: var(--lol);
+  --color-lol-bright: var(--lol-bright);
+
+  --font-pixel: "Departure Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -197,6 +225,43 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * The pixel type scale. Departure Mono renders crisp only on its 11px grid, so these are the
+ * only three sizes it is ever set at; body copy, buttons, form labels and the grid stay on
+ * the system sans. Font smoothing is switched off so the pixels stay pixels where the
+ * platform lets us.
+ */
+@layer components {
+  .pixel-display, .pixel-heading, .pixel-label {
+    font-family: var(--font-pixel);
+    font-weight: 400;
+    letter-spacing: 0;
+    -webkit-font-smoothing: none;
+  }
+  .pixel-display { font-size: 44px; line-height: 55px; }
+  .pixel-heading { font-size: 22px; line-height: 33px; }
+  .pixel-label { font-size: 11px; line-height: 22px; }
+  @media (max-width: 480px) {
+    .pixel-display { font-size: 33px; line-height: 44px; }
+  }
+
+  /* `> sign in` — the terminal prompt on nav-ish links. */
+  .prompt::before { content: "> "; color: var(--lol); }
+
+  /* `=== how it works ===` between two dashed rules. */
+  .rule { display: flex; align-items: center; gap: 12px; }
+  .rule::before, .rule::after { content: ""; flex: 1; border-top: 1px dashed var(--border); }
+
+  /* The block cursor after the tagline. */
+  .cursor {
+    display: inline-block; width: 0.5em; height: 0.85em; margin-left: 0.15em;
+    vertical-align: -0.05em; background: var(--lol-bright);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
 }
 
 @layer base {
@@ -332,5 +397,16 @@
     button.save { margin-top: 12px; }
     .name { margin-top: 12px; }
     .edit-link code { word-break: break-all; }
+  }
+}
+
+/* The island's "response stored." line, in the display face like every other status line. */
+@layer island {
+  #grid-root .status {
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    line-height: 22px;
+    color: var(--primary);
+    -webkit-font-smoothing: none;
   }
 }

@@ -276,7 +276,7 @@ export function TimeField({ name, initial, onValue, pickerInput }: TimeFieldProp
       data-time-field={name}
       role="group"
       // Segments announce only "Hour"/"Minute"/"AM/PM"; the group says which window.
-      aria-label={name === 'windowStart' ? 'Window start' : name === 'windowEnd' ? 'Window end' : name}
+      aria-label={name === 'windowStart' ? 'window start' : name === 'windowEnd' ? 'window end' : name}
       onMouseDown={(e) => {
         // Clicking the padding (or a separator) lands on the hour, as a native field does.
         if (e.target === e.currentTarget || !(e.target as HTMLElement).dataset.segment) {
@@ -294,24 +294,24 @@ export function TimeField({ name, initial, onValue, pickerInput }: TimeFieldProp
       )}
     >
       {renderSegment('hour', {
-        label: 'Hour', min: 1, max: 12,
+        label: 'hour', min: 1, max: 12,
         value: parts.hour, text: parts.hour === null ? null : pad2(parts.hour),
       })}
       <span aria-hidden="true" className="text-muted-foreground">:</span>
       {renderSegment('minute', {
-        label: 'Minute', min: 0, max: 59,
+        label: 'minute', min: 0, max: 59,
         value: parts.minute, text: parts.minute === null ? null : pad2(parts.minute),
       })}
       <span aria-hidden="true"> </span>
       {renderSegment('period', {
-        label: 'AM/PM', min: 1, max: 2,
+        label: 'am/pm', min: 1, max: 2,
         value: parts.period === null ? null : (parts.period === 'AM' ? 1 : 2),
         text: parts.period,
       })}
       {pickerInput ? (
         <button
           type="button"
-          aria-label="Open time picker"
+          aria-label="open time picker"
           className="text-muted-foreground hover:text-foreground ml-auto -mr-1 rounded-sm p-1"
           onMouseDown={(e) => e.preventDefault() /* keep segment focus where it is */}
           onClick={() => {

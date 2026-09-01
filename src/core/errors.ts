@@ -14,7 +14,7 @@ export class UserError extends Error {
 }
 
 /** The one line a client sees for anything that is not a UserError. */
-export const GENERIC_ERROR = 'Something went wrong on our side. Please try again.';
+export const GENERIC_ERROR = 'something broke on our end, not yours. give it another go.';
 
 export function userMessage(err: unknown): string {
   return err instanceof UserError ? err.message : GENERIC_ERROR;

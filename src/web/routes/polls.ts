@@ -51,7 +51,7 @@ export function pollRoutes(
   // routes costs PDS round trips and a free account is no harder to get than an IP.
   const guestLimiter = new TokenBucket(10, 0.1);
   const accountLimiter = new TokenBucket(10, 0.1);
-  const tooMany = { error: 'Too many submissions — try again in a minute.' };
+  const tooMany = { error: 'easy there. try again in a minute.' };
 
   app.get('/', async (c) => {
     const who = await readSession(c, session, deps.now().getTime());
@@ -79,7 +79,7 @@ export function pollRoutes(
     if (!did) return c.redirect('/login');
     if (!accountLimiter.allow(did, deps.now().getTime())) {
       return page(c, createElement(ErrorPage, {
-        heading: 'Slow down', message: tooMany.error,
+        heading: 'slow down', message: tooMany.error,
       }), 429);
     }
     const f = await c.req.formData();
@@ -93,8 +93,8 @@ export function pollRoutes(
     };
     if (time.dates.length === 0) {
       return page(c, createElement(ErrorPage, {
-        heading: 'Could not create poll',
-        message: 'Could not create poll: no dates selected.',
+        heading: 'could not create poll',
+        message: 'could not create poll: no dates selected.',
       }), 400);
     }
     try {
@@ -106,7 +106,7 @@ export function pollRoutes(
       return c.redirect(`/p/${rkey}`);
     } catch (err) {
       return page(c, createElement(ErrorPage, {
-        heading: 'Could not create poll',
+        heading: 'could not create poll',
         message: `Could not create poll: ${explain(err, 'createPoll')}`,
       }), 400);
     }
@@ -172,7 +172,7 @@ export function pollRoutes(
       name?: string; available?: Interval[]; ifNeedBe?: Interval[];
       timezone?: string; note?: string; editToken?: string;
     } | null;
-    if (!body || typeof body !== 'object') return c.json({ error: 'Malformed request body.' }, 400);
+    if (!body || typeof body !== 'object') return c.json({ error: 'malformed request body.' }, 400);
     try {
       const out = await submitGuestResponse(deps, c.req.param('rkey'), {
         name: String(body.name ?? '').trim() || 'Guest',
@@ -195,7 +195,7 @@ export function pollRoutes(
     const body = (await c.req.json().catch(() => null)) as {
       available?: Interval[]; ifNeedBe?: Interval[]; timezone?: string; note?: string;
     } | null;
-    if (!body || typeof body !== 'object') return c.json({ error: 'Malformed request body.' }, 400);
+    if (!body || typeof body !== 'object') return c.json({ error: 'malformed request body.' }, 400);
     try {
       await submitAccountResponse(deps, did, c.req.param('rkey'), {
         available: body.available ?? [], ifNeedBe: body.ifNeedBe,
@@ -211,7 +211,7 @@ export function pollRoutes(
     const did = await sessionDid(c);
     if (!did) return c.redirect('/login');
     if (!accountLimiter.allow(did, deps.now().getTime())) {
-      return page(c, createElement(ErrorPage, { heading: 'Slow down', message: tooMany.error }), 429);
+      return page(c, createElement(ErrorPage, { heading: 'slow down', message: tooMany.error }), 429);
     }
     const f = await c.req.formData();
     try {
@@ -221,7 +221,7 @@ export function pollRoutes(
       return c.redirect(`/p/${c.req.param('rkey')}`);
     } catch (err) {
       return page(c, createElement(ErrorPage, {
-        heading: 'Could not finalize',
+        heading: 'could not finalize',
         message: `Could not finalize: ${explain(err, 'finalizePoll')}`,
       }), 400);
     }

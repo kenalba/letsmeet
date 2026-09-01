@@ -78,9 +78,9 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
   useEffect(() => {
     const onSubmit = (e: Event) => {
       const problems: string[] = [];
-      if (dates.size === 0) problems.push('Pick at least one date.');
+      if (dates.size === 0) problems.push('pick at least one date.');
       // Without the segmented fields the native inputs keep `required`, which covers this.
-      if (start && end && (!startTime || !endTime)) problems.push('Pick a start and end time.');
+      if (start && end && (!startTime || !endTime)) problems.push('pick a start and end time.');
       if (problems.length > 0) {
         e.preventDefault();
         setError(problems.join(' '));
