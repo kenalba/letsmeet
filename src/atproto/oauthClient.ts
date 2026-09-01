@@ -18,7 +18,10 @@ export async function createOAuthClient(
 ): Promise<AuthClient> {
   const pub = env.PUBLIC_URL.replace(/\/$/, '');
   const isLoopback = pub.startsWith('http://localhost') || pub.startsWith('http://127.0.0.1');
-  const redirectUri = `${pub}/oauth/callback`;
+  // RFC 8252: a loopback redirect_uri must use an IP literal, never the "localhost" name,
+  // even though the loopback client_id origin itself is spelled "http://localhost".
+  const redirectBase = isLoopback ? pub.replace('//localhost', '//127.0.0.1') : pub;
+  const redirectUri = `${redirectBase}/oauth/callback`;
 
   const client = new NodeOAuthClient({
     clientMetadata: isLoopback
