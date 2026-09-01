@@ -368,7 +368,12 @@ describe('server', () => {
     });
     const res = await dev.request('/dev/login?did=did:plc:devguest');
     expect(res.status).toBe(302);
-    expect(res.headers.get('set-cookie')).toMatch(/^did=did%3Aplc%3Adevguest\./);
+    // The signed value carries the name-binding prefix now (did\x00…), so assert the
+    // cookie round-trips to the right DID rather than pinning its raw encoding.
+    const cookie = res.headers.get('set-cookie')!.split(';')[0];
+    expect(cookie.startsWith('did=')).toBe(true);
+    const landing = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(landing).toContain('did:plc:devguest');
   });
 });
 

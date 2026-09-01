@@ -119,7 +119,12 @@ describe('returnTo round trip', () => {
   });
 
   it('drops a returnTo that is not a same-site path', async () => {
-    for (const evil of ['https://evil.example/p/x', '//evil.example/p/x', 'javascript:alert(1)']) {
+    for (const evil of [
+      'https://evil.example/p/x', '//evil.example/p/x', 'javascript:alert(1)',
+      // Backslash and tab/newline tricks the browser normalises into an off-site host —
+      // a leading-slash regex admits all of these; the URL parser rejects them.
+      '/\\evil.example', '/\t/evil.example', '/\n/evil.example',
+    ]) {
       const res = await app.request(`/login?returnTo=${encodeURIComponent(evil)}`);
       const body = await res.text();
       expect(body).not.toContain('name="returnTo"');

@@ -1,10 +1,9 @@
 import { createElement } from 'react';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { setSignedCookie } from 'hono/cookie';
 import type { Deps } from '../atproto/types.js';
 import type { AuthClient } from '../atproto/oauthClient.js';
-import { authRoutes } from './routes/auth.js';
+import { authRoutes, setNamedCookie } from './routes/auth.js';
 import { pollRoutes } from './routes/polls.js';
 import { renderPage } from './render.js';
 import { ErrorPage } from './pages/ErrorPage.js';
@@ -31,7 +30,7 @@ export function createServer(
   if (env.devLogin) {
     app.get('/dev/login', async (c) => {
       const did = c.req.query('did') ?? 'did:plc:devhost';
-      await setSignedCookie(c, 'did', did, env.COOKIE_SECRET, {
+      await setNamedCookie(c, env.COOKIE_SECRET, 'did', did, {
         httpOnly: true, sameSite: 'Lax', path: '/',
         secure: env.PUBLIC_URL.startsWith('https'),
       });
