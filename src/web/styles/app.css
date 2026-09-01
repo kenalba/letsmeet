@@ -10,12 +10,37 @@
 @import "tailwindcss";
 
 /*
+ * Tailwind's stock `dark:` is a bare `prefers-color-scheme: dark` media query, which would
+ * ignore the theme toggle. Redefine it to the same three-state logic the token blocks below
+ * use: OS-dark unless the viewer pinned Light, plus an unconditional match under a pinned
+ * dark root. The `:where()` wrappers hold the variant at zero added specificity, as the
+ * stock variant has, so `dark:` utilities keep winning and losing exactly what they did.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *, :root:not([data-theme="light"])) { @slot }
+  }
+  &:where([data-theme="dark"] *, [data-theme="dark"]) { @slot }
+}
+
+/*
  * Design tokens — shadcn/ui (new-york) token block, Tailwind v4 flavour.
  *
  * Palette: the app's own green (#2b8a5f == oklch(0.567 0.111 159.68)) as --primary,
- * over neutral stone greys. Dark mode is driven by prefers-color-scheme, so Tailwind's
- * stock `dark:` variant (a media query) is what components use — there is no `.dark`
- * class and no @custom-variant override.
+ * over neutral stone greys.
+ *
+ * Theme is three-state — System / Light / Dark — because Linux browsers routinely report
+ * `prefers-color-scheme: light` no matter what the desktop is set to, so the OS signal alone
+ * is not enough. The header toggle writes `data-theme` on <html> (and localStorage); System
+ * removes the attribute and falls back to the media query:
+ *
+ *   :root                                       light tokens, the base
+ *   @media dark + :root:not([data-theme=light]) dark tokens when the OS says dark and the
+ *                                               viewer has not pinned light
+ *   :root[data-theme=dark]                      dark tokens, pinned, whatever the OS says
+ *
+ * The `dark:` Tailwind variant is redefined above to match that same logic exactly, so
+ * component classes like `dark:bg-input/30` follow the toggle too.
  *
  * react-day-picker ships no stylesheet here on purpose: ui/calendar.tsx styles every rdp
  * class hook through Tailwind utilities via DayPicker's `classNames` prop, so nothing
@@ -57,8 +82,15 @@
   --grid-hatch-b: #d8efe4;
 }
 
+/*
+ * Dark tokens, block 1 of 2 — the OS asks for dark and the viewer has not pinned Light.
+ * KEEP IN SYNC with the `:root[data-theme="dark"]` block right below: same properties, same
+ * values. The two cannot be merged into one rule (a media-gated selector and an
+ * unconditional one are not one selector list), so `tests/web/css.test.ts` compares them in
+ * the built sheet and fails when they drift.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: oklch(0.147 0.004 49.25);
     --foreground: oklch(0.985 0.001 106.423);
     --card: oklch(0.216 0.006 56.043);
@@ -92,6 +124,47 @@
     --grid-hatch-b: oklch(0.33 0.045 160);
   }
 }
+
+/* Dark tokens, block 2 of 2 — the viewer pinned Dark, whatever the OS reports.
+   KEEP IN SYNC with the media block above. */
+:root[data-theme="dark"] {
+  --background: oklch(0.147 0.004 49.25);
+  --foreground: oklch(0.985 0.001 106.423);
+  --card: oklch(0.216 0.006 56.043);
+  --card-foreground: oklch(0.985 0.001 106.423);
+  --popover: oklch(0.216 0.006 56.043);
+  --popover-foreground: oklch(0.985 0.001 106.423);
+  --primary: oklch(0.702 0.121 159.68);
+  --primary-foreground: oklch(0.216 0.006 56.043);
+  --secondary: oklch(0.268 0.007 34.298);
+  --secondary-foreground: oklch(0.985 0.001 106.423);
+  --muted: oklch(0.268 0.007 34.298);
+  --muted-foreground: oklch(0.709 0.01 56.259);
+  --accent: oklch(0.268 0.007 34.298);
+  --accent-foreground: oklch(0.985 0.001 106.423);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0.001 106.423);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.702 0.121 159.68);
+
+  --chart-1: oklch(0.702 0.121 159.68);
+  --chart-2: oklch(0.567 0.111 159.68);
+  --chart-3: oklch(0.796 0.101 160.4);
+  --chart-4: oklch(0.696 0.098 200.6);
+  --chart-5: oklch(0.827 0.109 91.2);
+
+  /* Muted desaturated greens — the light pair (#9fd6bd/#d8efe4) reads as barely-there on
+     a dark --card, so dark mode gets its own values that still land between --card and
+     the solid "available" green in perceived lightness (verified via a luminance probe). */
+  --grid-hatch-a: oklch(0.46 0.06 160);
+  --grid-hatch-b: oklch(0.33 0.045 160);
+}
+
+/* Native controls (selects, time inputs, scrollbars) follow a pinned theme too. With no pin,
+   `<html class="scheme-light-dark">` leaves them on the OS preference, as before. */
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 
 @theme inline {
   --color-background: var(--background);

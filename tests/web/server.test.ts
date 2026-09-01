@@ -49,6 +49,22 @@ describe('server', () => {
     expect(body).toContain('Sign in to create a poll');
   });
 
+  it('ships the theme toggle and its FOUC-preventing head script', async () => {
+    const { app } = await setup();
+    const body = await (await app.request('/')).text();
+    // The init script has to run *before* the stylesheet, or a viewer who pinned Dark gets
+    // one light frame first. Ordering in the markup is the whole guarantee.
+    const initIdx = body.indexOf("localStorage.getItem('theme')");
+    expect(initIdx).toBeGreaterThan(-1);
+    expect(body.indexOf('/assets/app.css')).toBeGreaterThan(initIdx);
+    // The button itself, server-rendered in the System state; the wiring script that cycles
+    // it comes after <main>, so the button is in the DOM by the time it runs.
+    const buttonIdx = body.indexOf('id="theme-toggle"');
+    expect(buttonIdx).toBeGreaterThan(-1);
+    expect(body).toContain('Theme: System');
+    expect(body.indexOf("getElementById('theme-toggle')")).toBeGreaterThan(buttonIdx);
+  });
+
   it('shows the signed-in DID in exactly one <code> element on the landing page', async () => {
     const { deps } = await setup();
     const dev = createServer(deps, stubAuth, {
