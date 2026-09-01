@@ -1,7 +1,6 @@
-/** @jsxImportSource preact */
-import { render } from 'preact';
-import type { JSX } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import { DateTime } from 'luxon';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
@@ -103,7 +102,7 @@ function Grid({ data }: { data: PollData }) {
     setPainted(applyPaint(d.base, rectKeys(geom, d.anchor, key), d.op, mode));
   };
 
-  const onDown = (key: string) => (e: JSX.TargetedPointerEvent<HTMLDivElement>) => {
+  const onDown = (key: string) => (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     // Capture keeps the move stream coming even when the pointer wanders off the cell;
     // hit-testing below still uses the real element under the pointer.
@@ -112,7 +111,7 @@ function Grid({ data }: { data: PollData }) {
     paintTo(key);
   };
 
-  const onMove = (e: JSX.TargetedPointerEvent<HTMLDivElement>) => {
+  const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const key = el instanceof HTMLElement ? el.dataset.slot : undefined;
@@ -171,7 +170,7 @@ function Grid({ data }: { data: PollData }) {
         <div
           key={key}
           data-slot={key}
-          class={`cell ${painted.get(key) ?? ''}`}
+          className={`cell ${painted.get(key) ?? ''}`}
           onPointerDown={onDown(key)}
           title={range}
         >{fmtTime(key, zone)}</div>
@@ -189,7 +188,7 @@ function Grid({ data }: { data: PollData }) {
       <div
         key={key}
         data-slot={key}
-        class={`cell group${hatched ? ' hatch' : ''}`}
+        className={`cell group${hatched ? ' hatch' : ''}`}
         style={ratio > 0
           ? {
             background: `rgba(43,138,95,${(0.15 + 0.85 * ratio).toFixed(3)})`,
@@ -198,8 +197,8 @@ function Grid({ data }: { data: PollData }) {
           : undefined}
         title={title}
       >
-        <span class="at">{fmtTime(key, zone)}</span>
-        <span class="tally">
+        <span className="at">{fmtTime(key, zone)}</span>
+        <span className="tally">
           {c.available.length}{c.ifNeedBe.length ? `+${c.ifNeedBe.length}` : ''}
         </span>
       </div>
@@ -208,40 +207,40 @@ function Grid({ data }: { data: PollData }) {
 
   return (
     <div>
-      <div class="toolbar">
-        <div class="modes" role="group" aria-label="Paint mode">
+      <div className="toolbar">
+        <div className="modes" role="group" aria-label="Paint mode">
           <button
             type="button"
-            class={mode === 'available' ? 'mode active' : 'mode'}
+            className={mode === 'available' ? 'mode active' : 'mode'}
             aria-pressed={mode === 'available'}
             disabled={group}
             onClick={() => setMode('available')}
           >Available</button>
           <button
             type="button"
-            class={mode === 'ifNeedBe' ? 'mode active' : 'mode'}
+            className={mode === 'ifNeedBe' ? 'mode active' : 'mode'}
             aria-pressed={mode === 'ifNeedBe'}
             disabled={group}
             onClick={() => setMode('ifNeedBe')}
           >If need be</button>
         </div>
-        <div class="views" role="group" aria-label="Whose availability to show">
+        <div className="views" role="group" aria-label="Whose availability to show">
           <button
             type="button"
-            class={group ? 'view' : 'view active'}
+            className={group ? 'view' : 'view active'}
             aria-pressed={!group}
             onClick={() => setView('me')}
           >Me</button>
           <button
             type="button"
-            class={group ? 'view active' : 'view'}
+            className={group ? 'view active' : 'view'}
             aria-pressed={group}
             onClick={() => setView('group')}
           >Group</button>
         </div>
         <button
           type="button"
-          class="zone"
+          className="zone"
           disabled={!canSwitchZone}
           title={canSwitchZone
             ? `Switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`
@@ -250,44 +249,45 @@ function Grid({ data }: { data: PollData }) {
         >Times shown in {zone}{canSwitchZone ? ' — switch' : ''}</button>
       </div>
       <div
-        class={group ? 'grid readonly' : 'grid'}
+        className={group ? 'grid readonly' : 'grid'}
         style={{ touchAction: 'none' }}
         onPointerMove={onMove}
       >
         {geom.dates.map((d) => (
-          <div class="col" key={d}>
-            <div class="col-head">{fmtDate(d, zone)}</div>
-            {geom.columns.get(d)!.map(cell)}
+          <div className="col" key={d}>
+            <div className="col-head">{fmtDate(d, zone)}</div>
+            {geom.columns.get(d)!.map((key) => cell(key))}
           </div>
         ))}
       </div>
       {group && (
-        <p class="hint">
+        <p className="hint">
           {responders > 0
             ? `Read-only view of ${responders} ${responders === 1 ? 'response' : 'responses'}. Switch to “Me” to paint your own.`
             : 'No responses yet. Switch to “Me” to paint your own.'}
         </p>
       )}
       {!data.viewerDid && (
-        <label class="name">
+        <label className="name">
           Your name <small>(shown publicly on this poll)</small>
-          <input value={name} onInput={(e) => setName(e.currentTarget.value)} />
+          {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
+          <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
         </label>
       )}
       <button
-        class="save"
+        className="save"
         type="button"
         onClick={submit}
         disabled={saving || (!data.viewerDid && !name.trim())}
       >Save availability</button>
-      {status && <p class="status" role="status">{status}</p>}
+      {status && <p className="status" role="status">{status}</p>}
       {editLink && (
-        <p class="edit-link">Keep this link to edit your response later:<br /><code>{editLink}</code></p>
+        <p className="edit-link">Keep this link to edit your response later:<br /><code>{editLink}</code></p>
       )}
       {editLink && (
         <button
           type="button"
-          class="show-results secondary"
+          className="show-results secondary"
           onClick={() => location.reload()}
         >Show results</button>
       )}
@@ -298,5 +298,5 @@ function Grid({ data }: { data: PollData }) {
 const dataEl = document.getElementById('poll-data');
 const mount = document.getElementById('grid-root');
 if (dataEl?.textContent && mount) {
-  render(<Grid data={JSON.parse(dataEl.textContent) as PollData} />, mount);
+  createRoot(mount).render(<Grid data={JSON.parse(dataEl.textContent) as PollData} />);
 }

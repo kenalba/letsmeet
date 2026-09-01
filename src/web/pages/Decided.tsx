@@ -1,15 +1,7 @@
-import { DateTime } from 'luxon';
-import type { Interval } from '../../core/intervals.js';
 import type { ScheduleRecord } from '../../atproto/records.js';
+import { fmtRange } from '../lib/fmtRange.js';
 import { Layout } from './Layout.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
-
-/** Same formatting the poll page uses; it moves into one place when views.ts goes away. */
-function fmtRange(slot: Interval, zone: string): string {
-  const s = DateTime.fromISO(slot.start, { zone });
-  const e = DateTime.fromISO(slot.end, { zone });
-  return `${s.toFormat('HH:mm')}–${e.toFormat('HH:mm')} ${s.toFormat('ccc LLL d')}`;
-}
 
 export function DecidedPage(
   { rkey, record, publicUrl }: { rkey: string; record: ScheduleRecord; publicUrl: string },

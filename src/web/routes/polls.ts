@@ -18,7 +18,7 @@ import { LandingPage } from '../pages/Landing.js';
 import { DecidedPage } from '../pages/Decided.js';
 import { TombstonePage } from '../pages/Tombstone.js';
 import { NewPollPage } from '../pages/NewPoll.js';
-import { pollPage } from '../views.js';
+import { PollPage } from '../pages/Poll.js';
 
 export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
@@ -94,7 +94,7 @@ export function pollRoutes(
       }
     }
     const isHost = viewerDid === results.poll.hostDid;
-    return c.html(pollPage({
+    return c.html(renderPage(createElement(PollPage, {
       rkey,
       title: results.poll.record.title,
       description: results.poll.record.description,
@@ -107,7 +107,7 @@ export function pollRoutes(
       prefill,
       editToken,
       pendingCount: isHost ? pendingOutboxCount(deps.db, results.poll.hostDid) : 0,
-    }));
+    })));
   };
 
   app.get('/p/:rkey', (c) => renderPoll(c, c.req.param('rkey')));

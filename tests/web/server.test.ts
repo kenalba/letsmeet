@@ -4,6 +4,7 @@ import { FakeRepo } from '../helpers/fakeRepo.js';
 import { createServer } from '../../src/web/server.js';
 import { scriptJson } from '../../src/web/scriptJson.js';
 import { createPoll } from '../../src/services/polls.js';
+import { enqueueOutbox } from '../../src/db/outbox.js';
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
 
@@ -119,6 +120,48 @@ describe('server', () => {
     expect(body).toContain('Movie night');
     expect(body).toContain('poll-data');
     expect(body).toContain('Shown publicly on this poll');
+    // The island's mount point, its data block and its bundle are one contract: drop any
+    // one of them and the grid silently never appears.
+    expect(body).toContain('id="grid-root"');
+    expect(body).toContain('<script id="poll-data" type="application/json">');
+    expect(body).toContain('src="/assets/grid.js"');
+  });
+
+  it('shows the host the responders, a finalize form and the pending-sync banner', async () => {
+    const { deps, poll } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+
+    const posted = await dev.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: PAINT }),
+    });
+    expect(posted.status).toBe(200);
+    // One response the host's PDS has not accepted yet, which is what the banner counts.
+    enqueueOutbox(
+      deps.db,
+      { hostDid: HOST, pollUri: poll.uri, rkey: 'queued-response', record: {} },
+      deps.now().getTime(),
+    );
+
+    const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(body).toContain('class="responders');
+    expect(body).toMatch(/class="responders[^"]*">\s*<li[^>]*>Sam</);
+    expect(body).toContain(`action="/p/${poll.rkey}/finalize"`);
+    expect(body).toContain('Pick this time');
+    expect(body).toContain(
+      '1 responses are still syncing to your account. '
+      + 'If this persists for more than a day, sign in again to reconnect.',
+    );
+
+    // ...and a guest sees neither the finalize form nor the host's sync banner.
+    const guest = await (await dev.request(`/p/${poll.rkey}`)).text();
+    expect(guest).not.toContain('/finalize');
+    expect(guest).not.toContain('still syncing to your account');
   });
 
   it('accepts a guest response and returns an edit token', async () => {
