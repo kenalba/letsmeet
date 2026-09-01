@@ -27,7 +27,7 @@ export interface PollPageData {
  * which this page renders inside <main> — Layout appends scripts after <main>, so the
  * mount point and the JSON are in the DOM by the time the module runs.
  */
-export const GRID_SCRIPTS = ['/assets/grid.js'];
+const GRID_SCRIPTS = ['/assets/grid.js'];
 
 export function PollPage(data: PollPageData) {
   const zone = data.time.timezone;
@@ -117,7 +117,10 @@ export function PollPage(data: PollPageData) {
               <h3 className="text-sm font-semibold tracking-tight">Responses</h3>
               <ul className="responders text-sm">
                 {responses.map((r, i) => (
-                  <li key={`${r.who}-${i}`} className={r.pending ? 'pending opacity-60' : ''}>
+                  <li
+                    key={`${r.who}-${i}`}
+                    className={r.pending ? 'py-0.5 pending opacity-60' : 'py-0.5'}
+                  >
                     {r.pending ? `${r.who} (syncing)` : r.who}
                   </li>
                 ))}

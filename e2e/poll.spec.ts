@@ -1,11 +1,42 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
+ * Fixture dates, computed relative to the runner clock instead of pinned to a fixed pair
+ * that eventually lands in the past (`pickDate` only ever pages the calendar forward — a
+ * fixed past date would never be reachable). ~2-3 weeks out keeps well clear of "today" no
+ * matter when this runs; both dates are derived from the same base so a month boundary can't
+ * put them on different, inconsistently-adjusted footings. `playwright.config.ts` pins the
+ * browser's `timezoneId` to UTC, so the calendar island renders "today" in UTC — compute the
+ * base in UTC too, or a host machine in a different zone could disagree with the browser
+ * about which day is 14 days out.
+ */
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function isWeekday(d: Date): boolean {
+  const day = d.getUTCDay();
+  return day !== 0 && day !== 6;
+}
+
+const FIXTURE_BASE = (() => {
+  const d = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  while (!isWeekday(d)) d.setUTCDate(d.getUTCDate() + 1);
+  // Friday would make the "adjacent day" a Saturday; roll to the following Monday instead
+  // so both fixture dates land on weekdays.
+  if (d.getUTCDay() === 5) d.setUTCDate(d.getUTCDate() + 3);
+  return d;
+})();
+const FIXTURE_DATE_1 = isoDate(FIXTURE_BASE);
+const FIXTURE_DATE_2 = isoDate(new Date(FIXTURE_BASE.getTime() + 24 * 60 * 60 * 1000));
+
+/**
  * Click one day in the calendar island, paging forward until its cell exists. The island
  * mounts on today's month, so a date a few months out needs a few hops; 12 is a year, past
  * which the date is wrong rather than far away.
  */
 async function pickDate(page: Page, iso: string): Promise<void> {
+  await page.waitForSelector('[data-slot="calendar"]');
   for (let hop = 0; hop < 12; hop++) {
     const day = page.locator(`button[data-date="${iso}"]`);
     if (await day.count()) { await day.click(); return; }
@@ -35,7 +66,7 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   await expect(page.locator('code')).toHaveText('did:plc:e2ehost');
   const pollUrl = await createPoll(page, {
     title: 'Board games',
-    dates: '2026-09-02,2026-09-03',
+    dates: `${FIXTURE_DATE_1},${FIXTURE_DATE_2}`,
     windowStart: '17:00',
     windowEnd: '19:00',
     slotMinutes: '60',
@@ -45,7 +76,7 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   const guestContext = await browser.newContext();
   const guest = await guestContext.newPage();
   await guest.goto(pollUrl);
-  const cells = guest.locator('[data-slot]');
+  const cells = guest.locator('#grid-root [data-slot]');
   await expect(cells.first()).toBeVisible();
   const a = (await cells.nth(0).boundingBox())!;
   const b = (await cells.nth(1).boundingBox())!;
@@ -71,7 +102,7 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   await page.goto('/dev/login?did=did:plc:e2ehost2');
   const pollUrl = await createPoll(page, {
     title: 'Edit test',
-    dates: '2026-09-02',
+    dates: FIXTURE_DATE_1,
     windowStart: '17:00',
     windowEnd: '18:00',
     slotMinutes: '30',
@@ -82,7 +113,7 @@ test('guest edit link round-trips', async ({ page, browser }) => {
   const guestContext = await browser.newContext();
   const guest = await guestContext.newPage();
   await guest.goto(pollUrl);
-  await guest.locator('[data-slot]').first().click();
+  await guest.locator('#grid-root [data-slot]').first().click();
   await guest.fill('.name input', 'Ana');
   await guest.click('button.save');
   const editLink = await guest.locator('.edit-link code').textContent();

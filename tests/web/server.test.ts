@@ -82,11 +82,16 @@ describe('server', () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     // No-JS still gets the frozen text input, still required until the island mounts.
+    // (A bare `toContain('required')` would pass on any of the other required fields —
+    // anchor it to the dates input specifically.)
+    expect(body).toMatch(
+      /<input[^>]*required[^>]*name="dates"|<input[^>]*name="dates"[^>]*required/,
+    );
     expect(body).toContain('name="dates"');
     expect(body).toContain('class="dates-fallback"');
-    expect(body).toContain('required');
     // The island's mount point, plus the two window fields as real time pickers.
     expect(body).toContain('id="create-dates"');
+    expect(body).toMatch(/id="create-dates"[^>]*hidden/);
     expect(body.match(/type="time"/g)).toHaveLength(2);
     expect(body).toContain('name="timezone"');
     expect(body).toContain('value="UTC"');

@@ -7,6 +7,11 @@ import {
   type PaintMap, type PaintMode,
 } from '../../core/gridModel.js';
 import type { Interval } from '../../core/intervals.js';
+import { cn } from '../lib/cn.js';
+// Only the class-string generator, never the <Button> component: <Button> stamps
+// data-slot="button", which would land inside #grid-root and start matching the same
+// `[data-slot]` selector the e2e grid-cell locator uses to find painted cells.
+import { buttonVariants } from '../ui/button.js';
 
 /** Names, per slot, of who can make it — mirrors the server's `RankedSlot`. */
 interface SlotCount {
@@ -211,14 +216,20 @@ function Grid({ data }: { data: PollData }) {
         <div className="modes" role="group" aria-label="Paint mode">
           <button
             type="button"
-            className={mode === 'available' ? 'mode active' : 'mode'}
+            className={cn(
+              buttonVariants({ variant: mode === 'available' ? 'default' : 'outline', size: 'sm' }),
+              mode === 'available' ? 'mode active' : 'mode',
+            )}
             aria-pressed={mode === 'available'}
             disabled={group}
             onClick={() => setMode('available')}
           >Available</button>
           <button
             type="button"
-            className={mode === 'ifNeedBe' ? 'mode active' : 'mode'}
+            className={cn(
+              buttonVariants({ variant: mode === 'ifNeedBe' ? 'default' : 'outline', size: 'sm' }),
+              mode === 'ifNeedBe' ? 'mode active' : 'mode',
+            )}
             aria-pressed={mode === 'ifNeedBe'}
             disabled={group}
             onClick={() => setMode('ifNeedBe')}
@@ -227,20 +238,26 @@ function Grid({ data }: { data: PollData }) {
         <div className="views" role="group" aria-label="Whose availability to show">
           <button
             type="button"
-            className={group ? 'view' : 'view active'}
+            className={cn(
+              buttonVariants({ variant: group ? 'outline' : 'default', size: 'sm' }),
+              group ? 'view' : 'view active',
+            )}
             aria-pressed={!group}
             onClick={() => setView('me')}
           >Me</button>
           <button
             type="button"
-            className={group ? 'view active' : 'view'}
+            className={cn(
+              buttonVariants({ variant: group ? 'default' : 'outline', size: 'sm' }),
+              group ? 'view active' : 'view',
+            )}
             aria-pressed={group}
             onClick={() => setView('group')}
           >Group</button>
         </div>
         <button
           type="button"
-          className="zone"
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
           disabled={!canSwitchZone}
           title={canSwitchZone
             ? `Switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`
@@ -275,7 +292,7 @@ function Grid({ data }: { data: PollData }) {
         </label>
       )}
       <button
-        className="save"
+        className={cn(buttonVariants({ variant: 'default' }), 'save')}
         type="button"
         onClick={submit}
         disabled={saving || (!data.viewerDid && !name.trim())}
@@ -287,7 +304,7 @@ function Grid({ data }: { data: PollData }) {
       {editLink && (
         <button
           type="button"
-          className="show-results secondary"
+          className={cn(buttonVariants({ variant: 'secondary' }), 'show-results secondary')}
           onClick={() => location.reload()}
         >Show results</button>
       )}

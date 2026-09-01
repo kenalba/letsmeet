@@ -48,6 +48,9 @@ export function pollRoutes(
       slotMinutes: Number(f.get('slotMinutes')) as 15 | 30 | 60,
       timezone: String(f.get('timezone')),
     };
+    if (time.dates.length === 0) {
+      return c.text('Could not create poll: no dates selected.', 400);
+    }
     try {
       const { rkey } = await createPoll(deps, did, {
         title: String(f.get('title') ?? ''),

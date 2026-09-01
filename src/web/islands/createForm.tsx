@@ -15,8 +15,13 @@ function fromISODate(iso: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/**
+ * Only well-formed `YYYY-MM-DD` tokens survive: the fallback is a plain text input, so
+ * anything a visitor typed before the island mounted (or pasted into it) could otherwise
+ * seed the picker's state with junk that `fromISODate` turns into an Invalid Date.
+ */
 function parseDates(value: string): string[] {
-  return value.split(',').map((s) => s.trim()).filter(Boolean);
+  return value.split(',').map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
 }
 
 interface DatesPickerProps {
