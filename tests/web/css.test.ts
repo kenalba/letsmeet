@@ -64,6 +64,16 @@ describe('built app.css', () => {
     expect(css).toMatch(/:root\[data-theme=["']?light["']?\][^{]*\{[^}]*color-scheme:light/);
   });
 
+  it('defines the text-safe green in every token block', () => {
+    // Primary buttons are rings drawn in --primary-ink; a theme block without it would fall
+    // back to the *inherited* colour and the ring would silently vanish in that theme.
+    const light = /:root\{([^}]*)\}/.exec(css);
+    expect(light).not.toBeNull();
+    expect(tokens(light![1])['--primary-ink']).toBeTruthy();
+    expect(tokens(DARK_PINNED_TOKENS.exec(css)![1])['--primary-ink']).toBeTruthy();
+    expect(css).toContain('.border-primary-ink');
+  });
+
   it('keeps the two dark token blocks identical', () => {
     // They are duplicated in source because a media-gated selector and an unconditional one
     // cannot share a rule; this is the guard that stops them drifting.

@@ -187,7 +187,8 @@ export function PollPage(data: PollPageData) {
                         <form method="post" action={`/p/${data.rkey}/finalize`} className="ml-2 inline">
                           <input type="hidden" name="start" value={r.slot.start} />
                           <input type="hidden" name="end" value={r.slot.end} />
-                          <button type="submit" className={buttonVariants({ size: 'sm' })}>
+                          {/* Five of these in a row; the host is choosing, not being pushed, so grey. */}
+                          <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                             pick this time
                           </button>
                         </form>

@@ -56,12 +56,12 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          'cal-prev size-(--cell-size) aria-disabled:opacity-50 p-0 select-none',
+          'btn-icon cal-prev size-(--cell-size) aria-disabled:opacity-50 p-0 select-none',
           defaultClassNames.button_previous,
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          'cal-next size-(--cell-size) aria-disabled:opacity-50 p-0 select-none',
+          'btn-icon cal-next size-(--cell-size) aria-disabled:opacity-50 p-0 select-none',
           defaultClassNames.button_next,
         ),
         month_caption: cn(

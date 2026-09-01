@@ -4,12 +4,19 @@ import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '../lib/cn.js';
 
+/*
+ * Square corners and rings. The primary is a 1px green ring with green text (`--primary-ink`,
+ * the text-safe green) that only ever tints on hover/press; `aria-pressed="true"` (the grid's
+ * selected paint mode) doubles the ring and holds a faint wash. `outline` is the same shape in
+ * grey. The prompt colour and the pixel type come from `.btn-pixel` in app.css.
+ */
 const buttonVariants = cva(
-  "btn-pixel inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
+  "btn-pixel inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
-        default: 'btn-filled bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
+        default:
+          'border border-primary-ink text-primary-ink hover:bg-primary/10 active:bg-primary/20 aria-pressed:bg-primary/15 aria-pressed:inset-ring aria-pressed:inset-ring-primary-ink',
         destructive:
           'btn-filled bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20',
         outline:
@@ -20,8 +27,8 @@ const buttonVariants = cva(
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',
-        sm: 'h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5',
-        lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
+        sm: 'h-8 gap-1.5 px-3 has-[>svg]:px-2.5',
+        lg: 'h-10 px-6 has-[>svg]:px-4',
         icon: 'btn-icon size-9',
       },
     },

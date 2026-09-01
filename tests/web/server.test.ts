@@ -48,6 +48,9 @@ describe('server', () => {
     expect(body).toContain('rel="stylesheet"');
     expect(body).toContain('/assets/app.css');
     expect(body).toContain('sign in to make a poll');
+    // The call to action is a green ring, not a green slab.
+    expect(body).toMatch(/<a[^>]*class="btn-pixel[^"]*border-primary-ink[^"]*"[^>]*>sign in to make a poll<\/a>/);
+    expect(body).not.toMatch(/class="btn-pixel[^"]*bg-primary text-primary-foreground/);
     // The type credit links to the designer's tip jar, in the footer's prompt dialect.
     expect(body).toMatch(/<a[^>]*href="https:\/\/buymeacoffee\.com\/helenazhang"[^>]*class="prompt[^"]*"[^>]*>helena zhang<\/a>/);
   });

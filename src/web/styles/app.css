@@ -72,6 +72,10 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.147 0.004 49.25);
   --primary: oklch(0.567 0.111 159.68);
+  /* The green as *text and rings* on the light ground. The fill green above sits right on
+     4.5:1 against white, which is not enough for 11px pixel type, so text/borders take one
+     step darker. Dark mode's primary is already light enough and reuses it. */
+  --primary-ink: oklch(0.5 0.105 159.68);
   --primary-foreground: oklch(0.985 0.001 106.423);
   --secondary: oklch(0.97 0.001 106.424);
   --secondary-foreground: oklch(0.216 0.006 56.043);
@@ -120,6 +124,7 @@
     --popover: oklch(0.216 0.006 56.043);
     --popover-foreground: oklch(0.985 0.001 106.423);
     --primary: oklch(0.702 0.121 159.68);
+    --primary-ink: oklch(0.702 0.121 159.68);
     --primary-foreground: oklch(0.216 0.006 56.043);
     --secondary: oklch(0.268 0.007 34.298);
     --secondary-foreground: oklch(0.985 0.001 106.423);
@@ -158,6 +163,7 @@
   --popover: oklch(0.216 0.006 56.043);
   --popover-foreground: oklch(0.985 0.001 106.423);
   --primary: oklch(0.702 0.121 159.68);
+  --primary-ink: oklch(0.702 0.121 159.68);
   --primary-foreground: oklch(0.216 0.006 56.043);
   --secondary: oklch(0.268 0.007 34.298);
   --secondary-foreground: oklch(0.985 0.001 106.423);
@@ -198,6 +204,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -251,9 +258,11 @@
   .prompt::before { content: "> "; color: var(--lol); }
 
   /* Buttons speak the same dialect as those links: pixel type, lowercase, a `>` prompt as
-     their first flex item (the button's own `gap` spaces it). Filled buttons keep the
-     prompt in their text colour, outlined ones borrow the link amber, and icon-only
-     buttons (the theme toggle) carry none. Height and padding are the button's own. */
+     their first flex item (the button's own `gap` spaces it), square corners. Every button
+     is a ring, not a fill — the primary a green one, the rest grey — so the prompt is amber
+     on all of them; the one filled variant left (destructive) keeps the prompt in its text
+     colour, and icon-only buttons (the theme toggle) carry none. Height and padding are the
+     button's own. */
   .btn-pixel {
     font-family: var(--font-pixel); font-size: 11px; line-height: 22px; font-weight: 400;
     letter-spacing: 0; -webkit-font-smoothing: none;
