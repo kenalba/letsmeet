@@ -13,7 +13,7 @@ describe('built app.css', () => {
     // than trust whatever public/assets/app.css happens to hold, so this test catches a
     // regression in the source `@layer` declaration regardless of build order elsewhere.
     execSync('npm run build:css', { stdio: 'pipe' });
-    if (!existsSync(CSS_PATH)) return;
+    expect(existsSync(CSS_PATH)).toBe(true);
     const css = readFileSync(CSS_PATH, 'utf8');
     const utilitiesIdx = css.indexOf('@layer utilities');
     const islandIdx = css.indexOf('@layer island');
