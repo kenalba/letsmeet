@@ -156,41 +156,52 @@ it's a tiny file).
 `ghcr.io/kenalba/letsmeet:<known-good sha>` and `docker compose up -d`;
 revert to `:latest` once main is fixed.
 
-## 3. Caddy
+## 3. nginx
 
-```
-letsmeet.lol {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:8787
+The box fronts everything with nginx + certbot (not Caddy — the rest of the
+box's vhosts already live in `/etc/nginx/sites-available/`). The letsmeet
+vhost, as deployed at `/etc/nginx/sites-available/letsmeet.lol`:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name letsmeet.lol;
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header Host $host;
+        # Append the real client as the last hop: the app's guest rate limiter
+        # keys on the final X-Forwarded-For entry (see below).
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
-`encode zstd gzip` compresses the responses on the way out: the app serves
-server-rendered HTML plus the (minified) `/assets/*` bundles (`grid.js`,
-`createForm.js`, `app.css`), and neither Hono nor the Node adapter compresses
-anything itself. Static assets need no dedicated Caddy directive — Node
-itself serves `/assets/*` straight out of `public/assets/` (the
-`build:client` output, gitignored — see "Before you build" above), so
-`reverse_proxy` alone covers it.
+Once DNS resolves to the box, `sudo certbot --nginx -d letsmeet.lol` adds the
+TLS listener and the HTTP→HTTPS redirect in place, same as every other vhost
+on the box. Static assets need no dedicated nginx location — Node itself
+serves `/assets/*` straight out of `public/assets/` (baked into the image),
+so `proxy_pass` alone covers it.
 
-The rest is enough — Caddy terminates TLS and, by default, sets
-`X-Forwarded-For` on the request it forwards to the backend, appending the
-real client IP as the last hop of that header. This matters concretely: the
-guest-submission rate limiter in `src/web/routes/polls.ts`
-(`app.post('/p/:rkey/respond', ...)`) reads `x-forwarded-for`, splits on
-commas, and takes the **last** entry as the client IP:
+The `X-Forwarded-For` header matters concretely: the guest-submission rate
+limiter in `src/web/routes/polls.ts` (`app.post('/p/:rkey/respond', ...)`)
+reads `x-forwarded-for`, splits on commas, and takes the **last** entry as
+the client IP:
 
 ```ts
 const xff = c.req.header('x-forwarded-for');
 const ip = xff ? xff.split(',').pop()!.trim() : 'local';
 ```
 
-Because Caddy appends the real client IP as the last hop rather than trusting
-whatever a client sent, a request forged with a fake `X-Forwarded-For`
-prefix can't rotate the rate-limit bucket key — the limiter only ever sees
-the hop Caddy itself added. If you ever put another proxy in front of Caddy,
-confirm it preserves this "append, don't replace" behavior, or the limiter
-degrades to keying everything under whatever the outer proxy sends.
+`$proxy_add_x_forwarded_for` appends the real client IP as the last hop
+rather than trusting whatever a client sent, so a request forged with a fake
+`X-Forwarded-For` prefix can't rotate the rate-limit bucket key — the
+limiter only ever sees the hop nginx itself added. If you ever put another
+proxy in front of nginx, confirm it preserves this "append, don't replace"
+behavior, or the limiter degrades to keying everything under whatever the
+outer proxy sends.
 
 ## 4. Publishing the lexicons
 
