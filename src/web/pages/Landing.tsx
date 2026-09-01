@@ -1,7 +1,8 @@
 import { Layout } from './Layout.js';
 import { Badge } from '../ui/badge.js';
-import { Button } from '../ui/button.js';
+import { Button, buttonVariants } from '../ui/button.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
+import { COPY_LINK_SCRIPT } from './copyLink.js';
 
 const STEPS = [
   'Sign in with your atproto handle — the poll is a record in your own repo.',
@@ -14,6 +15,34 @@ export interface PollListItem {
   rkey: string;
   title: string;
   status: string;
+  /** The poll's calendar dates (YYYY-MM-DD), for the range in the meta line. */
+  dates: string[];
+  responses: number;
+}
+
+/**
+ * "Sep 14 – Sep 30" from the poll's calendar dates. Locale pinned: this renders on the
+ * server, and the meta line shouldn't change shape with the box's locale env. Noon-UTC
+ * anchoring for the same reason as the grid's fmtDow: a bare date parsed as UTC must not
+ * drift a day when formatted.
+ */
+function fmtDateRange(dates: string[]): string {
+  if (dates.length === 0) return '';
+  const sorted = [...dates].sort();
+  const fmt = (iso: string) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  });
+  const first = fmt(sorted[0]);
+  const last = fmt(sorted[sorted.length - 1]);
+  return first === last ? first : `${first} – ${last}`;
+}
+
+function pollMeta(p: PollListItem): string {
+  return [
+    fmtDateRange(p.dates),
+    `${p.dates.length} ${p.dates.length === 1 ? 'day' : 'days'}`,
+    `${p.responses} ${p.responses === 1 ? 'response' : 'responses'}`,
+  ].filter(Boolean).join(' · ');
 }
 
 export function LandingPage({ did, handle, polls = [] }: {
@@ -93,22 +122,34 @@ export function LandingPage({ did, handle, polls = [] }: {
             ) : (
               <ul className="polls divide-y">
                 {polls.map((p) => (
-                  <li key={p.rkey}>
-                    <a
-                      href={`/p/${p.rkey}`}
-                      className="flex items-center justify-between gap-3 py-2.5 no-underline hover:text-primary"
-                    >
-                      <span className="text-sm font-medium">{p.title}</span>
-                      <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
-                        {p.status}
-                      </Badge>
+                  // The row is a flex line, not one big <a>: the copy button can't nest
+                  // inside an anchor, so the anchor takes the growing left half (title +
+                  // meta) and the badge/button sit beside it.
+                  <li key={p.rkey} className="flex items-center gap-3 py-2.5">
+                    <a href={`/p/${p.rkey}`} className="min-w-0 flex-1 no-underline">
+                      <span className="block truncate text-sm font-medium hover:text-primary">
+                        {p.title}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">{pollMeta(p)}</span>
                     </a>
+                    <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
+                      {p.status}
+                    </Badge>
+                    <button
+                      type="button"
+                      data-copy-path={`/p/${p.rkey}`}
+                      hidden
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    >
+                      Copy link
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
           </CardContent>
         </Card>
+        <script dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );

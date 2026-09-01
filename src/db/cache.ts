@@ -46,6 +46,14 @@ export function listPollsByHost(db: Database.Database, hostDid: string): CachedP
   }));
 }
 
+/** Response tallies for every poll in one grouped query — the landing list's "N responses". */
+export function countResponsesByPoll(db: Database.Database): Map<string, number> {
+  const rows = db.prepare(
+    'SELECT poll_rkey AS rkey, COUNT(*) AS n FROM response_cache GROUP BY poll_rkey',
+  ).all() as Array<{ rkey: string; n: number }>;
+  return new Map(rows.map((r) => [r.rkey, r.n]));
+}
+
 export function tombstonePoll(db: Database.Database, rkey: string): void {
   db.prepare('UPDATE poll_cache SET tombstoned = 1, updated_at = ? WHERE rkey = ?')
     .run(Date.now(), rkey);

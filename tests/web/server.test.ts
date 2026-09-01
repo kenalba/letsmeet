@@ -85,8 +85,11 @@ describe('server', () => {
     // The e2e suite locates the DID with a bare `code` locator, which is strict-mode:
     // a second <code> anywhere on this page would break it.
     expect(body.match(/<code[\s>]/g)).toHaveLength(1);
-    // The landing lists the host's polls with links; the create form lives on /new now.
+    // The landing lists the host's polls with links, meta and a copy button; the create
+    // form lives on /new now.
     expect(body).toContain(`href="/p/${poll.rkey}"`);
+    expect(body).toContain(`data-copy-path="/p/${poll.rkey}"`);
+    expect(body).toContain('0 responses');
     expect(body).toContain('href="/new"');
     expect(body).not.toContain('name="slotMinutes"');
 

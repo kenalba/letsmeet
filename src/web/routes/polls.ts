@@ -5,7 +5,7 @@ import type { AuthClient } from '../../atproto/oauthClient.js';
 import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
 import { getSessionDid, getSessionHandle } from './auth.js';
-import { listPollsByHost } from '../../db/cache.js';
+import { countResponsesByPoll, listPollsByHost } from '../../db/cache.js';
 import { createPoll, getPollWithRevalidate, finalizePoll } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
@@ -32,9 +32,11 @@ export function pollRoutes(
   app.get('/', async (c) => {
     const did = await getSessionDid(c, env.COOKIE_SECRET);
     const handle = did ? await getSessionHandle(c, env.COOKIE_SECRET) : null;
+    const counts = did ? countResponsesByPoll(deps.db) : new Map<string, number>();
     const polls = did
       ? listPollsByHost(deps.db, did).map((p) => ({
           rkey: p.rkey, title: p.record.title, status: p.record.status,
+          dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
         }))
       : [];
     return c.html(renderPage(createElement(LandingPage, {

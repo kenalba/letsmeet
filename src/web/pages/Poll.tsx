@@ -2,6 +2,7 @@ import type { Interval } from '../../core/intervals.js';
 import type { SpecificDates } from '../../core/slots.js';
 import type { PollResults } from '../../services/results.js';
 import { scriptJson } from '../scriptJson.js';
+import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { buttonVariants } from '../ui/button.js';
 import { Card, CardHeader, CardContent } from '../ui/card.js';
@@ -29,20 +30,6 @@ export interface PollPageData {
  * mount point and the JSON are in the DOM by the time the module runs.
  */
 const GRID_SCRIPTS = ['/assets/grid.js'];
-
-/**
- * The share button's whole behavior, inline: three lines of DOM work don't earn an island.
- * It copies the CANONICAL poll path from data-path, never location.href — a guest viewing
- * through their edit link is on `/p/<rkey>/e/<token>`, and sharing that would hand their
- * private edit token to the group chat.
- */
-const SHARE_SCRIPT = "(function(){var b=document.getElementById('share-poll');if(!b)return;"
-  + "b.hidden=false;var t=b.textContent;var url=location.origin+b.getAttribute('data-path');"
-  + "b.addEventListener('click',function(){"
-  + "var done=function(){b.textContent='Copied!';setTimeout(function(){b.textContent=t},1500)};"
-  + "var ask=function(){window.prompt('Copy this link:',url)};"
-  + "if(navigator.clipboard&&navigator.clipboard.writeText){"
-  + "navigator.clipboard.writeText(url).then(done,ask)}else{ask()}})})()";
 
 /** "30-minute" / "1-hour" / "1.5-hour" — mirrors the create form's option labels. */
 function fmtSlotLength(minutes: number): string {
@@ -91,12 +78,9 @@ export function PollPage(data: PollPageData) {
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
-            {/* Server-rendered hidden: without JS the button does nothing, so it only
-                appears once SHARE_SCRIPT wires it up. */}
             <button
-              id="share-poll"
               type="button"
-              data-path={path}
+              data-copy-path={path}
               hidden
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
@@ -179,7 +163,7 @@ export function PollPage(data: PollPageData) {
             </CardContent>
           </Card>
         ) : null}
-        <script dangerouslySetInnerHTML={{ __html: SHARE_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );
