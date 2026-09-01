@@ -62,7 +62,7 @@ export function LandingPage({ did, handle, polls = [] }: {
               <span className="cursor" aria-hidden="true" />
             </h1>
             <p className="max-w-prose text-lg text-muted-foreground">
-              as if it were ever that easy. paint when you're free, share one link, find the hour that actually works.
+              make a poll. paint when you're free. share the link. find the time that works.
             </p>
             <div>
               <Button asChild>

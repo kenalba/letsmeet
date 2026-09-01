@@ -3,7 +3,7 @@ import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
 import { PublicPdsReader } from '../../src/atproto/pds.js';
 import {
-  createPoll, getPollWithRevalidate, updatePollMeta, updatePollTime, parseRkey,
+  createPoll, getPollWithRevalidate, updatePollMeta, updatePollTime, withdrawPoll, parseRkey,
 } from '../../src/services/polls.js';
 import { upsertResponseCache } from '../../src/db/cache.js';
 import { buildResponseRecord, SCHEDULE_NSID } from '../../src/atproto/records.js';
@@ -108,5 +108,32 @@ describe('frozen geometry', () => {
     const { rkey } = await createPoll(deps, HOST, { title: 'T', time });
     await expect(updatePollMeta(deps, 'did:plc:mallory', rkey, { title: 'hax' }))
       .rejects.toThrow(/host/);
+  });
+});
+
+describe('updatePollMeta', () => {
+  it('drops the description when it is cleared, rather than storing an empty string', async () => {
+    const { deps, repo } = makeDeps();
+    const { rkey } = await createPoll(deps, HOST, { title: 'T', description: 'snacks', time });
+    await updatePollMeta(deps, HOST, rkey, { title: 'T', description: undefined });
+    const live = await repo.getRecord(HOST, SCHEDULE_NSID, rkey);
+    expect(live?.value).not.toHaveProperty('description');
+    expect((await getPollWithRevalidate(deps, rkey))?.record.description).toBeUndefined();
+  });
+});
+
+describe('withdrawPoll', () => {
+  it('deletes the record from the host repo and tombstones the cache row', async () => {
+    const { deps, repo } = makeDeps();
+    const { rkey } = await createPoll(deps, HOST, { title: 'T', time });
+    await withdrawPoll(deps, HOST, rkey);
+    expect(await repo.getRecord(HOST, SCHEDULE_NSID, rkey)).toBeNull();
+    expect((await getPollWithRevalidate(deps, rkey))?.tombstoned).toBe(true);
+  });
+  it('is the host\'s call alone', async () => {
+    const { deps, repo } = makeDeps();
+    const { rkey } = await createPoll(deps, HOST, { title: 'T', time });
+    await expect(withdrawPoll(deps, 'did:plc:mallory', rkey)).rejects.toThrow(/host/);
+    expect(await repo.getRecord(HOST, SCHEDULE_NSID, rkey)).not.toBeNull();
   });
 });

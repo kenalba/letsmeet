@@ -396,6 +396,118 @@ describe('server', () => {
   });
 });
 
+describe('host edits', () => {
+  const form = (fields: Record<string, string>, cookie: string) => ({
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+    body: new URLSearchParams(fields).toString(),
+  });
+  const hostSession = async (deps: Deps, did = HOST) => {
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(did)}`);
+    return { dev, cookie: login.headers.get('set-cookie')!.split(';')[0] };
+  };
+
+  it('shows the host a pre-filled form, and nobody else', async () => {
+    const { deps, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    const res = await dev.request(`/p/${poll.rkey}/edit`, { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain(`action="/p/${poll.rkey}/edit"`);
+    expect(body).toContain('value="Movie night"');
+    expect(body).toContain('value="2026-09-02"');
+    expect(body).toContain('value="17:00"');
+    expect(body).toContain('data-explicit="1"');
+    expect(body).toContain('save changes');
+    expect(body).toContain(`action="/p/${poll.rkey}/withdraw"`);
+    // Nobody has answered: the geometry is editable, and the calendar island ships.
+    expect(body).not.toContain('frozen');
+    expect(body).toContain('/assets/createForm.js');
+    // The poll page links the host there…
+    const own = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(own).toContain(`href="/p/${poll.rkey}/edit"`);
+    // …and a guest neither sees the link nor gets the page.
+    const guest = await (await dev.request(`/p/${poll.rkey}`)).text();
+    expect(guest).not.toContain('/edit"');
+    const signedOut = await dev.request(`/p/${poll.rkey}/edit`);
+    expect(signedOut.status).toBe(302);
+    expect(signedOut.headers.get('location')).toContain('/login?returnTo=');
+    const { cookie: other } = await hostSession(deps, 'did:plc:stranger');
+    expect((await dev.request(`/p/${poll.rkey}/edit`, { headers: { cookie: other } })).status).toBe(403);
+  });
+
+  it('saves title, description and geometry while nobody has answered', async () => {
+    const { deps, repo, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    const res = await dev.request(`/p/${poll.rkey}/edit`, form({
+      title: 'Game night', description: '', dates: '2026-09-03,2026-09-04',
+      windowStart: '18:00', windowEnd: '20:00', slotMinutes: '60', timezone: 'UTC',
+    }, cookie));
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(`/p/${poll.rkey}`);
+    const live = (await repo.getRecord(HOST, 'lol.letsmeet.poll.schedule', poll.rkey))!.value as {
+      title: string; description?: string; time: { dates: string[]; slotMinutes: number };
+    };
+    expect(live.title).toBe('Game night');
+    expect(live).not.toHaveProperty('description');
+    expect(live.time.dates).toEqual(['2026-09-03', '2026-09-04']);
+    expect(live.time.slotMinutes).toBe(60);
+    expect(await (await dev.request(`/p/${poll.rkey}`)).text()).toContain('Game night');
+  });
+
+  it('freezes the geometry once a response exists, but still takes a new title', async () => {
+    const { deps, repo, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    await dev.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: PAINT }),
+    });
+    const body = await (await dev.request(`/p/${poll.rkey}/edit`, { headers: { cookie } })).text();
+    expect(body).toContain('1 person has already answered, so the days and times are frozen');
+    expect(body).toMatch(/<input[^>]*disabled=""[^>]*name="dates"/);
+    expect(body).not.toContain('/assets/createForm.js');
+    // A hand-rolled POST that carries new dates anyway: title taken, geometry kept.
+    const res = await dev.request(`/p/${poll.rkey}/edit`, form({
+      title: 'Game night', dates: '2026-09-09', windowStart: '09:00', windowEnd: '10:00',
+      slotMinutes: '10', timezone: 'UTC',
+    }, cookie));
+    expect(res.status).toBe(302);
+    const live = (await repo.getRecord(HOST, 'lol.letsmeet.poll.schedule', poll.rkey))!.value as {
+      title: string; time: { dates: string[]; slotMinutes: number };
+    };
+    expect(live.title).toBe('Game night');
+    expect(live.time.dates).toEqual(['2026-09-02']);
+    expect(live.time.slotMinutes).toBe(30);
+  });
+
+  it('withdraws: the record is gone, the link answers 410, the list forgets it', async () => {
+    const { deps, repo, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    const res = await dev.request(`/p/${poll.rkey}/withdraw`, form({ sure: '1' }, cookie));
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+    expect(await repo.getRecord(HOST, 'lol.letsmeet.poll.schedule', poll.rkey)).toBeNull();
+    const gone = await dev.request(`/p/${poll.rkey}`);
+    expect(gone.status).toBe(410);
+    expect(await gone.text()).toContain('called it off');
+    const home = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(home).not.toContain(`/p/${poll.rkey}`);
+    // The edit page is gone with it, and a stranger still cannot withdraw anything.
+    expect((await dev.request(`/p/${poll.rkey}/edit`, { headers: { cookie } })).status).toBe(410);
+  });
+
+  it('refuses a stranger\'s withdraw', async () => {
+    const { deps, repo, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps, 'did:plc:stranger');
+    const res = await dev.request(`/p/${poll.rkey}/withdraw`, form({ sure: '1' }, cookie));
+    expect(res.status).toBe(403);
+    expect(await repo.getRecord(HOST, 'lol.letsmeet.poll.schedule', poll.rkey)).not.toBeNull();
+  });
+});
+
 describe('request hardening', () => {
   const devServer = (deps: Deps) => createServer(deps, stubAuth, {
     COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,

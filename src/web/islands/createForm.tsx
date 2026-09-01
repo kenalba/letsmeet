@@ -116,7 +116,7 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
 
   return (
     <div className="grid gap-3">
-      <span className="text-sm leading-none font-medium">Dates</span>
+      <span className="text-sm leading-none font-medium">dates</span>
       <Calendar
         mode="multiple"
         selected={sorted.map(fromISODate)}
@@ -233,9 +233,10 @@ if (datesMount && fallback && datesInput && form) {
   );
 }
 
-// Only the untouched server default is replaced: a zone the visitor typed is theirs.
+// Only the untouched server default is replaced: a zone the visitor typed is theirs, and
+// so is one the edit form rendered from the poll itself (`data-explicit`).
 const tz = document.querySelector<HTMLInputElement>('input[name="timezone"]');
-if (tz && tz.value === 'UTC') {
+if (tz && tz.value === 'UTC' && !tz.dataset.explicit) {
   const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
   if (local) tz.value = local;
 }

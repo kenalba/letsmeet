@@ -33,6 +33,11 @@ export class FakeRepo implements RepoReader, RepoWriter {
     }));
   }
 
+  async deleteRecord(repo: string, collection: string, rkey: string): Promise<void> {
+    if (this.failWrites) throw new Error('FakeRepo: writes disabled');
+    this.delete(repo, collection, rkey);
+  }
+
   delete(did: string, collection: string, rkey: string): void {
     this.bucket(did, collection).delete(rkey);
   }

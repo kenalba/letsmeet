@@ -144,7 +144,16 @@ export function Layout({ title, description, canonical, children, scripts, signI
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">{children}</main>
         <footer className="border-t">
           <div className="pixel-label mx-auto flex max-w-4xl flex-wrap gap-x-6 px-4 py-6 text-muted-foreground">
-            <span>made on atproto with love and mild optimism</span>
+            <span>
+              made on atproto by{' '}
+              <a
+                href="https://bsky.app/profile/wzrdz.cool"
+                className="prompt no-underline hover:text-foreground"
+                rel="noopener"
+              >
+                ken
+              </a>
+            </span>
             <a
               href="https://github.com/kenalba/letsmeet"
               className="prompt no-underline hover:text-foreground"

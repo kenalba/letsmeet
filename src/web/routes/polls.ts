@@ -7,8 +7,10 @@ import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
 import { GENERIC_ERROR, UserError } from '../../core/errors.js';
 import { readSession, type SessionEnv } from '../session.js';
-import { countResponsesByPoll, listPollsByHost } from '../../db/cache.js';
-import { createPoll, getPollWithRevalidate, finalizePoll } from '../../services/polls.js';
+import { countResponses, countResponsesByPoll, listPollsByHost } from '../../db/cache.js';
+import {
+  createPoll, getPollWithRevalidate, finalizePoll, updatePollMeta, updatePollTime, withdrawPoll,
+} from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
 import { lookupEditSecret } from '../../db/editSecrets.js';
@@ -22,6 +24,7 @@ import { LandingPage } from '../pages/Landing.js';
 import { DecidedPage } from '../pages/Decided.js';
 import { TombstonePage } from '../pages/Tombstone.js';
 import { NewPollPage } from '../pages/NewPoll.js';
+import { EditPollPage } from '../pages/EditPoll.js';
 import { PollPage } from '../pages/Poll.js';
 import { ErrorPage } from '../pages/ErrorPage.js';
 
@@ -34,6 +37,20 @@ function explain(err: unknown, where: string): string {
   if (err instanceof UserError || err instanceof ValidationError) return err.message;
   console.error(`${where} failed:`, err);
   return GENERIC_ERROR;
+}
+
+/**
+ * The poll's geometry, straight off the create/edit form. `slotMinutes` is an unchecked
+ * cast: the <select> only offers lexicon-legal values, and a hand-rolled POST carrying
+ * anything else is rejected by the lexicon on record build.
+ */
+function timeFromForm(f: FormData): SpecificDates {
+  return {
+    dates: String(f.get('dates') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    window: { start: String(f.get('windowStart')), end: String(f.get('windowEnd')) },
+    slotMinutes: Number(f.get('slotMinutes')) as SlotMinutes,
+    timezone: String(f.get('timezone')),
+  };
 }
 
 export function pollRoutes(
@@ -83,14 +100,7 @@ export function pollRoutes(
       }), 429);
     }
     const f = await c.req.formData();
-    const time: SpecificDates = {
-      dates: String(f.get('dates') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-      window: { start: String(f.get('windowStart')), end: String(f.get('windowEnd')) },
-      // Unchecked cast: the <select> only offers lexicon-legal values, and a hand-rolled
-      // POST carrying anything else is rejected by the lexicon on record build below.
-      slotMinutes: Number(f.get('slotMinutes')) as SlotMinutes,
-      timezone: String(f.get('timezone')),
-    };
+    const time = timeFromForm(f);
     if (time.dates.length === 0) {
       return page(c, createElement(ErrorPage, {
         heading: 'could not create poll',
@@ -204,6 +214,96 @@ export function pollRoutes(
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ error: explain(err, 'submitAccountResponse') }, 400);
+    }
+  });
+
+  /**
+   * The signed-in host's own poll, or the response that says why not: sign in first, not
+   * yours (403), gone (410). Shared by the edit and withdraw routes.
+   */
+  const ownPoll = async (c: import('hono').Context, rkey: string) => {
+    const did = await sessionDid(c);
+    if (!did) {
+      return { deny: c.redirect(`/login?returnTo=${encodeURIComponent(`/p/${rkey}/edit`)}`) };
+    }
+    const poll = await getPollWithRevalidate(deps, rkey);
+    if (!poll) return { deny: c.notFound() };
+    if (poll.tombstoned) return { deny: page(c, createElement(TombstonePage), 410) };
+    if (poll.hostDid !== did) {
+      return { deny: page(c, createElement(ErrorPage, {
+        heading: 'not yours', message: 'only the host can edit this poll.',
+      }), 403) };
+    }
+    return { did, poll };
+  };
+
+  app.get('/p/:rkey/edit', async (c) => {
+    const rkey = c.req.param('rkey');
+    const own = await ownPoll(c, rkey);
+    if ('deny' in own) return own.deny;
+    // A decided poll is not edited, it is read; the decided page has no edit link either.
+    if (own.poll.record.status !== 'active') return c.redirect(`/p/${rkey}`);
+    const t = own.poll.record.time;
+    return page(c, createElement(EditPollPage, {
+      rkey,
+      responses: countResponses(deps.db, rkey),
+      defaults: {
+        title: own.poll.record.title,
+        description: own.poll.record.description,
+        dates: t.dates,
+        windowStart: t.window.start,
+        windowEnd: t.window.end,
+        slotMinutes: t.slotMinutes,
+        timezone: t.timezone,
+      },
+    }));
+  });
+
+  app.post('/p/:rkey/edit', async (c) => {
+    const rkey = c.req.param('rkey');
+    const own = await ownPoll(c, rkey);
+    if ('deny' in own) return own.deny;
+    if (!accountLimiter.allow(own.did, deps.now().getTime())) {
+      return page(c, createElement(ErrorPage, { heading: 'slow down', message: tooMany.error }), 429);
+    }
+    const f = await c.req.formData();
+    try {
+      await updatePollMeta(deps, own.did, rkey, {
+        title: String(f.get('title') ?? ''),
+        description: String(f.get('description') ?? '') || undefined,
+      });
+      // Geometry only while nobody has answered. The frozen form posts no time fields at
+      // all (they render disabled), and a response that landed between GET and POST is
+      // caught here the same way — silently kept, since the host never saw the fields.
+      if (countResponses(deps.db, rkey) === 0) {
+        const time = timeFromForm(f);
+        if (time.dates.length === 0) throw new UserError('no dates selected.');
+        await updatePollTime(deps, own.did, rkey, time);
+      }
+      return c.redirect(`/p/${rkey}`);
+    } catch (err) {
+      return page(c, createElement(ErrorPage, {
+        heading: 'could not save',
+        message: `could not save: ${explain(err, 'updatePoll')}`,
+      }), 400);
+    }
+  });
+
+  app.post('/p/:rkey/withdraw', async (c) => {
+    const rkey = c.req.param('rkey');
+    const own = await ownPoll(c, rkey);
+    if ('deny' in own) return own.deny;
+    if (!accountLimiter.allow(own.did, deps.now().getTime())) {
+      return page(c, createElement(ErrorPage, { heading: 'slow down', message: tooMany.error }), 429);
+    }
+    try {
+      await withdrawPoll(deps, own.did, rkey);
+      return c.redirect('/');
+    } catch (err) {
+      return page(c, createElement(ErrorPage, {
+        heading: 'could not withdraw',
+        message: `could not withdraw: ${explain(err, 'withdrawPoll')}`,
+      }), 400);
     }
   });
 

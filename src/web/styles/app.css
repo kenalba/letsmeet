@@ -250,6 +250,18 @@
   /* `> sign in` — the terminal prompt on nav-ish links. */
   .prompt::before { content: "> "; color: var(--lol); }
 
+  /* Buttons speak the same dialect as those links: pixel type, lowercase, a `>` prompt as
+     their first flex item (the button's own `gap` spaces it). Filled buttons keep the
+     prompt in their text colour, outlined ones borrow the link amber, and icon-only
+     buttons (the theme toggle) carry none. Height and padding are the button's own. */
+  .btn-pixel {
+    font-family: var(--font-pixel); font-size: 11px; line-height: 22px; font-weight: 400;
+    letter-spacing: 0; -webkit-font-smoothing: none;
+  }
+  .btn-pixel::before { content: ">"; color: var(--lol); }
+  .btn-filled::before { color: currentColor; opacity: 0.8; }
+  .btn-icon::before { content: none; }
+
   /* `=== how it works ===` between two dashed rules. */
   .rule { display: flex; align-items: center; gap: 12px; }
   .rule::before, .rule::after { content: ""; flex: 1; border-top: 1px dashed var(--border); }

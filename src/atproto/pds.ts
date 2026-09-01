@@ -165,5 +165,8 @@ export function writerForAgent(agent: Agent): RepoWriter {
       });
       return { uri: res.data.uri, cid: res.data.cid };
     },
+    async deleteRecord(repo, collection, rkey): Promise<void> {
+      await agent.com.atproto.repo.deleteRecord({ repo, collection, rkey });
+    },
   };
 }

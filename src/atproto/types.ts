@@ -7,6 +7,7 @@ export interface RepoReader {
 export interface RepoWriter {
   createRecord(repo: string, collection: string, record: object): Promise<RecordRef>;
   putRecord(repo: string, collection: string, rkey: string, record: object): Promise<RecordRef>;
+  deleteRecord(repo: string, collection: string, rkey: string): Promise<void>;
 }
 export interface Deps {
   db: import('../db/db.js').Database.Database;

@@ -113,9 +113,13 @@ async function createPoll(page: Page, fields: {
 }
 
 test('host creates, guest paints, host finalizes', async ({ page, browser }) => {
+  // One host DID per project: the four projects run this flow concurrently against one
+  // server, and the per-account rate limiter (create, edit, finalize — three writes each)
+  // would otherwise count them all as one very busy host.
+  const hostDid = `did:plc:e2ehost${test.info().project.name.replace(/[^a-z0-9]/gi, '')}`;
   // host signs in (dev route) and creates a poll
-  await page.goto('/dev/login?did=did:plc:e2ehost');
-  await expect(page.locator('code')).toHaveText('did:plc:e2ehost');
+  await page.goto(`/dev/login?did=${hostDid}`);
+  await expect(page.locator('code')).toHaveText(hostDid);
   const pollUrl = await createPoll(page, {
     title: 'Board games',
     dates: `${FIXTURE_DATE_1},${FIXTURE_DATE_2}`,
@@ -123,6 +127,14 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
     windowEnd: '19:00',
     slotMinutes: '60',
   });
+
+  // host edits the title while the poll is still untouched: the same form, pre-filled,
+  // with the calendar island seeded from the poll's own dates.
+  await page.click('a[href$="/edit"]');
+  await expect(page.locator('input[name=title]')).toHaveValue('Board games');
+  await page.fill('input[name=title]', 'Board games, revised');
+  await page.click('form.create button[type=submit]');
+  await expect(page.getByRole('heading', { name: 'Board games, revised' })).toBeVisible();
 
   // guest responds in a clean context: paint two cells, name, save. Touch projects tap
   // each cell (Playwright's touchscreen has no drag primitive); pointer projects drag

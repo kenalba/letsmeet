@@ -43,6 +43,7 @@ describe('finalizePoll', () => {
         return repo.createRecord(r, collection, record);
       },
       putRecord: (r, collection, rkey, record) => repo.putRecord(r, collection, rkey, record),
+      deleteRecord: (r, collection, rkey) => repo.deleteRecord(r, collection, rkey),
     });
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {

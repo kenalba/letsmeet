@@ -21,7 +21,7 @@ export function DecidedPage(
     >
       <div className="grid gap-6">
         <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{record.title}</h1>
+          <h1 className="pixel-heading">{record.title}</h1>
           {record.description ? (
             <p className="description text-muted-foreground">{record.description}</p>
           ) : null}

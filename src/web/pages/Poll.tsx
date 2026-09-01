@@ -84,7 +84,7 @@ export function PollPage(data: PollPageData) {
 
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
+            <h1 className="pixel-heading">{data.title}</h1>
             <button
               type="button"
               data-copy-path={path}
@@ -93,6 +93,14 @@ export function PollPage(data: PollPageData) {
             >
               copy share link
             </button>
+            {data.isHost && isActive ? (
+              <a
+                href={`/p/${data.rkey}/edit`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                edit
+              </a>
+            ) : null}
           </div>
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>

@@ -95,8 +95,23 @@ export async function updatePollMeta(
   input: { title?: string; description?: string },
 ): Promise<void> {
   const poll = loadOwned(deps, hostDid, rkey);
-  const next = validateScheduleRecord({ ...poll.record, ...input });
+  const merged: Record<string, unknown> = { ...poll.record, ...input };
+  // An empty description is a removed one, not a record with an empty string in it.
+  if (!merged.description) delete merged.description;
+  const next = validateScheduleRecord(merged);
   await putUpdated(deps, hostDid, rkey, next);
+}
+
+/**
+ * The record leaves the host's repo and the cache row is tombstoned, so the share link
+ * answers 410 from now on. Guests' own response records are theirs and stay put; a
+ * withdrawn poll simply stops rendering them.
+ */
+export async function withdrawPoll(deps: Deps, hostDid: string, rkey: string): Promise<void> {
+  loadOwned(deps, hostDid, rkey);
+  const writer = await deps.writerFor(hostDid);
+  await writer.deleteRecord(hostDid, SCHEDULE_NSID, rkey);
+  tombstonePoll(deps.db, rkey);
 }
 
 export async function updatePollTime(
