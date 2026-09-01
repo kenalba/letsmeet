@@ -1,5 +1,4 @@
 node_modules/
-public/grid.js
 public/assets/
 *.db
 *.db-*

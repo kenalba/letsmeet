@@ -1,7 +1,8 @@
 # Deploying letsmeet
 
-letsmeet is a single Node process (Hono, server-rendered pages + one Preact
-island for the grid) backed by SQLite. It is designed to run behind Caddy at
+letsmeet is a single Node process (Hono, server-rendered pages + a couple of
+React islands — the availability grid and the create-form date picker)
+backed by SQLite. It is designed to run behind Caddy at
 `letsmeet.lol`, on the same home server that hosts the rest of the letsmeet.lol
 stack, or on any small VPS.
 
@@ -71,18 +72,21 @@ missing its `EnvironmentFile`, not broken.
 
 ### Before you build
 
-`public/grid.js` is gitignored and not checked in — it's the esbuild bundle
-of the Preact grid island (`src/web/static/grid.tsx`), served as a static
-file by `serveStatic` in `src/web/server.ts`. **Run the build before starting
-the server, and after every deploy of new source:**
+`public/assets/` is gitignored and not checked in — it's the build output
+(`grid.js`, `createForm.js`, `app.css`), served as static files at `/assets/*`
+by `serveStatic` in `src/web/server.ts`. `npm run build:client` chains the
+three build steps (`build:grid`, `build:createform`, `build:css`) behind one
+name. **Run it before starting the server, and after every deploy of new
+source:**
 
 ```bash
 npm ci
-npm run build:grid
+npm run build:client
 ```
 
-If you skip this, the app boots fine but every poll/create/results page loads
-with a broken grid (404 on `/grid.js`).
+If you skip this, the app boots fine but every page loads with 404s for
+`/assets/grid.js`, `/assets/createForm.js`, and `/assets/app.css` — a broken
+grid, a plain-text dates fallback on the create form, and unstyled markup.
 
 ### A local dev-sign-in quirk
 
@@ -121,7 +125,7 @@ Deploy steps for a new release, in order:
 
 ```bash
 sudo -u letsmeet git -C /opt/letsmeet pull
-sudo -u letsmeet bash -c 'cd /opt/letsmeet && npm ci && npm run build:grid'
+sudo -u letsmeet bash -c 'cd /opt/letsmeet && npm ci && npm run build:client'
 sudo systemctl restart letsmeet
 sudo systemctl status letsmeet --no-pager
 ```
@@ -142,8 +146,12 @@ letsmeet.lol {
 ```
 
 `encode zstd gzip` compresses the responses on the way out: the app serves
-server-rendered HTML plus the (minified) grid bundle, and neither Hono nor
-the Node adapter compresses anything itself.
+server-rendered HTML plus the (minified) `/assets/*` bundles (`grid.js`,
+`createForm.js`, `app.css`), and neither Hono nor the Node adapter compresses
+anything itself. Static assets need no dedicated Caddy directive — Node
+itself serves `/assets/*` straight out of `public/assets/` (the
+`build:client` output, gitignored — see "Before you build" above), so
+`reverse_proxy` alone covers it.
 
 The rest is enough — Caddy terminates TLS and, by default, sets
 `X-Forwarded-For` on the request it forwards to the backend, appending the
