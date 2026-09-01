@@ -144,11 +144,21 @@ function CreateForm({ input, form, start, end }: CreateFormProps) {
         </p>
       ) : null}
       {start ? createPortal(
-        <TimeField name={start.input.name} initial={startTime} onValue={onStart} />,
+        <TimeField
+          name={start.input.name}
+          initial={startTime}
+          onValue={onStart}
+          pickerInput={start.input}
+        />,
         start.mount,
       ) : null}
       {end ? createPortal(
-        <TimeField name={end.input.name} initial={endTime} onValue={onEnd} />,
+        <TimeField
+          name={end.input.name}
+          initial={endTime}
+          onValue={onEnd}
+          pickerInput={end.input}
+        />,
         end.mount,
       ) : null}
     </div>
@@ -175,11 +185,19 @@ function findTimeInput(inputId: string, mountId: string): WindowField | null {
  */
 function claimTimeInput({ input, mount }: WindowField): void {
   const labelId = input.id;
-  input.hidden = true;
+  // Visually hidden, NOT display:none: `showPicker()` needs a rendered input to anchor the
+  // platform popup to, and this keeps it right under the segmented field it stands behind.
+  input.style.position = 'absolute';
+  input.style.opacity = '0';
+  input.style.pointerEvents = 'none';
+  input.style.width = '1px';
+  input.style.height = '1px';
+  input.tabIndex = -1;
   input.required = false;
   mount.hidden = false;
   const label = document.querySelector<HTMLLabelElement>(`label[for="${labelId}"]`);
   if (!label) return;
+  label.style.position = 'relative'; // the 1px input anchors the popup inside this label
   label.removeAttribute('for');
   label.addEventListener('mousedown', (e) => {
     e.preventDefault();

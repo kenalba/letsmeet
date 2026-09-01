@@ -307,6 +307,9 @@
        (`2+1`) and the hover title, because a second identical hatch meaning *someone else*
        said if-need-be would be unreadable next to the first. */
     .tally { font-variant-numeric: tabular-nums; opacity: .85; }
+    /* The grid ends flush with its last row; the actions below it need their own air. */
+    button.save { margin-top: 12px; }
+    .name { margin-top: 12px; }
     .edit-link code { word-break: break-all; }
   }
 }

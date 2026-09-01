@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Clock } from 'lucide-react';
 
 import { cn } from '../lib/cn.js';
 
@@ -71,9 +72,15 @@ export interface TimeFieldProps {
   initial: string;
   /** Called with `"HH:mm"` once all three segments are set, and `""` whenever they aren't. */
   onValue: (value: string) => void;
+  /**
+   * The native input this field stands in for, when it is still rendered (visually hidden):
+   * a clock button then opens its platform picker via `showPicker()`, and picking there
+   * flows back into the segments through the input's own `input` event.
+   */
+  pickerInput?: HTMLInputElement;
 }
 
-export function TimeField({ name, initial, onValue }: TimeFieldProps) {
+export function TimeField({ name, initial, onValue, pickerInput }: TimeFieldProps) {
   const [parts, setParts] = React.useState<TimeParts>(() => parseTime(initial));
   const refs = React.useRef<Record<Segment, HTMLSpanElement | null>>({
     hour: null, minute: null, period: null,
@@ -94,6 +101,15 @@ export function TimeField({ name, initial, onValue }: TimeFieldProps) {
   }, []);
 
   React.useEffect(() => clearTyping, [clearTyping]);
+
+  // A pick in the native popup lands here. Our own writes to the input are programmatic
+  // assignments, which fire no `input` event, so this cannot loop.
+  React.useEffect(() => {
+    if (!pickerInput) return;
+    const sync = () => setParts(parseTime(pickerInput.value));
+    pickerInput.addEventListener('input', sync);
+    return () => pickerInput.removeEventListener('input', sync);
+  }, [pickerInput]);
 
   // The hidden input trails every change, so it is always what the form would post.
   React.useEffect(() => {
@@ -292,6 +308,23 @@ export function TimeField({ name, initial, onValue }: TimeFieldProps) {
         value: parts.period === null ? null : (parts.period === 'AM' ? 1 : 2),
         text: parts.period,
       })}
+      {pickerInput ? (
+        <button
+          type="button"
+          aria-label="Open time picker"
+          className="text-muted-foreground hover:text-foreground ml-auto -mr-1 rounded-sm p-1"
+          onMouseDown={(e) => e.preventDefault() /* keep segment focus where it is */}
+          onClick={() => {
+            try {
+              pickerInput.showPicker();
+            } catch {
+              focusSegment('hour'); // no picker without user activation or support
+            }
+          }}
+        >
+          <Clock aria-hidden="true" className="size-4" />
+        </button>
+      ) : null}
     </span>
   );
 }
