@@ -4,7 +4,7 @@ import { createEditSecret, lookupEditSecret } from '../../src/db/editSecrets.js'
 
 describe('edit secrets', () => {
   const db = openDb(':memory:');
-  const POLL = 'at://did:plc:host/cool.wzrdz.poll.schedule/3kabc';
+  const POLL = 'at://did:plc:host/lol.letsmeet.poll.schedule/3kabc';
 
   it('round-trips a token to its rkey', () => {
     const token = createEditSecret(db, POLL, '3kresp1');

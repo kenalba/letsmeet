@@ -4,11 +4,11 @@ import { FakeRepo } from './fakeRepo.js';
 describe('FakeRepo', () => {
   it('createRecord assigns a TID rkey and real CID; getRecord round-trips', async () => {
     const repo = new FakeRepo();
-    const ref = await repo.createRecord('did:plc:host', 'cool.wzrdz.poll.schedule', { a: 1 });
-    expect(ref.uri).toMatch(/^at:\/\/did:plc:host\/cool\.wzrdz\.poll\.schedule\/[a-z2-7]+$/);
+    const ref = await repo.createRecord('did:plc:host', 'lol.letsmeet.poll.schedule', { a: 1 });
+    expect(ref.uri).toMatch(/^at:\/\/did:plc:host\/lol\.letsmeet\.poll\.schedule\/[a-z2-7]+$/);
     expect(ref.cid).toMatch(/^bafy/);
     const rkey = ref.uri.split('/').pop()!;
-    const found = await repo.getRecord('did:plc:host', 'cool.wzrdz.poll.schedule', rkey);
+    const found = await repo.getRecord('did:plc:host', 'lol.letsmeet.poll.schedule', rkey);
     expect(found?.value).toEqual({ a: 1 });
   });
   it('putRecord upserts at a fixed rkey and changes the CID on new content', async () => {

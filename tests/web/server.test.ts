@@ -39,7 +39,7 @@ describe('server', () => {
     const { app } = await setup();
     const res = await app.request('/');
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('wzrdz-poll');
+    expect(await res.text()).toContain('letsmeet');
   });
 
   it('renders a poll page with embedded grid data', async () => {
@@ -62,7 +62,7 @@ describe('server', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { editToken: string; pending: boolean };
     expect(body.editToken).toBeTruthy();
-    expect(await repo.listRecords(HOST, 'cool.wzrdz.poll.response')).toHaveLength(1);
+    expect(await repo.listRecords(HOST, 'lol.letsmeet.poll.response')).toHaveLength(1);
   });
 
   it('returns 400 for a malformed JSON body instead of throwing', async () => {
@@ -148,7 +148,7 @@ describe('server', () => {
 
   it('renders a tombstone page for withdrawn polls', async () => {
     const { app, repo, poll } = await setup();
-    repo.delete(HOST, 'cool.wzrdz.poll.schedule', poll.rkey);
+    repo.delete(HOST, 'lol.letsmeet.poll.schedule', poll.rkey);
     const res = await app.request(`/p/${poll.rkey}`);
     expect(res.status).toBe(410);
     expect(await res.text()).toContain('withdrawn by the host');

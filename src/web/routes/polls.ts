@@ -166,7 +166,7 @@ export function pollRoutes(
     const poll = await getPollWithRevalidate(deps, c.req.param('rkey'));
     if (!poll || poll.record.status !== 'finalized' || !poll.record.finalized) return c.notFound();
     const ics = buildIcs({
-      uid: `${poll.rkey}@poll.wzrdz.cool`,
+      uid: `${poll.rkey}@letsmeet.lol`,
       title: poll.record.title,
       start: poll.record.finalized.start,
       end: poll.record.finalized.end,

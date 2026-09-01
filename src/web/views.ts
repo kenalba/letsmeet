@@ -109,7 +109,7 @@ export function layout(title: string, body: Html | string): Html {
 <style>${raw(STYLE)}</style>
 </head>
 <body>
-<header><a class="brand" href="/">wzrdz-poll</a></header>
+<header><a class="brand" href="/">letsmeet</a></header>
 <main>${body}</main>
 </body>
 </html>`;
@@ -134,7 +134,7 @@ function createForm(): Html {
 }
 
 export function createFormPage(): Html {
-  return layout('New poll — wzrdz-poll', html`<h1>New poll</h1>${createForm()}`);
+  return layout('New poll — letsmeet', html`<h1>New poll</h1>${createForm()}`);
 }
 
 export function landingPage(loggedInDid: string | null): Html {
@@ -145,7 +145,7 @@ ${createForm()}`
     : html`<h1>Pick a time, together</h1>
 <p>Polls live in your own atproto repo. Guests can answer without an account.</p>
 <p><a href="/login">Sign in to create a poll</a></p>`;
-  return layout('wzrdz-poll', body);
+  return layout('letsmeet', body);
 }
 
 function fmtRange(slot: Interval, zone: string): string {
@@ -225,7 +225,7 @@ ${isActive
     : null}
 </section>`;
 
-  return layout(`${data.title} — wzrdz-poll`, body);
+  return layout(`${data.title} — letsmeet`, body);
 }
 
 export function decidedPage(rkey: string, record: ScheduleRecord, publicUrl: string): Html {
@@ -241,11 +241,11 @@ ${record.description ? html`<p class="description">${record.description}</p>` : 
 <p><a href="${icsPath}" class="ics">Download .ics</a> ·
    <a href="${webcal}" class="webcal">Add to calendar (webcal)</a></p>
 <p class="hint">Responses are closed. The event also lives in the host's atproto repo.</p>`;
-  return layout(`${record.title} — wzrdz-poll`, body);
+  return layout(`${record.title} — letsmeet`, body);
 }
 
 export function tombstonePage(): Html {
-  return layout('Poll withdrawn — wzrdz-poll', html`<h1>Poll withdrawn</h1>
+  return layout('Poll withdrawn — letsmeet', html`<h1>Poll withdrawn</h1>
 <p>This poll was withdrawn by the host.</p>
-<p><a href="/">Back to wzrdz-poll</a></p>`);
+<p><a href="/">Back to letsmeet</a></p>`);
 }

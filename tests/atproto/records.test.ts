@@ -11,7 +11,7 @@ const time = {
 };
 // any syntactically valid CID works for validation tests
 const CID = 'bafyreidfayvfuwqa2qskciqhtcc73ipe2f2wgib3fmyk6ssqrlkln5dcvy';
-const SUBJECT = { uri: 'at://did:plc:host123/cool.wzrdz.poll.schedule/3kabc', cid: CID };
+const SUBJECT = { uri: 'at://did:plc:host123/lol.letsmeet.poll.schedule/3kabc', cid: CID };
 
 describe('schedule records', () => {
   it('builds a valid active record', () => {

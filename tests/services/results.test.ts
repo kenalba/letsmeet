@@ -46,9 +46,9 @@ describe('getResults', () => {
   it('picks up an account response edited directly in the PDS', async () => {
     const { deps, repo, poll } = await setup();
     await submitAccountResponse(deps, 'did:plc:ana', poll.rkey, { available: PAINT });
-    const recs = await repo.listRecords('did:plc:ana', 'cool.wzrdz.poll.response');
+    const recs = await repo.listRecords('did:plc:ana', 'lol.letsmeet.poll.response');
     const rkey = recs[0].uri.split('/').pop()!;
-    await repo.putRecord('did:plc:ana', 'cool.wzrdz.poll.response', rkey, {
+    await repo.putRecord('did:plc:ana', 'lol.letsmeet.poll.response', rkey, {
       ...recs[0].value,
       available: [{ start: '2026-09-02T17:30:00.000Z', end: '2026-09-02T18:00:00.000Z' }],
     });
@@ -60,8 +60,8 @@ describe('getResults', () => {
   it('ignores an account record referencing a different poll', async () => {
     const { deps, repo, poll } = await setup();
     await submitAccountResponse(deps, 'did:plc:ana', poll.rkey, { available: PAINT });
-    await repo.createRecord('did:plc:ana', 'cool.wzrdz.poll.response', {
-      subject: { uri: 'at://did:plc:other/cool.wzrdz.poll.schedule/xyz', cid: 'bafyfake' },
+    await repo.createRecord('did:plc:ana', 'lol.letsmeet.poll.response', {
+      subject: { uri: 'at://did:plc:other/lol.letsmeet.poll.schedule/xyz', cid: 'bafyfake' },
       available: PAINT, createdAt: '2026-08-31T12:00:00.000Z',
     });
     const results = await getResults(deps, poll.rkey);

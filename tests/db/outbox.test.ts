@@ -5,8 +5,8 @@ import {
 } from '../../src/db/outbox.js';
 
 const item = {
-  hostDid: 'did:plc:host', pollUri: 'at://did:plc:host/cool.wzrdz.poll.schedule/3k',
-  rkey: '3kresp1', record: { $type: 'cool.wzrdz.poll.response' },
+  hostDid: 'did:plc:host', pollUri: 'at://did:plc:host/lol.letsmeet.poll.schedule/3k',
+  rkey: '3kresp1', record: { $type: 'lol.letsmeet.poll.response' },
 };
 
 describe('outbox', () => {
@@ -27,10 +27,10 @@ describe('outbox', () => {
   it('a new enqueue for the same (host, rkey) supersedes the old undone row', () => {
     const db = openDb(':memory:');
     enqueueOutbox(db, item, 1000);
-    enqueueOutbox(db, { ...item, record: { $type: 'cool.wzrdz.poll.response', v: 2 } }, 2000);
+    enqueueOutbox(db, { ...item, record: { $type: 'lol.letsmeet.poll.response', v: 2 } }, 2000);
     const due = dueOutbox(db, 999999);
     expect(due).toHaveLength(1);
-    expect(due[0].record).toEqual({ $type: 'cool.wzrdz.poll.response', v: 2 });
+    expect(due[0].record).toEqual({ $type: 'lol.letsmeet.poll.response', v: 2 });
   });
   it('failures back off exponentially and cap at 6h', () => {
     const db = openDb(':memory:');

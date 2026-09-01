@@ -1,10 +1,10 @@
 import { AtpAgent } from '@atproto/api';
-import scheduleLex from '../lexicons/cool.wzrdz.poll.schedule.json' with { type: 'json' };
-import responseLex from '../lexicons/cool.wzrdz.poll.response.json' with { type: 'json' };
+import scheduleLex from '../lexicons/lol.letsmeet.poll.schedule.json' with { type: 'json' };
+import responseLex from '../lexicons/lol.letsmeet.poll.response.json' with { type: 'json' };
 
 const { LEX_HANDLE, LEX_APP_PASSWORD, LEX_PDS = 'https://bsky.social' } = process.env;
 if (!LEX_HANDLE || !LEX_APP_PASSWORD) {
-  console.error('Set LEX_HANDLE and LEX_APP_PASSWORD (an app password for the wzrdz.cool account).');
+  console.error('Set LEX_HANDLE and LEX_APP_PASSWORD (an app password for the letsmeet.lol account).');
   process.exit(1);
 }
 

@@ -13,7 +13,7 @@ const time = {
 };
 const CID = 'bafyreidfayvfuwqa2qskciqhtcc73ipe2f2wgib3fmyk6ssqrlkln5dcvy';
 const poll = {
-  rkey: '3kpoll', uri: 'at://did:plc:host/cool.wzrdz.poll.schedule/3kpoll',
+  rkey: '3kpoll', uri: 'at://did:plc:host/lol.letsmeet.poll.schedule/3kpoll',
   hostDid: 'did:plc:host', cid: CID, record: buildScheduleRecord({ title: 'T', time }),
 };
 const resp = buildResponseRecord({

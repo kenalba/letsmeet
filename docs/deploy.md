@@ -1,8 +1,8 @@
-# Deploying wzrdz-poll
+# Deploying letsmeet
 
-wzrdz-poll is a single Node process (Hono, server-rendered pages + one Preact
+letsmeet is a single Node process (Hono, server-rendered pages + one Preact
 island for the grid) backed by SQLite. It is designed to run behind Caddy at
-`poll.wzrdz.cool`, on the same home server that hosts the rest of the wzrdz.cool
+`letsmeet.lol`, on the same home server that hosts the rest of the letsmeet.lol
 stack, or on any small VPS.
 
 The one thing worth internalizing before you deploy: **`DB_PATH` needs real
@@ -42,14 +42,14 @@ All configuration is via environment variables, read once at boot in
 | Variable | Required in prod | Default | Notes |
 |---|---|---|---|
 | `PORT` | no | `8787` | TCP port the Node process listens on. Caddy proxies to this. |
-| `PUBLIC_URL` | **yes** | `http://localhost:8787` | The externally-visible origin, no trailing slash — e.g. `https://poll.wzrdz.cool`. Used to build the OAuth `redirect_uri`, `client_id`, and `jwks_uri`, and to render share links. Leaving this at the `localhost` default in production breaks OAuth and produces poll links nobody outside the box can open. |
-| `DB_PATH` | no | `./wzrdz-poll.db` | Path to the SQLite file. Point this at a persistent volume outside the deploy directory if you ever redeploy by replacing `/opt/wzrdz-poll` wholesale. |
+| `PUBLIC_URL` | **yes** | `http://localhost:8787` | The externally-visible origin, no trailing slash — e.g. `https://letsmeet.lol`. Used to build the OAuth `redirect_uri`, `client_id`, and `jwks_uri`, and to render share links. Leaving this at the `localhost` default in production breaks OAuth and produces poll links nobody outside the box can open. |
+| `DB_PATH` | no | `./letsmeet.db` | Path to the SQLite file. Point this at a persistent volume outside the deploy directory if you ever redeploy by replacing `/opt/letsmeet` wholesale. |
 | `COOKIE_SECRET` | **yes** | `dev-cookie-secret` | Signs the session cookie (`hono/cookie`'s signed-cookie HMAC). Use a random string, 32+ characters — e.g. `openssl rand -base64 32`. The insecure default is fine for local dev only, and the server refuses to boot on it (see below). |
 | `SESSION_ENC_KEY` | **yes** | `00`×32 (all-zero) | 32-byte AES-256-GCM key, **hex-encoded (64 hex characters)** — this encrypts OAuth session/state rows at rest in the DB (`src/db/sessions.ts` does `Buffer.from(keyHex, 'hex')`). Generate with `openssl rand -hex 32`. The all-zero default is a real key, not a "disabled" sentinel — and, like the cookie default, the server refuses to boot on it. |
 | `OAUTH_JWK` | **yes** (non-loopback `PUBLIC_URL`) | unset | A single ES256 private JWK, as JSON, produced by `npx tsx scripts/genJwk.ts`. Used for `private_key_jwt` client authentication to the PDS/authorization server when `PUBLIC_URL` is a real https origin. Ignored when `PUBLIC_URL` is a loopback address (see the dev sign-in note below). Generate it once and store it in your secrets, not in git. |
-| `LEX_HANDLE` | only when publishing lexicons | unset | The wzrdz.cool atproto account's handle, for `scripts/publishLexicons.ts`. Not read by the server. |
+| `LEX_HANDLE` | only when publishing lexicons | unset | The handle of the lexicon-authority account (see §5 — e.g. wzrdz.cool), for `scripts/publishLexicons.ts`. Not read by the server. |
 | `LEX_APP_PASSWORD` | only when publishing lexicons | unset | An **app password** (not the account password, not OAuth) for that account. Not read by the server. |
-| `LEX_PDS` | no | `https://bsky.social` | The PDS/entryway to authenticate `publishLexicons.ts` against. Only change this if the wzrdz.cool account lives on a self-hosted PDS. |
+| `LEX_PDS` | no | `https://bsky.social` | The PDS/entryway to authenticate `publishLexicons.ts` against. Only change this if the authority account lives on a self-hosted PDS. |
 | `FAKE_PDS` | never in prod | unset | Dev/test-only. `1` swaps every atproto call for an in-process fake repo and mounts a password-free `/dev/login` route. `src/index.ts` prints a warning banner when this is on. **Do not set this in a deployment.** |
 
 Generate the two secrets and the JWK once, keep them in whatever secrets
@@ -103,15 +103,15 @@ Run as an unprivileged user, restart on failure, load secrets from an
 
 ```ini
 [Unit]
-Description=wzrdz-poll
+Description=letsmeet
 After=network-online.target
 
 [Service]
-WorkingDirectory=/opt/wzrdz-poll
-EnvironmentFile=/opt/wzrdz-poll/.env
+WorkingDirectory=/opt/letsmeet
+EnvironmentFile=/opt/letsmeet/.env
 ExecStart=/usr/bin/npx tsx src/index.ts
 Restart=on-failure
-User=wzrdzpoll
+User=letsmeet
 
 [Install]
 WantedBy=multi-user.target
@@ -120,13 +120,13 @@ WantedBy=multi-user.target
 Deploy steps for a new release, in order:
 
 ```bash
-sudo -u wzrdzpoll git -C /opt/wzrdz-poll pull
-sudo -u wzrdzpoll bash -c 'cd /opt/wzrdz-poll && npm ci && npm run build:grid'
-sudo systemctl restart wzrdz-poll
-sudo systemctl status wzrdz-poll --no-pager
+sudo -u letsmeet git -C /opt/letsmeet pull
+sudo -u letsmeet bash -c 'cd /opt/letsmeet && npm ci && npm run build:grid'
+sudo systemctl restart letsmeet
+sudo systemctl status letsmeet --no-pager
 ```
 
-`/opt/wzrdz-poll/.env` holds `PUBLIC_URL`, `DB_PATH`, `COOKIE_SECRET`,
+`/opt/letsmeet/.env` holds `PUBLIC_URL`, `DB_PATH`, `COOKIE_SECRET`,
 `SESSION_ENC_KEY`, `OAUTH_JWK`, and `PORT` if you don't want the default.
 Leave `FAKE_PDS` unset. Make sure `DB_PATH` points somewhere that survives a
 `git pull` (e.g. outside the working tree, or listed in `.gitignore`, which
@@ -135,7 +135,7 @@ Leave `FAKE_PDS` unset. Make sure `DB_PATH` points somewhere that survives a
 ## 3. Caddy
 
 ```
-poll.wzrdz.cool {
+letsmeet.lol {
     encode zstd gzip
     reverse_proxy 127.0.0.1:8787
 }
@@ -166,22 +166,27 @@ degrades to keying everything under whatever the outer proxy sends.
 
 ## 4. Publishing the lexicons
 
-The two custom record schemas (`cool.wzrdz.poll.schedule` and
-`cool.wzrdz.poll.response`, in `lexicons/`) need to be discoverable per the
+The two custom record schemas (`lol.letsmeet.poll.schedule` and
+`lol.letsmeet.poll.response`, in `lexicons/`) need to be discoverable per the
 atproto lexicon-publishing convention: a DNS TXT record naming the owning
 DID, plus a `com.atproto.lexicon.schema` record for each schema in that DID's
 repo. This is a one-time (or one-time-per-schema-change) admin task, not
 something the running server does.
 
-1. **Add the DNS TXT record.** In the `wzrdz.cool` zone, add:
+1. **Add the DNS TXT record.** In the `letsmeet.lol` zone, add:
 
    ```
-   _lexicon.wzrdz.cool.  TXT  "did=did:plc:<the wzrdz.cool account DID>"
+   _lexicon.letsmeet.lol.  TXT  "did=did:plc:<the letsmeet.lol account DID>"
    ```
 
-   Look up the DID with `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=wzrdz.cool` (or whatever handle the account uses) if you don't already have it recorded.
+   The owning DID can be any account you control — no dedicated
+   `letsmeet.lol` account is required. Pointing this at the existing
+   wzrdz.cool account's DID is the expected setup; the TXT record is what
+   makes that DID the authority for `lol.letsmeet.*`. Look up a DID with
+   `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=<handle>`
+   if you don't already have it recorded.
 
-2. **Get an app password.** Log into the wzrdz.cool atproto account and
+2. **Get an app password.** Log into that account and
    create an app password (Settings → App Passwords). Do **not** use the
    account's main password — `publishLexicons.ts` uses `agent.login()`,
    which is fine with an app password and doesn't need OAuth ceremony for a
@@ -190,7 +195,7 @@ something the running server does.
 3. **Run the publish script:**
 
    ```bash
-   LEX_HANDLE=wzrdz.cool LEX_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx \
+   LEX_HANDLE=<authority handle> LEX_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx \
      npx tsx scripts/publishLexicons.ts
    ```
 
@@ -198,8 +203,8 @@ something the running server does.
    lines of output, one per lexicon:
 
    ```
-   published cool.wzrdz.poll.schedule -> at://did:plc:.../com.atproto.lexicon.schema/cool.wzrdz.poll.schedule
-   published cool.wzrdz.poll.response -> at://did:plc:.../com.atproto.lexicon.schema/cool.wzrdz.poll.response
+   published lol.letsmeet.poll.schedule -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.poll.schedule
+   published lol.letsmeet.poll.response -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.poll.response
    ```
 
    The script exits 1 with a usage message if `LEX_HANDLE`/`LEX_APP_PASSWORD`
@@ -209,13 +214,13 @@ something the running server does.
 4. **Verify.**
 
    ```bash
-   dig TXT _lexicon.wzrdz.cool +short
+   dig TXT _lexicon.letsmeet.lol +short
    # -> "did=did:plc:..."
 
-   curl -s 'https://bsky.social/xrpc/com.atproto.repo.getRecord?repo=did:plc:...&collection=com.atproto.lexicon.schema&rkey=cool.wzrdz.poll.schedule' | jq .
+   curl -s 'https://bsky.social/xrpc/com.atproto.repo.getRecord?repo=did:plc:...&collection=com.atproto.lexicon.schema&rkey=lol.letsmeet.poll.schedule' | jq .
    ```
 
-   Repeat the `getRecord` check for `cool.wzrdz.poll.response`. Both should
+   Repeat the `getRecord` check for `lol.letsmeet.poll.response`. Both should
    return the full lexicon JSON with `$type: "com.atproto.lexicon.schema"`
    added.
 
@@ -232,7 +237,7 @@ touches OAuth, record writing, or finalization.
 **Pre-flight — confirm `jwks_uri` actually resolves.** With a real (non-loopback) `PUBLIC_URL`, the OAuth client metadata built in `src/atproto/oauthClient.ts` advertises `token_endpoint_auth_method: 'private_key_jwt'` and a `jwks_uri` of `${PUBLIC_URL}/oauth/jwks.json` — the authorization server fetches that URL to verify the JWTs the app signs with `OAUTH_JWK`. `src/web/routes/auth.ts` serves that route from the client's keyset (public halves only). Check it before testing sign-in:
 
 ```bash
-curl -s https://poll.wzrdz.cool/oauth/jwks.json | jq .
+curl -s https://letsmeet.lol/oauth/jwks.json | jq .
 # -> {"keys":[{"kty":"EC","crv":"P-256","x":"...","y":"...","kid":"...","alg":"ES256",...}]}
 ```
 
@@ -246,14 +251,14 @@ Once that's confirmed:
    exists when `FAKE_PDS=1`).
 3. Create a poll from `/new`. Confirm the create form redirects to the new
    poll's `/p/<rkey>` page.
-4. Verify the `cool.wzrdz.poll.schedule` record actually landed in your own
+4. Verify the `lol.letsmeet.poll.schedule` record actually landed in your own
    PDS — don't just trust the app's cache:
 
    ```bash
-   curl -s 'https://<your-pds>/xrpc/com.atproto.repo.getRecord?repo=<your-did>&collection=cool.wzrdz.poll.schedule&rkey=<rkey>' | jq .
+   curl -s 'https://<your-pds>/xrpc/com.atproto.repo.getRecord?repo=<your-did>&collection=lol.letsmeet.poll.schedule&rkey=<rkey>' | jq .
    ```
 
-   or paste `at://<your-did>/cool.wzrdz.poll.schedule/<rkey>` into
+   or paste `at://<your-did>/lol.letsmeet.poll.schedule/<rkey>` into
    [pdsls.dev](https://pdsls.dev). Confirm `title`, `time`, `status`, and
    `createdAt` match what you entered.
 5. Open the poll's `/p/<rkey>` URL in a **private/incognito window** (no
@@ -263,7 +268,7 @@ Once that's confirmed:
    the design), with `guest.name` set to what you typed:
 
    ```bash
-   curl -s 'https://<host-pds>/xrpc/com.atproto.repo.listRecords?repo=<host-did>&collection=cool.wzrdz.poll.response' | jq .
+   curl -s 'https://<host-pds>/xrpc/com.atproto.repo.listRecords?repo=<host-did>&collection=lol.letsmeet.poll.response' | jq .
    ```
 
    Find the record whose `subject` strongRef points at the schedule record
@@ -294,7 +299,7 @@ Carried over from the design spec (`docs/superpowers/specs/2026-08-31-wzrdz-poll
 
 - **No notifications.** Nobody gets emailed or pinged when a poll is created, someone responds, or a poll is finalized. Hosts and respondents have to check back on the poll page themselves.
 - **No calendar OAuth.** The app never talks to Google/Microsoft calendar APIs (deliberately — "the scope trap"). The only calendar interop is the ICS/webcal export and the `community.lexicon.calendar.event` atproto record on finalize.
-- **OAuth scope is `atproto transition:generic`**, not a narrower `cool.wzrdz.poll.*`-scoped grant — atproto's scope model doesn't yet support per-collection write scoping, so a host's sign-in grants the app the same broad write access any `transition:generic` app gets.
+- **OAuth scope is `atproto transition:generic`**, not a narrower `lol.letsmeet.poll.*`-scoped grant — atproto's scope model doesn't yet support per-collection write scoping, so a host's sign-in grants the app the same broad write access any `transition:generic` app gets.
 - **Response cap is 60 per poll**, fixed in v1 (`GUEST_CAP` in `src/services/responses.ts`). Despite the name it counts *every* response row — guest and signed-in alike — so 60 signed-in responses lock guests out of the same poll entirely. The 61st new guest response is rejected with "this poll is full" (edits to an existing response still go through at the cap); there's no UI to raise it per-poll.
 - **Painting the grid is pointer-only.** The cells respond to mouse/touch drag and nothing else: there is no keyboard interaction and no screen-reader affordance, so keyboard and assistive-technology users cannot submit a response in v1 at all. Planned for v1.1 (focusable cells, arrow-key/space painting, and an accessible non-grid fallback for entering availability).
 

@@ -1,12 +1,12 @@
 import { Lexicons, type LexiconDoc } from '@atproto/lexicon';
-import scheduleLex from '../../lexicons/cool.wzrdz.poll.schedule.json' with { type: 'json' };
-import responseLex from '../../lexicons/cool.wzrdz.poll.response.json' with { type: 'json' };
+import scheduleLex from '../../lexicons/lol.letsmeet.poll.schedule.json' with { type: 'json' };
+import responseLex from '../../lexicons/lol.letsmeet.poll.response.json' with { type: 'json' };
 import strongRefLex from '../../lexicons/com.atproto.repo.strongRef.json' with { type: 'json' };
 import { mergeIntervals, normalizeIso, type Interval } from '../core/intervals.js';
 import type { SpecificDates } from '../core/slots.js';
 
-export const SCHEDULE_NSID = 'cool.wzrdz.poll.schedule';
-export const RESPONSE_NSID = 'cool.wzrdz.poll.response';
+export const SCHEDULE_NSID = 'lol.letsmeet.poll.schedule';
+export const RESPONSE_NSID = 'lol.letsmeet.poll.response';
 
 export const lexicons = new Lexicons(
   [scheduleLex, responseLex, strongRefLex] as unknown as LexiconDoc[],

@@ -36,11 +36,11 @@ export async function createOAuthClient(
           response_types: ['code'],
           application_type: 'web',
           dpop_bound_access_tokens: true,
-          client_name: 'wzrdz-poll (dev)',
+          client_name: 'letsmeet (dev)',
         }
       : {
           client_id: `${pub}/oauth/client-metadata.json`,
-          client_name: 'wzrdz-poll',
+          client_name: 'letsmeet',
           client_uri: pub,
           redirect_uris: [redirectUri],
           scope: SCOPE,

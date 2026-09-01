@@ -7,7 +7,7 @@ export function buildIcs(input: {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//wzrdz-poll//EN',
+    'PRODID:-//letsmeet//EN',
     'BEGIN:VEVENT',
     `UID:${input.uid}`,
     `DTSTAMP:${toBasic(input.now.toISOString())}`,

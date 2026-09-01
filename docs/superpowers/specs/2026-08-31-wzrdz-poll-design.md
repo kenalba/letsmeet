@@ -1,8 +1,8 @@
-# wzrdz-poll — Design Spec
+# letsmeet — Design Spec
 
 **Date:** 2026-08-31
 **Status:** Approved design, pre-implementation
-**What:** An availability-grid scheduling app (When2meet archetype, not the Doodle date-option archetype) built on atproto, hosted at `poll.wzrdz.cool`, with lexicons under `cool.wzrdz.poll.*`.
+**What:** An availability-grid scheduling app (When2meet archetype, not the Doodle date-option archetype) built on atproto, hosted at `letsmeet.lol`, with lexicons under `lol.letsmeet.poll.*`.
 
 ## Product thesis
 
@@ -29,9 +29,9 @@ Three promises on the landing page: no ads, no account wall for participants, no
 
 ## Lexicons
 
-Namespace authority: `wzrdz.cool`. Publish via DNS TXT `_lexicon.wzrdz.cool` → host DID, plus `com.atproto.lexicon.schema` records in that repo.
+Namespace authority: `letsmeet.lol`. Publish via DNS TXT `_lexicon.letsmeet.lol` → host DID, plus `com.atproto.lexicon.schema` records in that repo.
 
-### `cool.wzrdz.poll.schedule` — host's repo, rkey = TID
+### `lol.letsmeet.poll.schedule` — host's repo, rkey = TID
 
 ```
 title        string, ≤200 chars, required
@@ -47,7 +47,7 @@ closesAt     datetime, optional — seam for auto-close later; no v1 UI
 createdAt    datetime, required
 ```
 
-### `cool.wzrdz.poll.response` — respondent's repo; host's repo for guests. rkey = TID
+### `lol.letsmeet.poll.response` — respondent's repo; host's repo for guests. rkey = TID
 
 ```
 subject    strongRef { uri, cid } → the schedule record, required
@@ -68,7 +68,7 @@ Rules:
 
 ## Flows
 
-**Create:** OAuth (scoped to `cool.wzrdz.poll.*` writes) → write schedule record → cache → share URL `poll.wzrdz.cool/p/<rkey>` (pretty pointer to the `at://` URI).
+**Create:** OAuth (scoped to `lol.letsmeet.poll.*` writes) → write schedule record → cache → share URL `letsmeet.lol/p/<rkey>` (pretty pointer to the `at://` URI).
 
 **Respond (signed-in):** OAuth → response record in own repo; upsert on return. App indexes DID → poll.
 
@@ -121,7 +121,7 @@ Recovery property: losing the DB costs host re-logins, any unflushed outbox rows
 
 - TypeScript; `@atproto/oauth-client-node` + first-party SDKs.
 - Single light server (Hono), server-rendered pages, small Preact island for the grid. SQLite.
-- One process behind Caddy at `poll.wzrdz.cool`; runs on the existing home server or any small VPS. Lexicon DNS records on `wzrdz.cool`.
+- One process behind Caddy at `letsmeet.lol`; runs on the existing home server or any small VPS. Lexicon DNS records on `letsmeet.lol`.
 
 ## Explicitly out of scope for v1
 

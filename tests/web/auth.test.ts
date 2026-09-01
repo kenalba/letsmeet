@@ -63,7 +63,7 @@ describe('auth routes', () => {
       const res = await limited.request('/login', {
         method: 'POST',
         headers: { 'x-forwarded-for': '10.0.0.7' },
-        body: new URLSearchParams({ handle: 'ken.wzrdz.cool' }),
+        body: new URLSearchParams({ handle: 'ken.letsmeet.lol' }),
       });
       if (res.status === 429) denied++;
     }
@@ -73,7 +73,7 @@ describe('auth routes', () => {
   it('POST /login redirects to the authorization URL', async () => {
     const res = await app.request('/login', {
       method: 'POST',
-      body: new URLSearchParams({ handle: 'ken.wzrdz.cool' }),
+      body: new URLSearchParams({ handle: 'ken.letsmeet.lol' }),
     });
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('pds.example.com/authorize');
@@ -91,7 +91,7 @@ describe('auth routes', () => {
   it('POST /login does not leak internal error details when authorize() throws', async () => {
     const res = await failingApp.request('/login', {
       method: 'POST',
-      body: new URLSearchParams({ handle: 'ken.wzrdz.cool' }),
+      body: new URLSearchParams({ handle: 'ken.letsmeet.lol' }),
     });
     expect(res.status).toBe(400);
     expect(await res.text()).not.toContain('secret-internal-detail');

@@ -17,7 +17,7 @@ const FAKE_PDS = process.env.FAKE_PDS === '1';
 const env = {
   PORT: Number(process.env.PORT ?? 8787),
   PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8787',
-  DB_PATH: process.env.DB_PATH ?? (FAKE_PDS ? ':memory:' : './wzrdz-poll.db'),
+  DB_PATH: process.env.DB_PATH ?? (FAKE_PDS ? ':memory:' : './letsmeet.db'),
   COOKIE_SECRET: process.env.COOKIE_SECRET ?? 'dev-cookie-secret',
   SESSION_ENC_KEY: process.env.SESSION_ENC_KEY ?? '00'.repeat(32),
   OAUTH_JWK: process.env.OAUTH_JWK,
@@ -83,4 +83,4 @@ setInterval(() => {
 
 const app = createServer(deps, auth, { ...env, devLogin: FAKE_PDS });
 serve({ fetch: app.fetch, port: env.PORT });
-console.log(`wzrdz-poll listening on :${env.PORT} (${env.PUBLIC_URL})`);
+console.log(`letsmeet listening on :${env.PORT} (${env.PUBLIC_URL})`);
