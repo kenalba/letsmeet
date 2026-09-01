@@ -235,11 +235,13 @@ function Grid({ data }: { data: PollData }) {
         // The heatmap tint is the cell's *base*, so it is skipped where the viewer's own
         // paint covers it: an inline background would otherwise beat `.cell.available`'s
         // solid green, and that green has to stay dominant.
+        // Blue, not the brand green: the group's heat and the viewer's own picks must never
+        // share a hue, and blue-vs-green also survives the common red-green colorblindness.
         // Text color stays inherited (--card-foreground): it flips with the theme, and it
         // clears contrast on the tint at every ratio in both palettes — a hardcoded white
         // did not.
         style={!mine && ratio > 0
-          ? { background: `rgba(43,138,95,${(0.15 + 0.85 * ratio).toFixed(3)})` }
+          ? { background: `rgba(59,130,246,${(0.15 + 0.85 * ratio).toFixed(3)})` }
           : undefined}
         onPointerDown={locked ? undefined : onDown(key)}
         title={title}
@@ -322,9 +324,9 @@ function Grid({ data }: { data: PollData }) {
       </div>
       {responders > 0 && (
         <p className="hint">
-          {`Shading counts how many of the ${responders} `
+          {`Blue shading counts how many of the ${responders} `
             + `${responders === 1 ? 'response' : 'responses'} can make each slot`}
-          {locked ? '.' : '; your own cells are outlined.'}
+          {locked ? '.' : '; green is your own selection.'}
         </p>
       )}
       {!data.viewerDid && !locked && (

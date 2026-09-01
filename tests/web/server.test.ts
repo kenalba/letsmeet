@@ -222,23 +222,32 @@ describe('server', () => {
   });
 
   it('neutralizes a script-breaking guest name in the embedded JSON', async () => {
-    const { app, poll } = await setup();
+    const { deps, poll } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
     const evil = '<!--<script>';
-    const posted = await app.request(`/p/${poll.rkey}/respond`, {
+    const posted = await dev.request(`/p/${poll.rkey}/respond`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: evil, available: PAINT }),
     });
     expect(posted.status).toBe(200);
 
-    const body = await (await app.request(`/p/${poll.rkey}`)).text();
+    const body = await (await dev.request(`/p/${poll.rkey}`)).text();
     // The raw sequence must not survive anywhere: inside #poll-data it would flip the
     // HTML tokenizer into script-data-escaped state and swallow the rest of the page.
     expect(body).not.toContain(evil);
     // ...so everything after the JSON block is still parsed as markup.
     expect(body).toContain('src="/assets/grid.js"');
-    // ...and the name still shows up, HTML-escaped, in the responders list.
-    expect(body).toContain('&lt;!--&lt;script&gt;');
+
+    // The responders list is host-only now, so the HTML-escaped rendering of the name is
+    // asserted on the host's view of the page.
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const hostBody = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(hostBody).not.toContain(evil);
+    expect(hostBody).toContain('&lt;!--&lt;script&gt;');
   });
 
   it('returns 400 with a message for unusable paint', async () => {

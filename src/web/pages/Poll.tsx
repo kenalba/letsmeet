@@ -58,7 +58,6 @@ export function PollPage(data: PollPageData) {
     // anything that is not active.
     readonly: !isActive,
   };
-  const showRanked = responses.length > 0 || data.isHost;
   const pending = data.isHost ? data.pendingCount ?? 0 : 0;
 
   return (
@@ -98,51 +97,57 @@ export function PollPage(data: PollPageData) {
           />
         </div>
 
-        <Card className="results">
-          <CardHeader>
-            <h2 className="text-lg font-semibold tracking-tight">Results</h2>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {responses.length === 0 ? (
-              <p className="hint text-sm text-muted-foreground">No responses yet — share this page.</p>
-            ) : null}
-            {showRanked ? (
-              <ol className="ranked list-decimal space-y-2 pl-5 text-sm">
-                {ranked.slice(0, 5).map((r) => (
-                  <li key={r.slot.start}>
-                    <span className="slot font-medium tabular-nums">{fmtRange(r.slot, zone)}</span>
-                    {` — ${r.available.length} available + ${r.ifNeedBe.length} if needed`}
-                    {r.missing.length ? `, missing: ${r.missing.join(', ')}` : null}
-                    {data.isHost && isActive ? (
-                      <form method="post" action={`/p/${data.rkey}/finalize`} className="ml-2 inline">
-                        <input type="hidden" name="start" value={r.slot.start} />
-                        <input type="hidden" name="end" value={r.slot.end} />
-                        <button type="submit" className={buttonVariants({ size: 'sm' })}>
-                          Pick this time
-                        </button>
-                      </form>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-            {responses.length > 0 ? (
-              <>
-                <h3 className="text-sm font-semibold tracking-tight">Responses</h3>
-                <ul className="responders text-sm">
-                  {responses.map((r, i) => (
-                    <li
-                      key={`${r.who}-${i}`}
-                      className={r.pending ? 'py-0.5 pending opacity-60' : 'py-0.5'}
-                    >
-                      {r.pending ? `${r.who} (syncing)` : r.who}
+        {/* Host-only: guests get the whole story from the grid itself (the heatmap, the
+            tallies, and the hover titles with names). What the grid cannot carry is the
+            host's side — picking the final slot, seeing who is *missing* from each top
+            slot, and which guest responses are still syncing to their PDS. */}
+        {data.isHost ? (
+          <Card className="results">
+            <CardHeader>
+              <h2 className="text-lg font-semibold tracking-tight">Finalize</h2>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {responses.length === 0 ? (
+                <p className="hint text-sm text-muted-foreground">No responses yet — share this page.</p>
+              ) : null}
+              {responses.length > 0 ? (
+                <ol className="ranked list-decimal space-y-2 pl-5 text-sm">
+                  {ranked.slice(0, 5).map((r) => (
+                    <li key={r.slot.start}>
+                      <span className="slot font-medium tabular-nums">{fmtRange(r.slot, zone)}</span>
+                      {` — ${r.available.length} available + ${r.ifNeedBe.length} if needed`}
+                      {r.missing.length ? `, missing: ${r.missing.join(', ')}` : null}
+                      {isActive ? (
+                        <form method="post" action={`/p/${data.rkey}/finalize`} className="ml-2 inline">
+                          <input type="hidden" name="start" value={r.slot.start} />
+                          <input type="hidden" name="end" value={r.slot.end} />
+                          <button type="submit" className={buttonVariants({ size: 'sm' })}>
+                            Pick this time
+                          </button>
+                        </form>
+                      ) : null}
                     </li>
                   ))}
-                </ul>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
+                </ol>
+              ) : null}
+              {responses.length > 0 ? (
+                <>
+                  <h3 className="text-sm font-semibold tracking-tight">Responses</h3>
+                  <ul className="responders text-sm">
+                    {responses.map((r, i) => (
+                      <li
+                        key={`${r.who}-${i}`}
+                        className={r.pending ? 'py-0.5 pending opacity-60' : 'py-0.5'}
+                      >
+                        {r.pending ? `${r.who} (syncing)` : r.who}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </Layout>
   );
