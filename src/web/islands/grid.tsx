@@ -41,14 +41,40 @@ function fmtTime(iso: string, zone: string): string {
 }
 
 /**
- * `d` is already a calendar date *in `zone`* (buildGeom bucketed it there) — its weekday is
- * fixed regardless of viewing zone, so anchoring at noon UTC and formatting in UTC reads back
- * that same date `d` for any `zone`: no zone-aware math needed, unlike `fmtTime` below.
+ * `d` is already a calendar date *in the displayed zone* (buildGeom bucketed it there) — its
+ * weekday is fixed regardless of viewing zone, so anchoring at noon UTC and formatting in UTC
+ * reads back that same date `d` for any zone: no zone-aware math needed, unlike `fmtTime`.
+ * Weekday and month-day are separate so the column head can stack them on two deliberate
+ * lines instead of letting "Mon, Sep 14" wrap wherever the column width happens to break it.
  */
-function fmtDate(d: string, zone: string): string {
+function fmtDow(d: string): string {
   return new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+    weekday: 'short', timeZone: 'UTC',
   });
+}
+function fmtDom(d: string): string {
+  return new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  });
+}
+
+/** Axis labels drop the leading zero the in-title `fmtTime` keeps ("6:00 PM", not "06:00 PM"). */
+function fmtAxisTime(iso: string, zone: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: 'numeric', minute: '2-digit', timeZone: zone,
+  });
+}
+
+/**
+ * Minute-of-day of an instant in `zone` — the row axis. Slots on different dates that start
+ * at the same wall-clock time share a row, which is what lets each time be printed once, in
+ * the axis column, instead of inside every cell of every column.
+ */
+function minutesInZone(iso: string, zone: string): number {
+  const [h, m] = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone,
+  }).format(new Date(iso)).split(':').map(Number);
+  return h * 60 + m;
 }
 
 /**
@@ -90,6 +116,20 @@ function Grid({ data }: { data: PollData }) {
   // Columns are bucketed by calendar date *in the displayed zone*, so the whole geometry —
   // not just the labels — is rebuilt when the zone toggles.
   const geom = useMemo(() => buildGeom(data.slots, zone), [zone]);
+  // The shared row axis: every wall-clock start time that occurs on any day, each holding a
+  // sample slot key to format its label from. All days share one window today, so this is
+  // normally exactly the first column's times — but a day that crosses a DST change can
+  // shift, and its odd slots simply get rows of their own (other columns show a blank there).
+  const rows = useMemo(() => {
+    const byMin = new Map<number, string>();
+    for (const keys of geom.columns.values()) {
+      for (const k of keys) {
+        const min = minutesInZone(k, zone);
+        if (!byMin.has(min)) byMin.set(min, k);
+      }
+    }
+    return [...byMin.entries()].sort((a, b) => a[0] - b[0]);
+  }, [geom, zone]);
   const slotByKey = useMemo(() => new Map(data.slots.map((s) => [s.start, s])), []);
   const responders = useMemo(() => countResponders(data.counts), []);
   const locked = data.readonly === true;
@@ -125,8 +165,8 @@ function Grid({ data }: { data: PollData }) {
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    // Cells now contain spans (the time label and the tally), so the topmost element under
-    // the pointer is usually one of those — climb to the cell that owns it.
+    // A cell with a tally has that span as its topmost element — climb to the cell that
+    // owns it. `.cell[data-slot]` also skips the unpaintable `.cell.gap` row-fillers.
     const cell = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
     const key = cell?.dataset.slot;
     if (key) paintTo(key);
@@ -204,7 +244,6 @@ function Grid({ data }: { data: PollData }) {
         onPointerDown={locked ? undefined : onDown(key)}
         title={title}
       >
-        <span className="at">{fmtTime(key, zone)}</span>
         {tally > 0 && (
           <span className="tally">
             {c.available.length}{c.ifNeedBe.length ? `+${c.ifNeedBe.length}` : ''}
@@ -250,18 +289,36 @@ function Grid({ data }: { data: PollData }) {
         >Times shown in {zone}{canSwitchZone ? ' — switch' : ''}</button>
       </div>
       <div
-        // `counted` only widens the cells, and only once there is a tally to fit: an
-        // unanswered poll keeps the narrow columns that fit a phone without scrolling.
-        className={cn('grid', responders > 0 && 'counted', locked && 'readonly')}
+        className={cn('grid', locked && 'readonly')}
         style={{ touchAction: 'none' }}
         onPointerMove={onMove}
       >
-        {geom.dates.map((d) => (
-          <div className="col" key={d}>
-            <div className="col-head">{fmtDate(d, zone)}</div>
-            {geom.columns.get(d)!.map((key) => cell(key))}
-          </div>
-        ))}
+        <div className="col axis">
+          <div className="col-head" />
+          {rows.map(([min, sample]) => (
+            <div key={min} className="axis-label">{fmtAxisTime(sample, zone)}</div>
+          ))}
+        </div>
+        {geom.dates.map((d) => {
+          const byMin = new Map(geom.columns.get(d)!.map((k) => [minutesInZone(k, zone), k]));
+          return (
+            <div className="col" key={d}>
+              <div className="col-head">
+                <span className="dow">{fmtDow(d)}</span>
+                <span className="dom">{fmtDom(d)}</span>
+              </div>
+              {rows.map(([min]) => {
+                const key = byMin.get(min);
+                // No slot at this wall-clock time on this day (DST edge): hold the row
+                // open with an unpaintable blank so the columns stay aligned. No
+                // `data-slot`, so neither the e2e locator nor a drag stroke can hit it.
+                return key
+                  ? cell(key)
+                  : <div key={`gap-${min}`} className="cell gap" aria-hidden="true" />;
+              })}
+            </div>
+          );
+        })}
       </div>
       {responders > 0 && (
         <p className="hint">

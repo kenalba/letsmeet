@@ -273,22 +273,41 @@
     .hint { color: var(--muted-foreground); font-size: 13px; }
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
     .toolbar > div { display: flex; gap: 6px; }
-    .col-head { font-size: 12px; font-weight: 600; padding: 2px 8px; }
-    .grid { display: flex; gap: 4px; overflow-x: auto; touch-action: none; }
-    .col { display: flex; flex-direction: column; }
-    /* Every cell carries the time on the left and, once anyone has answered, the tally on
-       the right — the layout the old read-only "group" cell had, now the only one. The
-       plain --card background is the zero-responses state; anything higher is tinted
-       inline, per slot, by the island. */
+    /* The grid is an axis + columns: times print once, down the left, because every day
+       shares the same window — repeating "06:00 PM" in every cell is what used to force
+       the columns wide enough to scroll. Day heads stack weekday over month-day on two
+       deliberate lines so nothing wraps mid-word. Everything in a column is border-box
+       with a fixed row height, so axis labels and cells stay aligned. */
+    .grid { display: flex; overflow-x: auto; touch-action: none; padding-bottom: 2px; }
+    .col { display: flex; flex-direction: column; flex: 1 0 44px; max-width: 96px; }
+    /* Adjacent 1px borders collapse into single grid lines; the axis column has no
+       borders, so the first date column keeps its own left edge. */
+    .col:not(.axis) + .col { margin-left: -1px; }
+    .col.axis { flex: 0 0 auto; max-width: none; }
+    .col-head {
+      height: 34px; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-end; gap: 2px; padding-bottom: 5px;
+    }
+    .dow { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+    .dom { font-size: 11px; color: var(--muted-foreground); line-height: 1; white-space: nowrap; }
+    .axis-label {
+      height: 24px; display: flex; align-items: center; justify-content: flex-end;
+      padding-right: 8px; font-size: 11px; color: var(--muted-foreground);
+      white-space: nowrap; font-variant-numeric: tabular-nums;
+    }
+    /* Cells carry no text of their own any more — only the tint, the viewer's paint, and
+       (once anyone has answered) the tally; the slot's full range lives in the hover
+       title and the axis. The plain --card background is the zero-responses state;
+       anything higher is tinted inline, per slot, by the island. */
     .cell {
-      display: flex; justify-content: space-between; gap: 8px;
-      border: 1px solid var(--border); padding: 2px 8px; font-size: 12px;
-      user-select: none; cursor: pointer; min-width: 64px;
+      height: 24px; display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); font-size: 11px;
+      user-select: none; cursor: pointer;
       background: var(--card); color: var(--card-foreground);
     }
-    /* Only widened where a tally actually renders, so an unanswered poll keeps columns
-       narrow enough to fit a phone without horizontal scrolling. */
-    .grid.counted .cell { min-width: 84px; }
+    .cell + .cell { margin-top: -1px; }
+    /* Rows a DST-shifted day doesn't have: keep the row height, drop the grid look. */
+    .cell.gap { background: transparent; border-color: transparent; cursor: default; }
     /* The viewer's own paint, drawn over the heatmap tint. Both states are shapes, not
        shades, so neither can be mistaken for "lots of people picked this": solid brand
        green and a hatch. The inset ring in the page background is what separates *your*
