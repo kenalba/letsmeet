@@ -5,7 +5,7 @@ import { createPoll, getPollWithRevalidate } from '../../src/services/polls.js';
 import {
   submitGuestResponse, submitAccountResponse, flushOutbox, GUEST_CAP,
 } from '../../src/services/responses.js';
-import { listResponseCache } from '../../src/db/cache.js';
+import { listResponseCache, listParticipants } from '../../src/db/cache.js';
 import { RESPONSE_NSID, SCHEDULE_NSID } from '../../src/atproto/records.js';
 import type { Deps } from '../../src/atproto/types.js';
 
@@ -89,6 +89,56 @@ describe('submitGuestResponse', () => {
     await expect(submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT }))
       .rejects.toThrow(/not open/);
   });
+
+  it('a later edit is not reverted by a stale queued write', async () => {
+    const { deps, repo, poll } = await setup();
+    repo.failWrites = true;
+    const { editToken } = await submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT });
+    repo.failWrites = false;
+    const V2 = [{ start: '2026-09-02T18:00:00.000Z', end: '2026-09-02T18:30:00.000Z' }];
+    await submitGuestResponse(deps, poll.rkey, { name: 'Sam', editToken, available: V2 });
+    deps.now = () => new Date('2027-01-01T00:00:00Z');
+    await flushOutbox(deps);
+    const recs = await repo.listRecords(HOST, RESPONSE_NSID);
+    expect(recs).toHaveLength(1);
+    expect((recs[0].value as { available: typeof V2 }).available).toEqual(V2);
+  });
+
+  it('rejects an invalid edit token', async () => {
+    const { deps, poll } = await setup();
+    await expect(submitGuestResponse(deps, poll.rkey, {
+      name: 'Sam', available: PAINT, editToken: 'not-a-real-token',
+    })).rejects.toThrow(/invalid edit link/);
+  });
+
+  it('allows editing an existing response even when the poll is at cap', async () => {
+    const { deps, poll } = await setup();
+    let firstToken = '';
+    for (let i = 0; i < GUEST_CAP; i++) {
+      const { editToken } = await submitGuestResponse(deps, poll.rkey, { name: `G${i}`, available: PAINT });
+      if (i === 0) firstToken = editToken;
+    }
+    const V2 = [{ start: '2026-09-02T18:00:00.000Z', end: '2026-09-02T18:30:00.000Z' }];
+    await submitGuestResponse(deps, poll.rkey, { name: 'G0', editToken: firstToken, available: V2 });
+    expect(listResponseCache(deps.db, poll.rkey)).toHaveLength(GUEST_CAP);
+  });
+
+  it('keeps available empty and populates ifNeedBe when only ifNeedBe is painted', async () => {
+    const { deps, repo, poll } = await setup();
+    await submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: [], ifNeedBe: PAINT });
+    const recs = await repo.listRecords(HOST, RESPONSE_NSID);
+    expect(recs).toHaveLength(1);
+    const value = recs[0].value as { available: unknown[]; ifNeedBe: unknown[] };
+    expect(value.available).toEqual([]);
+    expect(value.ifNeedBe).toEqual(PAINT);
+  });
+
+  it('rejects responses to a tombstoned poll', async () => {
+    const { deps, repo, poll } = await setup();
+    repo.delete(HOST, SCHEDULE_NSID, poll.rkey);
+    await expect(submitGuestResponse(deps, poll.rkey, { name: 'Sam', available: PAINT }))
+      .rejects.toThrow(/poll not found/);
+  });
 });
 
 describe('submitAccountResponse', () => {
@@ -101,5 +151,13 @@ describe('submitAccountResponse', () => {
     const recs = await repo.listRecords('did:plc:sam', RESPONSE_NSID);
     expect(recs).toHaveLength(1);
     expect((recs[0].value as { guest?: unknown }).guest).toBeUndefined();
+  });
+
+  it('adds the participant and clears pending after a successful write', async () => {
+    const { deps, poll } = await setup();
+    await submitAccountResponse(deps, 'did:plc:sam', poll.rkey, { available: PAINT });
+    expect(listParticipants(deps.db, poll.rkey)).toContain('did:plc:sam');
+    const cache = listResponseCache(deps.db, poll.rkey).find((r) => r.key === 'did:plc:sam');
+    expect(cache?.pending).toBe(false);
   });
 });

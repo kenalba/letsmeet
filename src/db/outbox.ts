@@ -14,6 +14,9 @@ export function enqueueOutbox(
   item: { hostDid: string; pollUri: string; rkey: string; record: object },
   now: number,
 ): number {
+  db.prepare(
+    "UPDATE outbox SET done = 1, last_error = 'superseded' WHERE done = 0 AND host_did = ? AND rkey = ?",
+  ).run(item.hostDid, item.rkey);
   const res = db.prepare(
     `INSERT INTO outbox (host_did, poll_uri, rkey, record_json, next_attempt_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,

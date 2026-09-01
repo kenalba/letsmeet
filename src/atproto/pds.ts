@@ -55,7 +55,7 @@ export class PublicPdsReader implements RepoReader {
       u.searchParams.set('limit', '100');
       if (cursor) u.searchParams.set('cursor', cursor);
       const res = await this.fetchImpl(u);
-      if (!res.ok) return out;
+      if (!res.ok) throw new Error(`listRecords failed for ${did}: ${res.status}`);
       const body = (await res.json()) as { records: FoundRecord[]; cursor?: string };
       out.push(...body.records);
       cursor = body.cursor;

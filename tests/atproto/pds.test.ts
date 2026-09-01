@@ -49,4 +49,8 @@ describe('PublicPdsReader', () => {
   it('listRecords returns the records array', async () => {
     expect(await reader.listRecords('did:plc:abc', 'c')).toHaveLength(1);
   });
+  it('listRecords throws on a non-OK page instead of returning partial results', async () => {
+    const r = new PublicPdsReader(fakeFetch({ 'https://plc.directory/did:plc:abc': plcDoc }));
+    await expect(r.listRecords('did:plc:abc', 'c')).rejects.toThrow(/listRecords failed/);
+  });
 });

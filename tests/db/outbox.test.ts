@@ -24,6 +24,14 @@ describe('outbox', () => {
     expect(dueOutbox(db, 999999)).toHaveLength(0);
     expect(pendingOutboxCount(db, 'did:plc:host')).toBe(0);
   });
+  it('a new enqueue for the same (host, rkey) supersedes the old undone row', () => {
+    const db = openDb(':memory:');
+    enqueueOutbox(db, item, 1000);
+    enqueueOutbox(db, { ...item, record: { $type: 'cool.wzrdz.poll.response', v: 2 } }, 2000);
+    const due = dueOutbox(db, 999999);
+    expect(due).toHaveLength(1);
+    expect(due[0].record).toEqual({ $type: 'cool.wzrdz.poll.response', v: 2 });
+  });
   it('failures back off exponentially and cap at 6h', () => {
     const db = openDb(':memory:');
     const id = enqueueOutbox(db, item, 0);
