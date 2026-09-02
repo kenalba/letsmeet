@@ -452,7 +452,9 @@
     /* Two-way toggles — the paint mode in the toolbar, who's answering at the name field —
        are prompt text, not ring buttons: a context word, then `> option` `> option`. The
        chosen one is ink with a 2px underline in what it stands for (green: available, or
-       the identity; amber: if need be), the other grey; hover underlines in grey. */
+       the identity; amber: if need be), the other grey; hover underlines in grey. The
+       paint-mode pair leads with a swatch instead of the `>`: swatch plus underline is
+       enough, and the prompt on top of them was one mark too many. */
     .modes { display: flex; flex-wrap: wrap; align-items: baseline; }
     /* The context word is an entry in the time axis's column: sized to it by the island
        (inline min-width) and set like an axis label — 11px, muted, right-aligned, 8px off

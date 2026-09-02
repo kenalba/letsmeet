@@ -536,16 +536,16 @@ function Grid({ data }: { data: PollData }) {
     <div>
       <div className="toolbar">
         <div className="modes" role="group" aria-label="mark as">
-          {/* Prompt text with the brush colour underlined, like the identity toggle below:
-              green under available, amber under if need be, so the line says which paint
-              you are holding. */}
+          {/* Like the identity toggle below, but the swatch stands in for the `>` prompt:
+              the brush colour is under the chosen one — green for available, amber for if
+              need be — so swatch and line together say which paint you are holding. */}
           <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>mark as</span>
           <span className="opts">
             {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                className={cn('prompt pixel-label toggle', id)}
+                className={cn('pixel-label toggle', id)}
                 aria-pressed={mode === id}
                 disabled={locked}
                 onClick={() => setMode(id)}
