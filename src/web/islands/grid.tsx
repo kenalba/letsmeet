@@ -177,11 +177,9 @@ function Grid({ data }: { data: PollData }) {
   const locked = data.readonly === true;
   // The canvas: while someone is marking — unsaved marks, or no saved answer yet — the
   // heat steps back and their cells fill, so the grid reads as a place to draw rather than
-  // a finished chart. Saving brings the heat back (their marks drop to the band), as does
-  // "show everyone". The host reads results and never gets it.
-  const [showAll, setShowAll] = useState(false);
-  const canvasAuto = !locked && !data.isHost && (!paintEquals(painted, saved) || !data.prefill);
-  const canvas = canvasAuto && !showAll;
+  // a finished chart. Saving brings the heat back and their marks drop to the band. The
+  // host reads results and never gets it.
+  const canvas = !locked && !data.isHost && (!paintEquals(painted, saved) || !data.prefill);
   const dirty = !paintEquals(painted, saved)
     || name.trim() !== (data.prefill?.name ?? '').trim();
   const canSave = dirty && painted.size > 0 && (!!data.viewerDid || !!name.trim());
@@ -555,14 +553,6 @@ function Grid({ data }: { data: PollData }) {
         {/* What used to be a line under the title: the slot length and the zone the grid is
             in, at the toolbar's right, with the switch when the viewer's zone differs. */}
         <div className="zoneinfo">
-          {canvasAuto && (
-            <button
-              type="button"
-              className="prompt pixel-label toggle peek"
-              aria-pressed={showAll}
-              onClick={() => setShowAll((v) => !v)}
-            >{showAll ? 'show mine' : 'show everyone'}</button>
-          )}
           <span className="hint">{slotMinutes}-minute slots · times in {zone}</span>
           {canSwitchZone && (
             <button
