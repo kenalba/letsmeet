@@ -469,15 +469,6 @@ function Grid({ data }: { data: PollData }) {
           );
         })}
       </div>
-      {responders > 0 && (
-        <p className="hint">
-          {`blue shading counts how many of the ${responders} `
-            + `${responders === 1 ? 'response' : 'responses'} can make each slot`}
-          {locked
-            ? '.'
-            : ', your unsaved paint included. the green outline is you; amber hatching is your if-need-be.'}
-        </p>
-      )}
       {!data.viewerDid && !locked && (
         <div className="whoami">
           {/* Two equal ways to answer, at the one place a guest says who they are. The
