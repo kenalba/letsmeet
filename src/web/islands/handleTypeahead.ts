@@ -49,6 +49,9 @@ export function attachHandleTypeahead(input: HTMLInputElement, list: HTMLUListEl
     const hit = hits[i];
     if (!hit) return;
     input.value = hit.handle;
+    // Setting .value fires nothing; whoever watches the field (the grid's submit button)
+    // needs to hear about it.
+    input.dispatchEvent(new Event('input', { bubbles: true }));
     close();
     input.focus();
   };

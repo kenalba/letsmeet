@@ -441,7 +441,15 @@
        are prompt text, not ring buttons: a context word, then `> option` `> option`. The
        chosen one is ink with a 2px underline in what it stands for (green: available, or
        the identity; amber: if need be), the other grey; hover underlines in grey. */
-    .modes { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; }
+    .modes { display: flex; flex-wrap: wrap; align-items: baseline; }
+    /* The context word is an entry in the time axis's column: sized to it by the island
+       (inline min-width) and set like an axis label — 11px, muted, right-aligned, 8px off
+       the cells — so the first option starts flush with the first cell. */
+    .modes .ctx {
+      flex: 0 0 auto; box-sizing: border-box; padding-right: 8px; text-align: right;
+      font-size: 11px; color: var(--muted-foreground); white-space: nowrap;
+    }
+    .modes .opts { display: flex; flex-wrap: wrap; gap: 14px; }
     .whoami .modes { margin-top: 12px; }
     .toggle {
       background: none; border: 0; padding: 0 0 2px; cursor: pointer;
@@ -459,7 +467,6 @@
     .whoami .row .field { flex: 1 1 200px; min-width: 0; }
     .whoami .row input { margin-top: 0; max-width: none; height: 36px; border-radius: 0; }
     .whoami .row .save { margin-top: 0; flex: 0 0 auto; }
-    .whoami .row .helper { flex: 1 0 100%; margin: 0; }
     .edit-link code { word-break: break-all; }
     .responders .chip[data-who] { cursor: pointer; }
     .responders .chip.lit .text-foreground,

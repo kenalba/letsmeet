@@ -369,10 +369,16 @@ test('a guest can sign in at the name field and the paint is saved on return', a
   // The inline field is the login page's: same suggestions (the fake roster), same route.
   await toggle('bluesky').click();
   const handle = guest.locator('#handle');
+  const signIn = guest.locator('form.handle button[type=submit]');
   await handle.fill('ali');
+  // Not a handle yet: nothing to submit. Picking a suggestion makes it one.
+  await expect(signIn).toBeDisabled();
   await expect(guest.getByRole('option').first()).toBeVisible();
-  await guest.keyboard.press('Escape');
-  await guest.locator('form.handle button[type=submit]').click();
+  await guest.keyboard.press('ArrowDown');
+  await guest.keyboard.press('Enter');
+  await expect(handle).toHaveValue(/\./);
+  await expect(signIn).toBeEnabled();
+  await signIn.click();
   await expect(guest).toHaveURL(/\/login/);
   // The fake PDS signs in through /dev/login; coming back is a plain visit to the poll,
   // where the paint is already saved: no name field, no save button to press.

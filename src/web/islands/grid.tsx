@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
@@ -135,6 +135,14 @@ function Grid({ data }: { data: PollData }) {
   // and both values survive switching back and forth.
   const [identity, setIdentity] = useState<'guest' | 'bluesky'>('guest');
   const [handle, setHandle] = useState('');
+  // The "paint" and "reply as" labels are as wide as the time axis, so "> available" and
+  // "> guest" start where the cells do. The axis is sized by its labels, which change with
+  // the zone: measure.
+  const [axisWidth, setAxisWidth] = useState<number>();
+  useLayoutEffect(() => {
+    const axis = gridEl.current?.querySelector<HTMLElement>('.col.axis');
+    if (axis) setAxisWidth(axis.getBoundingClientRect().width);
+  }, [zone]);
   const handleInput = useRef<HTMLInputElement>(null);
   const handleList = useRef<HTMLUListElement>(null);
   useEffect(() => {
@@ -410,17 +418,19 @@ function Grid({ data }: { data: PollData }) {
           {/* Prompt text with the brush colour underlined, like the identity toggle below:
               green under available, amber under if need be, so the line says which paint
               you are holding. */}
-          <span className="hint">paint</span>
-          {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={cn('prompt pixel-label toggle', id)}
-              aria-pressed={mode === id}
-              disabled={locked}
-              onClick={() => setMode(id)}
-            >{label}</button>
-          ))}
+          <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>paint</span>
+          <span className="opts">
+            {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={cn('prompt pixel-label toggle', id)}
+                aria-pressed={mode === id}
+                disabled={locked}
+                onClick={() => setMode(id)}
+              >{label}</button>
+            ))}
+          </span>
         </div>
         {/* Only when there is something to switch: a viewer in the poll's own zone needs no
             telling, and the page's hint names the zone the list below is in. */}
@@ -473,19 +483,23 @@ function Grid({ data }: { data: PollData }) {
         <div className="whoami">
           {/* Two equal ways to answer, at the one place a guest says who they are. The
               header link and a note above the grid were both too easy to scroll past. */}
-          <div className="modes" role="group" aria-label="answering as">
-            <span className="hint">answering as</span>
+          <div className="modes" role="group" aria-label="reply as">
+            {/* Sized to the time axis like "paint" above, so "> guest" lines up with the
+                cells too. */}
+            <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>reply as</span>
             {/* Prompt text, not ring buttons: this sits in a line of prose. The selected
                 one is ink with a green underline, the other grey — a two-tab tab bar. */}
-            {(['guest', 'bluesky'] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                className="prompt pixel-label toggle"
-                aria-pressed={identity === id}
-                onClick={() => setIdentity(id)}
-              >{id}</button>
-            ))}
+            <span className="opts">
+              {(['guest', 'bluesky'] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="prompt pixel-label toggle"
+                  aria-pressed={identity === id}
+                  onClick={() => setIdentity(id)}
+                >{id}</button>
+              ))}
+            </span>
           </div>
           {identity === 'guest' ? (
             /* The same row shape as the bluesky side, so nothing moves when the toggle
@@ -507,8 +521,6 @@ function Grid({ data }: { data: PollData }) {
                 className={cn(buttonVariants({ variant: 'default' }), 'save')}
                 disabled={saving || !canSave}
               >save availability</button>
-              {/* One helper line on each side, so the toggle never changes the height. */}
-              <p className="hint helper">your name is shown on this poll.</p>
             </form>
           ) : (
             /* The sign-in page's form, inline: same route, same typeahead. The paint goes
@@ -537,14 +549,22 @@ function Grid({ data }: { data: PollData }) {
                   autoCapitalize="none"
                   required
                   defaultValue={handle}
-                  onInput={(e) => setHandle(e.currentTarget.value)}
+                  onInput={(e) => {
+                    // A pasted "@handle" loses its @: the route resolves bare handles.
+                    const el = e.currentTarget;
+                    if (el.value.startsWith('@')) el.value = el.value.slice(1);
+                    setHandle(el.value);
+                  }}
                 />
                 <ul ref={handleList} id="handle-suggestions" hidden />
               </div>
-              <button type="submit" className={cn(buttonVariants({ variant: 'default' }), 'save')}>
+              <button
+                type="submit"
+                className={cn(buttonVariants({ variant: 'default' }), 'save')}
+                disabled={!validHandle(handle)}
+              >
                 sign in &amp; save
               </button>
-              <p className="hint helper">any atproto account works, not just bluesky.</p>
             </form>
           )}
         </div>
@@ -595,6 +615,14 @@ function writeEditSecret(rkey: string, token: string | null): boolean {
     return true;
   } catch { return false; }
 }
+
+/**
+ * Something that could resolve as a handle: dotted labels of letters, digits and hyphens,
+ * the last one not all digits. Mirrors @atproto/syntax's isValidHandle without pulling the
+ * package into the bundle; the route does the real resolution.
+ */
+const HANDLE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+const validHandle = (h: string) => h.length <= 253 && HANDLE.test(h.trim());
 
 /**
  * Unsaved paint carried across the sign-in round trip: same tab, gone once read. `save`
