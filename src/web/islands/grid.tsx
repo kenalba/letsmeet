@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
-  paintEquals, liveTally, paintEdges,
+  paintEquals, liveTally,
   type PaintMap, type PaintMode, type SlotCount,
 } from '../../core/gridModel.js';
 import type { Interval } from '../../core/intervals.js';
@@ -94,11 +94,6 @@ function countOthers(counts: Record<string, SlotCount> | undefined, self?: strin
   return names.size;
 }
 
-const EDGE = 3;
-const EDGE_SHADOW = {
-  top: `inset 0 ${EDGE}px 0 0`, bottom: `inset 0 -${EDGE}px 0 0`,
-  left: `inset ${EDGE}px 0 0 0`, right: `inset -${EDGE}px 0 0 0`,
-} as const;
 
 /** How long a finger rests on a cell before it paints instead of scrolling. Under the
  * browsers' own long-press (~500ms), so no callout or context menu races it. */
@@ -106,9 +101,8 @@ const HOLD_MS = 350;
 
 /**
  * One grid, not two. Every cell is tinted by how many people can make that slot, counting
- * the viewer's own unsaved paint as they go, and the viewer's paint is drawn as an outline
- * around each painted run (green for available, amber for if-need-be, which also carries a
- * faint hatch) rather than a fill — so the tint and the tally stay readable inside it.
+ * the viewer's own unsaved marks as they go. Colour is meaning: yellow for everyone else,
+ * blue for the viewer, green where they meet (see `cell`); if-need-be is a blue hatch.
  */
 function Grid({ data }: { data: PollData }) {
   const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || data.timezone;
@@ -371,35 +365,32 @@ function Grid({ data }: { data: PollData }) {
       ? saved.available.includes(spotlight.who) ? 'lit'
         : saved.ifNeedBe.includes(spotlight.who) ? 'lit-soft' : null
       : null;
-    const ratio = responders > 0 ? c.available.length / responders : 0;
+    // Everyone else, for the colour: the viewer's own mark is the blue, not part of the heat.
+    const others = c.available.length - (mine === 'available' ? 1 : 0);
+    const ratio = responders > 0 ? Math.min(1, others / responders) : 0;
     const tally = c.available.length + c.ifNeedBe.length;
     const title = responders === 0 ? range : [
       range,
       `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`,
       c.ifNeedBe.length ? `If need be: ${c.ifNeedBe.join(', ')}` : '',
     ].filter(Boolean).join('\n');
-    const edges = mine ? paintEdges(painted, key, {
-      top: colMaps[ci].get(rows[ri - 1]?.[0]), bottom: colMaps[ci].get(rows[ri + 1]?.[0]),
-      left: colMaps[ci - 1]?.get(rows[ri][0]), right: colMaps[ci + 1]?.get(rows[ri][0]),
-    }) : [];
-    const edgeColor = mine === 'available' ? 'var(--primary)' : 'var(--lol-bright)';
+    // Colour is meaning: yellow is everyone else, deeper the more of them can make it;
+    // blue is you; where you meet them the two mix to green, at their depth, so the fullest
+    // green is the slot that works. Your if-need-be keeps the heat and lays a blue hatch
+    // over it (stylesheet). Text stays --card-foreground: it clears every mix in both
+    // palettes. Only the colour is inline, so the hatch image still layers over it.
+    const depth = `${Math.round(30 + 70 * ratio)}%`;
+    const background = mine === 'available'
+      ? others > 0
+        ? `color-mix(in oklab, var(--both) ${depth}, var(--card))`
+        : 'color-mix(in oklab, var(--mine) 55%, var(--card))'
+      : others > 0 ? `color-mix(in oklab, var(--heat) ${depth}, var(--card))` : undefined;
     return (
       <div
         key={key}
         data-slot={key}
         className={cn('cell', mine, lit)}
-        // Blue, not the brand green: the group's heat and the viewer's own picks must never
-        // share a hue, and blue-vs-green also survives the common red-green colorblindness.
-        // Only the colour is set inline, so the stylesheet's hatch image for if-need-be
-        // still layers over it. Text color stays inherited (--card-foreground): it flips
-        // with the theme, and it clears contrast on the tint at every ratio in both
-        // palettes — a hardcoded white did not.
-        style={{
-          backgroundColor: ratio > 0 ? `rgba(59,130,246,${(0.15 + 0.85 * ratio).toFixed(3)})` : undefined,
-          boxShadow: edges.length
-            ? edges.map((side) => `${EDGE_SHADOW[side]} ${edgeColor}`).join(', ')
-            : undefined,
-        }}
+        style={{ backgroundColor: background }}
         onPointerDown={locked ? undefined : onDown(key)}
         onPointerUp={locked ? undefined : onUp(key)}
         title={title}
@@ -539,9 +530,8 @@ function Grid({ data }: { data: PollData }) {
     <div>
       <div className="toolbar">
         <div className="modes" role="group" aria-label="mark as">
-          {/* Prompt text with the brush colour underlined, like the identity toggle below:
-              green under available, amber under if need be, so the line says which paint
-              you are holding. */}
+          {/* Prompt text like the identity toggle below, underlined in blue — your colour on
+              the grid — under whichever you hold; the swatch says solid or hatched. */}
           <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>mark as</span>
           <span className="opts">
             {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
