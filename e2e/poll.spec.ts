@@ -338,3 +338,38 @@ test('touch: a swipe scrolls the grid, a held finger paints it', async ({ page, 
   await expect(painted).toHaveCount(4);
   await guestContext.close();
 });
+
+/**
+ * The sign-in alternative sits at the name field, after painting, so the paint has to
+ * survive the trip: stashed for the tab on the way out, restored on the way back in.
+ */
+test("a guest's paint survives signing in at the name field", async ({ page, browser }) => {
+  const suffix = test.info().project.name.replace(/[^a-z0-9]/gi, '');
+  await page.goto(`/dev/login?did=did:plc:e2efork${suffix}`);
+  const pollUrl = await createPoll(page, {
+    title: 'Fork test', dates: FIXTURE_DATE_1, windowStart: '17:00', windowEnd: '18:00', slotMinutes: '30',
+  });
+
+  const { context: guestContext, page: guest } = await newGuest(browser);
+  await guest.goto(pollUrl);
+  const cells = guest.locator('#grid-root [data-slot]');
+  await cells.nth(0).click();
+  await cells.nth(1).click();
+  await expect(guest.locator('.cell.available')).toHaveCount(2);
+  await guest.locator('.whoami a', { hasText: 'sign in with bluesky' }).click();
+  await expect(guest).toHaveURL(/\/login\?returnTo=/);
+  // The fake PDS signs in through /dev/login; coming back is a plain visit to the poll.
+  await guest.goto(`/dev/login?did=did:plc:e2eforkguest${suffix}`);
+  await guest.goto(pollUrl);
+  await expect(guest.locator('.cell.available')).toHaveCount(2);
+  await expect(guest.locator('.name input')).toHaveCount(0);
+  await expect(guest.getByText('your paint from before signing in is back')).toBeVisible();
+  await expect(guest.locator('button.save')).toBeEnabled();
+  await guest.click('button.save');
+  await expect(guest.getByText('response stored')).toBeVisible();
+  // Read once, then gone: a reload shows the saved answer, not a second restore.
+  await guest.reload();
+  await expect(guest.locator('.cell.available')).toHaveCount(2);
+  await expect(guest.getByText('your paint from before signing in is back')).toHaveCount(0);
+  await guestContext.close();
+});

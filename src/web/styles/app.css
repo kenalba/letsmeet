@@ -380,7 +380,12 @@
     /* Adjacent 1px borders collapse into single grid lines; the axis column has no
        borders, so the first date column keeps its own left edge. */
     .col:not(.axis) + .col { margin-left: -1px; }
-    .col.axis { flex: 0 0 auto; max-width: none; }
+    /* The time axis stays put while the days scroll under it (a phone's grid is wider than
+       its screen): opaque, and above the cells, so nothing shows through. */
+    .col.axis {
+      flex: 0 0 auto; max-width: none;
+      position: sticky; left: 0; z-index: 2; background: var(--background);
+    }
     .col-head {
       height: 34px; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-end; gap: 2px; padding-bottom: 5px;
@@ -433,6 +438,8 @@
     /* The grid ends flush with its last row; the actions below it need their own air. */
     button.save { margin-top: 12px; }
     .name { margin-top: 12px; }
+    /* The sign-in alternative hangs off the name field, one line, one link. */
+    .whoami .or { margin-top: 6px; }
     .edit-link code { word-break: break-all; }
     .responders .chip[data-who] { cursor: pointer; }
     .responders .chip.lit .text-foreground,

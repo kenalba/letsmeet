@@ -166,12 +166,10 @@ describe('server', () => {
     expect(res.status).toBe(200);
     expect(body).toContain('Movie night');
     expect(body).toContain('poll-data');
-    expect(body).toContain('shown on this poll');
-    // A signed-out viewer is offered the account path right where they choose how to
-    // answer, ahead of the grid, and it brings them back to this poll.
-    expect(body).toContain('answering as a guest');
+    // A signed-out viewer's header link signs in and comes back to this poll. The fork
+    // at the name field is the island's, so it is not in the server's HTML.
     expect(body).toMatch(new RegExp(
-      `<a[^>]*class="prompt[^"]*"[^>]*href="/login\\?returnTo=${encodeURIComponent(`/p/${poll.rkey}`).replace(/%/g, '%')}"[^>]*>sign in with bluesky</a>`,
+      `href="/login\\?returnTo=${encodeURIComponent(`/p/${poll.rkey}`)}"[^>]*>sign in with bluesky</a>`,
     ));
     // The island's mount point, its data block and its bundle are one contract: drop any
     // one of them and the grid silently never appears.
@@ -374,8 +372,7 @@ describe('server', () => {
     expect(posted.status).toBe(200);
 
     const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
-    // Signed in: no guest fork, no sign-in link.
-    expect(body).not.toContain('answering as a guest');
+    // Signed in: no sign-in link anywhere.
     expect(body).not.toContain('sign in with bluesky');
     expect(body).toContain('"prefill"');
     expect(body).toContain(PAINT[0].start);

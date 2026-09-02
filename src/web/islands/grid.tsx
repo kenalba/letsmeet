@@ -125,7 +125,13 @@ function Grid({ data }: { data: PollData }) {
     data.prefill
       ? intervalsToPaint(data.prefill.available, data.prefill.ifNeedBe, data.slots)
       : new Map(), []);
-  const [painted, setPainted] = useState<PaintMap>(saved);
+  // Paint stashed on the way to sign-in (the fork at the name field) comes back here, signed
+  // in or not, over whatever the server had; it is cleared once read.
+  const draft = useMemo(() => takeDraft(data.rkey, data.slots), []);
+  const [painted, setPainted] = useState<PaintMap>(draft ?? saved);
+  useEffect(() => {
+    if (draft) setStatus('your paint from before signing in is back. save it when you\u2019re ready.');
+  }, []);
 
   // Columns are bucketed by calendar date *in the displayed zone*, so the whole geometry —
   // not just the labels — is rebuilt when the zone toggles.
@@ -461,11 +467,29 @@ function Grid({ data }: { data: PollData }) {
         </p>
       )}
       {!data.viewerDid && !locked && (
-        <label className="name">
-          your name <span className="note">(shown on this poll)</span>
-          {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
-          <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
-        </label>
+        <div className="whoami">
+          <label className="name">
+            your name <span className="note">(shown on this poll)</span>
+            {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
+            <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          </label>
+          {/* The other way to answer, right where a name is asked for: the header link is
+              too quiet and a note above the grid gets scrolled past. The paint goes along
+              (sessionStorage, same tab) and is back once the sign-in returns to this poll. */}
+          <p className="hint or">
+            or{' '}
+            <a
+              className="prompt text-foreground"
+              href={`/login?returnTo=${encodeURIComponent(`/p/${data.rkey}`)}`}
+              onClick={() => stashDraft(
+                data.rkey,
+                paintToIntervals(painted, data.slots, 'available'),
+                paintToIntervals(painted, data.slots, 'ifNeedBe'),
+              )}
+            >sign in with bluesky</a>
+            {' '}to answer as yourself. your paint comes along.
+          </p>
+        </div>
       )}
       {!locked && (
         <button
@@ -512,6 +536,22 @@ function writeEditSecret(rkey: string, token: string | null): boolean {
     else localStorage.removeItem(editKey(rkey));
     return true;
   } catch { return false; }
+}
+
+/** Unsaved paint carried across the sign-in round trip: same tab, gone once read. */
+const draftKey = (rkey: string) => `letsmeet.draft.${rkey}`;
+type Intervals = ReturnType<typeof paintToIntervals>;
+function stashDraft(rkey: string, available: Intervals, ifNeedBe: Intervals): void {
+  try { sessionStorage.setItem(draftKey(rkey), JSON.stringify({ available, ifNeedBe })); } catch { /* then it is lost, as before */ }
+}
+function takeDraft(rkey: string, slots: PollData['slots']): PaintMap | null {
+  try {
+    const raw = sessionStorage.getItem(draftKey(rkey));
+    if (!raw) return null;
+    sessionStorage.removeItem(draftKey(rkey));
+    const d = JSON.parse(raw) as { available?: Intervals; ifNeedBe?: Intervals };
+    return intervalsToPaint(d.available ?? [], d.ifNeedBe ?? [], slots);
+  } catch { return null; }
 }
 
 const dataEl = document.getElementById('poll-data');

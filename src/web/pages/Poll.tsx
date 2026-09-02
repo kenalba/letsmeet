@@ -121,16 +121,6 @@ export function PollPage(data: PollPageData) {
         </div>
 
         <div className="flex flex-col gap-3">
-          {/* The fork in the road for a signed-out viewer, put before the grid so nobody
-              paints first and loses it to the sign-in redirect. The header's "sign in" is
-              too quiet to carry this: the name field below reads as the only way. */}
-          {isActive && signInHref ? (
-            <p className="name-note text-sm text-muted-foreground">
-              you're answering as a guest: you'll give a name when you save, and it's shown on this poll.{' '}
-              <a className="prompt text-foreground" href={signInHref}>sign in with bluesky</a>
-              {' '}to answer as yourself instead.
-            </p>
-          ) : null}
           <div id="grid-root" />
           <script
             id="poll-data"
