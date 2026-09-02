@@ -390,6 +390,6 @@ test('a guest can sign in at the name field and the paint is saved on return', a
   // Read once, then gone: after the reload the saved answer is what shows, quietly.
   await expect(guest.locator('button.save')).toBeDisabled({ timeout: 10_000 });
   await expect(guest.locator('.cell.available')).toHaveCount(2);
-  await expect(guest.getByText('your paint from before signing in')).toHaveCount(0);
+  await expect(guest.getByText('your marks from before signing in')).toHaveCount(0);
   await guestContext.close();
 });

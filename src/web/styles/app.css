@@ -346,7 +346,8 @@
  * `.ifNeedBe` paint drawn on top of that tint. See the `.cell` rules below.
  */
 @layer island {
-  #grid-root {
+  /* The reply block renders through a portal into #reply-root, below the chips: same rules. */
+  #grid-root, #reply-root {
     p { margin: 6px 0; }
     label { display: block; margin: 10px 0; font-size: 14px; }
     input {
@@ -402,6 +403,7 @@
        title and the axis. The plain --card background is the zero-responses state;
        anything higher is tinted inline, per slot, by the island. */
     .cell {
+      position: relative;
       height: 24px; display: flex; align-items: center; justify-content: center;
       border: 1px solid var(--border); font-size: 11px;
       user-select: none; cursor: pointer;
@@ -420,6 +422,13 @@
         45deg, color-mix(in srgb, var(--lol-bright) 45%, transparent) 0 3px, transparent 3px 7px
       );
     }
+    /* Your own marks carry a corner flag in the brush colour, on top of the run outline,
+       so they read as yours over any amount of heat. */
+    .cell.available::after, .cell.ifNeedBe::after {
+      content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0;
+      border-top: 8px solid var(--primary); border-left: 8px solid transparent;
+    }
+    .cell.ifNeedBe::after { border-top-color: var(--lol-bright); }
     /* Closed/cancelled polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
     /* Spotlight: one responder's answer, from their chip. Their cells get an ink outline
@@ -459,6 +468,19 @@
     .toggle[aria-pressed="true"] { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--primary-ink); }
     .toggle.ifNeedBe[aria-pressed="true"] { box-shadow: inset 0 -2px 0 0 var(--lol-bright); }
     .toggle:disabled { cursor: default; opacity: .5; }
+    /* The paint each option applies, as a swatch, so the toggle reads as a brush to pick
+       rather than a place to go; if-need-be's shows its hatch. */
+    .toggle .swatch {
+      display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -1px;
+      border: 1px solid var(--primary); background: var(--primary);
+    }
+    .toggle.ifNeedBe .swatch {
+      border-color: var(--lol-bright); background-color: var(--card);
+      background-image: repeating-linear-gradient(
+        45deg, color-mix(in srgb, var(--lol-bright) 60%, transparent) 0 2px, transparent 2px 4px
+      );
+    }
+    .toolbar .zoneinfo { margin-left: auto; display: flex; align-items: center; gap: 8px; }
     .toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
     /* One row on either side of the toggle: the field takes the width, the button its own,
        both the button's 36px, square like the button — so flipping the toggle moves
@@ -477,11 +499,19 @@
 
 /* The island's "response stored." line, in the display face like every other status line. */
 @layer island {
-  #grid-root .status {
+  :is(#grid-root, #reply-root) .status {
     font-family: var(--font-pixel);
     font-size: 11px;
     line-height: 22px;
     color: var(--primary);
     -webkit-font-smoothing: none;
   }
+}
+
+@layer island {
+  /* The reply block is a second tier below the grid and the chips: a hairline, then who
+     you are, the field, the button. Hidden when the island has nothing to put there. */
+  #reply-root { padding-top: 16px; border-top: 1px solid var(--border); }
+  #reply-root:empty { display: none; }
+  #reply-root .whoami .modes { margin-top: 0; }
 }

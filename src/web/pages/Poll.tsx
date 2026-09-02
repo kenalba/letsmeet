@@ -75,7 +75,7 @@ export function PollPage(data: PollPageData) {
       title={pageTitle(data.title)}
       description={data.description ?? `${fmtSlotLength(data.time.slotMinutes)} slots · ${
         data.results.responses.length === 1 ? '1 response' : `${data.results.responses.length} responses`
-      } so far. paint the times you're free.`}
+      } so far. mark the times you're free.`}
       canonical={data.publicUrl ? `${data.publicUrl}${path}` : undefined}
       scripts={GRID_SCRIPTS}
       signInHref={signInHref}
@@ -115,12 +115,6 @@ export function PollPage(data: PollPageData) {
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
-          <p className="hint pixel-label text-muted-foreground">
-            {/* The grid's own zone is the island's business: it names it, and offers the
-                switch, only when the viewer's differs. This line covers what the island
-                can't see, the ranked list below the grid. */}
-            {`${fmtSlotLength(data.time.slotMinutes)} slots · listed times are in the poll's timezone (${zone}).`}
-          </p>
           {isActive ? null : (
             <p className="hint text-sm text-muted-foreground">
               {`this poll is ${data.status}. responses are closed.`}
@@ -171,6 +165,9 @@ export function PollPage(data: PollPageData) {
             ))}
           </p>
         ) : null}
+        {/* The island puts the reply block (who you are, the field, the button) here,
+            below the chips, so the page reads grid → who answered → your reply → the pick. */}
+        <div id="reply-root" />
 
         {/* Host-only: what the grid cannot carry is the host's side — picking the final
             slot, seeing who is *missing* from each top slot, and which guest responses
@@ -179,6 +176,8 @@ export function PollPage(data: PollPageData) {
           <Card className="results">
             <CardHeader>
               <h2 className="pixel-heading">pick the winner</h2>
+              {/* The grid may be showing the viewer's zone; this list is always the poll's. */}
+              <p className="hint text-sm text-muted-foreground">{`times in ${zone}`}</p>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {responses.length === 0 ? (

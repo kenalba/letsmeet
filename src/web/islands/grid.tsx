@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
   paintEquals, liveTally, paintEdges,
@@ -351,10 +352,11 @@ function Grid({ data }: { data: PollData }) {
   useEffect(() => {
     if (!draft) return;
     if (draft.save && data.viewerDid) void submit();
-    else setStatus('your paint from before signing in is back. save it when you\u2019re ready.');
+    else setStatus('your marks from before signing in are back. save them when you\u2019re ready.');
   }, []);
 
   const canSwitchZone = viewerZone !== data.timezone;
+  const slotMinutes = Math.round((Date.parse(data.slots[0]!.end) - Date.parse(data.slots[0]!.start)) / 60000);
 
   const cell = (key: string, ci: number, ri: number) => {
     const end = slotByKey.get(key)!.end;
@@ -411,74 +413,11 @@ function Grid({ data }: { data: PollData }) {
     );
   };
 
-  return (
-    <div>
-      <div className="toolbar">
-        <div className="modes" role="group" aria-label="paint mode">
-          {/* Prompt text with the brush colour underlined, like the identity toggle below:
-              green under available, amber under if need be, so the line says which paint
-              you are holding. */}
-          <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>paint</span>
-          <span className="opts">
-            {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={cn('prompt pixel-label toggle', id)}
-                aria-pressed={mode === id}
-                disabled={locked}
-                onClick={() => setMode(id)}
-              >{label}</button>
-            ))}
-          </span>
-        </div>
-        {/* Only when there is something to switch: a viewer in the poll's own zone needs no
-            telling, and the page's hint names the zone the list below is in. */}
-        {canSwitchZone && (
-          <button
-            type="button"
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
-            title={`switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`}
-            onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
-          >times shown in {zone} · switch</button>
-        )}
-      </div>
-      {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
-      {!locked && (
-        <p className="hint touch-hint">tap a slot to paint it. hold, then drag, for a block. swipe to scroll.</p>
-      )}
-      <div
-        ref={gridEl}
-        className={cn('grid', locked && 'readonly', spotlight && 'spotlight')}
-        onPointerMove={onMove}
-      >
-        <div className="col axis">
-          <div className="col-head" />
-          {rows.map(([min, sample]) => (
-            <div key={min} className="axis-label">{fmtAxisTime(sample, zone)}</div>
-          ))}
-        </div>
-        {geom.dates.map((d, ci) => {
-          const byMin = colMaps[ci];
-          return (
-            <div className="col" key={d}>
-              <div className="col-head">
-                <span className="dow">{fmtDow(d)}</span>
-                <span className="dom">{fmtDom(d)}</span>
-              </div>
-              {rows.map(([min], ri) => {
-                const key = byMin.get(min);
-                // No slot at this wall-clock time on this day (DST edge): hold the row
-                // open with an unpaintable blank so the columns stay aligned. No
-                // `data-slot`, so neither the e2e locator nor a drag stroke can hit it.
-                return key
-                  ? cell(key, ci, ri)
-                  : <div key={`gap-${min}`} className="cell gap" aria-hidden="true" />;
-              })}
-            </div>
-          );
-        })}
-      </div>
+  // Who you are, the field and the button, the status and the edit link: rendered below
+  // the server's chips (see #reply-root in Poll.tsx) so the page reads grid → who answered
+  // → your reply. Inline if the slot is missing.
+  const reply = (
+    <>
       {!data.viewerDid && !locked && (
         <div className="whoami">
           {/* Two equal ways to answer, at the one place a guest says who they are. The
@@ -593,6 +532,81 @@ function Grid({ data }: { data: PollData }) {
           onClick={() => location.reload()}
         >show results</button>
       )}
+    </>
+  );
+
+  return (
+    <div>
+      <div className="toolbar">
+        <div className="modes" role="group" aria-label="mark as">
+          {/* Prompt text with the brush colour underlined, like the identity toggle below:
+              green under available, amber under if need be, so the line says which paint
+              you are holding. */}
+          <span className="ctx" style={axisWidth ? { minWidth: axisWidth } : undefined}>mark as</span>
+          <span className="opts">
+            {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={cn('prompt pixel-label toggle', id)}
+                aria-pressed={mode === id}
+                disabled={locked}
+                onClick={() => setMode(id)}
+              ><i className="swatch" aria-hidden="true" />{label}</button>
+            ))}
+          </span>
+        </div>
+        {/* What used to be a line under the title: the slot length and the zone the grid is
+            in, at the toolbar's right, with the switch when the viewer's zone differs. */}
+        <div className="zoneinfo">
+          <span className="hint">{slotMinutes}-minute slots · times in {zone}</span>
+          {canSwitchZone && (
+            <button
+              type="button"
+              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
+              title={`switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`}
+              onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
+            >switch to {zone === viewerZone ? data.timezone : viewerZone}</button>
+          )}
+        </div>
+      </div>
+      {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
+      {!locked && (
+        <p className="hint touch-hint">tap a slot to mark it. hold, then drag, for a block. swipe to scroll.</p>
+      )}
+      <div
+        ref={gridEl}
+        className={cn('grid', locked && 'readonly', spotlight && 'spotlight')}
+        onPointerMove={onMove}
+      >
+        <div className="col axis">
+          <div className="col-head" />
+          {rows.map(([min, sample]) => (
+            <div key={min} className="axis-label">{fmtAxisTime(sample, zone)}</div>
+          ))}
+        </div>
+        {geom.dates.map((d, ci) => {
+          const byMin = colMaps[ci];
+          return (
+            <div className="col" key={d}>
+              <div className="col-head">
+                <span className="dow">{fmtDow(d)}</span>
+                <span className="dom">{fmtDom(d)}</span>
+              </div>
+              {rows.map(([min], ri) => {
+                const key = byMin.get(min);
+                // No slot at this wall-clock time on this day (DST edge): hold the row
+                // open with an unpaintable blank so the columns stay aligned. No
+                // `data-slot`, so neither the e2e locator nor a drag stroke can hit it.
+                return key
+                  ? cell(key, ci, ri)
+                  : <div key={`gap-${min}`} className="cell gap" aria-hidden="true" />;
+              })}
+            </div>
+          );
+        })}
+      </div>
+      {REPLY_ROOT ? createPortal(reply, REPLY_ROOT) : reply}
     </div>
   );
 }
@@ -645,6 +659,7 @@ function takeDraft(rkey: string, slots: PollData['slots']): { paint: PaintMap; s
   } catch { return null; }
 }
 
+const REPLY_ROOT = document.getElementById('reply-root');
 const dataEl = document.getElementById('poll-data');
 const mount = document.getElementById('grid-root');
 if (dataEl?.textContent && mount) {
