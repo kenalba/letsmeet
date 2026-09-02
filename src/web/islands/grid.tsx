@@ -497,18 +497,35 @@ function Grid({ data }: { data: PollData }) {
             ))}
           </div>
           {identity === 'guest' ? (
-            <label className="name">
-              your name <span className="note">(shown on this poll)</span>
-              {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
-              <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
-            </label>
+            /* The same row shape as the bluesky side, so nothing moves when the toggle
+               flips: the field takes the width, the button its own, both the button's
+               height. No visible label: the placeholder says it, a hidden one names it. */
+            <form
+              className="row name"
+              onSubmit={(e) => { e.preventDefault(); if (canSave && !saving) void submit(); }}
+            >
+              <input
+                className="field"
+                aria-label="your name"
+                placeholder="your name"
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+              />
+              <button
+                type="submit"
+                className={cn(buttonVariants({ variant: 'default' }), 'save')}
+                disabled={saving || !canSave}
+              >save availability</button>
+              {/* One helper line on each side, so the toggle never changes the height. */}
+              <p className="hint helper">your name is shown on this poll.</p>
+            </form>
           ) : (
             /* The sign-in page's form, inline: same route, same typeahead. The paint goes
                along for the tab (sessionStorage) with a note to save it on return. */
             <form
               method="post"
               action="/login"
-              className="handle"
+              className="row handle"
               onSubmit={() => stashDraft(
                 data.rkey,
                 paintToIntervals(painted, data.slots, 'available'),
@@ -517,12 +534,12 @@ function Grid({ data }: { data: PollData }) {
               )}
             >
               <input type="hidden" name="returnTo" value={`/p/${data.rkey}`} />
-              <label className="name" htmlFor="handle">your bluesky handle</label>
-              <div className="relative">
+              <div className="relative field">
                 <input
                   ref={handleInput}
                   id="handle"
                   name="handle"
+                  aria-label="your bluesky handle"
                   placeholder="you.bsky.social"
                   autoComplete="username"
                   spellCheck={false}
@@ -536,11 +553,12 @@ function Grid({ data }: { data: PollData }) {
               <button type="submit" className={cn(buttonVariants({ variant: 'default' }), 'save')}>
                 sign in &amp; save
               </button>
+              <p className="hint helper">any atproto account works, not just bluesky.</p>
             </form>
           )}
         </div>
       )}
-      {!locked && (data.viewerDid || identity === 'guest') && (
+      {!locked && data.viewerDid && (
         <button
           className={cn(buttonVariants({ variant: 'default' }), 'save')}
           type="button"

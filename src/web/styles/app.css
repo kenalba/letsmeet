@@ -437,7 +437,6 @@
     .tally { font-variant-numeric: tabular-nums; opacity: .85; }
     /* The grid ends flush with its last row; the actions below it need their own air. */
     button.save { margin-top: 12px; }
-    .name { margin-top: 12px; }
     /* Two-way toggles — the paint mode in the toolbar, who's answering at the name field —
        are prompt text, not ring buttons: a context word, then `> option` `> option`. The
        chosen one is ink with a 2px underline in what it stands for (green: available, or
@@ -448,13 +447,19 @@
       background: none; border: 0; padding: 0 0 2px; cursor: pointer;
       color: var(--muted-foreground); box-shadow: inset 0 -2px 0 0 transparent;
     }
-    .toggle:hover:not(:disabled) { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--border); }
+    .toggle:not([aria-pressed="true"]):hover:not(:disabled) { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--border); }
     .toggle[aria-pressed="true"] { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--primary-ink); }
     .toggle.ifNeedBe[aria-pressed="true"] { box-shadow: inset 0 -2px 0 0 var(--lol-bright); }
     .toggle:disabled { cursor: default; opacity: .5; }
     .toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-    .whoami form.handle { display: grid; gap: 6px; }
-    .whoami form.handle .name { margin-bottom: 0; }
+    /* One row on either side of the toggle: the field takes the width, the button its own,
+       both the button's 36px, square like the button — so flipping the toggle moves
+       nothing below it. */
+    .whoami .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+    .whoami .row .field { flex: 1 1 200px; min-width: 0; }
+    .whoami .row input { margin-top: 0; max-width: none; height: 36px; border-radius: 0; }
+    .whoami .row .save { margin-top: 0; flex: 0 0 auto; }
+    .whoami .row .helper { flex: 1 0 100%; margin: 0; }
     .edit-link code { word-break: break-all; }
     .responders .chip[data-who] { cursor: pointer; }
     .responders .chip.lit .text-foreground,
