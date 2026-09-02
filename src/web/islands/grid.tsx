@@ -115,6 +115,9 @@ function Grid({ data }: { data: PollData }) {
   const [name, setName] = useState(data.prefill?.name ?? '');
   const [status, setStatus] = useState<string | null>(null);
   const [editLink, setEditLink] = useState<{ url: string; remembered: boolean } | null>(null);
+  // One responder's saved answer, lit up on the grid: hovering their chip below the grid
+  // does it in passing, tapping or clicking pins it (there is no hover on a phone).
+  const [spotlight, setSpotlight] = useState<{ who: string; pinned: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   // What the server already has for this viewer; the save button lights up only when the
   // grid (or a guest's name) differs from it.
@@ -166,6 +169,40 @@ function Grid({ data }: { data: PollData }) {
     if (press.current) window.clearTimeout(press.current.timer);
     press.current = null;
   };
+
+  // The chips are server-rendered outside this island; listen to them from here.
+  useEffect(() => {
+    const chips = Array.from(document.querySelectorAll<HTMLElement>('.responders .chip[data-who]'));
+    const offs = chips.flatMap((chip) => {
+      const who = chip.dataset.who!;
+      const enter = () => setSpotlight((cur) => cur?.pinned ? cur : { who, pinned: false });
+      const leave = () => setSpotlight((cur) => cur?.pinned ? cur : null);
+      const toggle = (e: Event) => {
+        // The account chip's link still goes to the profile; the brackets around it pin.
+        if (e.target instanceof HTMLAnchorElement) return;
+        setSpotlight((cur) => cur?.pinned && cur.who === who ? null : { who, pinned: true });
+      };
+      chip.addEventListener('mouseenter', enter);
+      chip.addEventListener('mouseleave', leave);
+      chip.addEventListener('focusin', enter);
+      chip.addEventListener('focusout', leave);
+      chip.addEventListener('click', toggle);
+      return [() => {
+        chip.removeEventListener('mouseenter', enter);
+        chip.removeEventListener('mouseleave', leave);
+        chip.removeEventListener('focusin', enter);
+        chip.removeEventListener('focusout', leave);
+        chip.removeEventListener('click', toggle);
+      }];
+    });
+    return () => offs.forEach((off) => off());
+  }, []);
+  useEffect(() => {
+    document.querySelectorAll<HTMLElement>('.responders .chip[data-who]').forEach((chip) => {
+      chip.classList.toggle('lit', chip.dataset.who === spotlight?.who);
+      chip.classList.toggle('pinned', !!spotlight?.pinned && chip.dataset.who === spotlight.who);
+    });
+  }, [spotlight]);
 
   // A pointer released off the grid (or cancelled by the OS) must still end the stroke.
   useEffect(() => {
@@ -295,6 +332,12 @@ function Grid({ data }: { data: PollData }) {
     // Everyone else's saved answer plus the viewer's current paint, so the numbers keep up
     // with the brush: "with you, 3 of 4 can make this".
     const c = liveTally(data.counts?.[key] ?? NO_COUNT, data.self, mine);
+    // The spotlight follows saved answers (what the chips list), not the live repaint.
+    const saved = data.counts?.[key] ?? NO_COUNT;
+    const lit = spotlight
+      ? saved.available.includes(spotlight.who) ? 'lit'
+        : saved.ifNeedBe.includes(spotlight.who) ? 'lit-soft' : null
+      : null;
     const ratio = responders > 0 ? c.available.length / responders : 0;
     const tally = c.available.length + c.ifNeedBe.length;
     const title = responders === 0 ? range : [
@@ -311,7 +354,7 @@ function Grid({ data }: { data: PollData }) {
       <div
         key={key}
         data-slot={key}
-        className={cn('cell', mine)}
+        className={cn('cell', mine, lit)}
         // Blue, not the brand green: the group's heat and the viewer's own picks must never
         // share a hue, and blue-vs-green also survives the common red-green colorblindness.
         // Only the colour is set inline, so the stylesheet's hatch image for if-need-be
@@ -378,7 +421,7 @@ function Grid({ data }: { data: PollData }) {
       )}
       <div
         ref={gridEl}
-        className={cn('grid', locked && 'readonly')}
+        className={cn('grid', locked && 'readonly', spotlight && 'spotlight')}
         onPointerMove={onMove}
       >
         <div className="col axis">

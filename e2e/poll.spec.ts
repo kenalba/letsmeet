@@ -168,6 +168,18 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   // host sees the response and finalizes the top slot
   await page.reload();
   await expect(page.locator('.responders').getByText('Sam')).toBeVisible();
+  // Hovering Sam's chip spotlights the two cells Sam painted; a click pins the spotlight
+  // so it survives the pointer leaving, and a second click lets go.
+  const chip = page.locator('.chip[data-who="Sam"]');
+  await chip.hover();
+  await expect(page.locator('.cell.lit')).toHaveCount(2);
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.cell.lit')).toHaveCount(0);
+  await chip.click();
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.cell.lit')).toHaveCount(2);
+  await chip.click();
+  await expect(page.locator('.cell.lit')).toHaveCount(0);
   await page.locator('form[action$="/finalize"] button').first().click();
   await expect(page.getByText(/happening|decided|finalized/i)).toBeVisible();
   await expect(page.locator('a.ics[href$="/ics"]')).toBeVisible();

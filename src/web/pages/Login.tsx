@@ -13,9 +13,9 @@ import { Label } from '../ui/label.js';
  */
 export function LoginPage({ error, returnTo }: { error?: string; returnTo?: string }) {
   return (
-    <Layout title={pageTitle('sign in')} scripts={LOGIN_SCRIPTS}>
+    <Layout title={pageTitle('sign in with bluesky')} scripts={LOGIN_SCRIPTS}>
       <div className="mx-auto grid max-w-md gap-6">
-        <h1 className="pixel-heading">sign in</h1>
+        <h1 className="pixel-heading">sign in with bluesky</h1>
         <Card>
           <CardHeader>
             <CardTitle>your atproto account</CardTitle>
@@ -38,7 +38,7 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                   state after it) can put the visitor back where they came from. */}
               {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               <div className="grid gap-2">
-                <Label htmlFor="handle">your handle</Label>
+                <Label htmlFor="handle">your bluesky handle</Label>
                 <Input
                   id="handle"
                   name="handle"

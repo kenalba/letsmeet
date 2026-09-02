@@ -118,7 +118,7 @@ export function Layout({ title, description, canonical, children, scripts, signI
                   className="prompt pixel-label mr-2 text-muted-foreground no-underline hover:text-foreground"
                   href={signInHref}
                 >
-                  sign in
+                  sign in with bluesky
                 </a>
               ) : null}
               {/*

@@ -417,6 +417,14 @@
     }
     /* Closed/cancelled polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
+    /* Spotlight: one responder's answer, from their chip. Their cells get an ink outline
+       (solid available, dashed if-need-be) and everything else dims; ink rather than a
+       status colour, so it can't be read as heat, you, or if-need-be. */
+    .grid .cell:not(.gap) { transition: opacity .12s; }
+    .grid.spotlight .cell:not(.gap):not(.lit):not(.lit-soft) { opacity: .35; }
+    .cell.lit { outline: 2px solid var(--foreground); outline-offset: -2px; }
+    .cell.lit-soft { outline: 2px dashed var(--foreground); outline-offset: -2px; }
+    @media (prefers-reduced-motion: reduce) { .grid .cell:not(.gap) { transition: none; } }
     /* `.cell.group` and `.cell.hatch` are gone with the Me/Group split. The hatch is now
        exclusively "you said if-need-be"; the group's if-need-be count lives in the tally
        (`2+1`) and the hover title, because a second identical hatch meaning *someone else*
@@ -426,6 +434,10 @@
     button.save { margin-top: 12px; }
     .name { margin-top: 12px; }
     .edit-link code { word-break: break-all; }
+    .responders .chip[data-who] { cursor: pointer; }
+    .responders .chip.lit .text-foreground,
+    .responders .chip.lit a { text-decoration: underline; text-underline-offset: 3px; }
+    .responders .chip.pinned { color: var(--foreground); }
   }
 }
 

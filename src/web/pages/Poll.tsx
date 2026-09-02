@@ -141,7 +141,8 @@ export function PollPage(data: PollPageData) {
 
         {/* Who has answered, as bracketed chips: guests by the name they gave, accounts
             by handle with the `>` prompt, linking to their profile. Everyone sees this —
-            the same names are already in every cell's hover title. */}
+            the same names are already in every cell's hover title. `data-who` is the name
+            the island tallies by: hovering (or tapping) a chip spotlights that answer. */}
         {responses.length > 0 ? (
           <p className="responders pixel-label flex flex-wrap items-baseline gap-x-3">
             <span className="text-muted-foreground">
@@ -150,6 +151,7 @@ export function PollPage(data: PollPageData) {
             {responses.map((r, i) => (
               <span
                 key={`${r.who}-${i}`}
+                data-who={r.who}
                 className={cn('chip text-muted-foreground', r.pending && 'pending opacity-60')}
                 title={r.pending ? 'still syncing to the host’s repo' : undefined}
               >

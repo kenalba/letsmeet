@@ -779,7 +779,7 @@ describe('page chrome', () => {
     expect(page).toMatch(/property="og:description" content="30-minute slots · 0 responses so far[^"]*"/);
 
     const login = await (await app.request('/login')).text();
-    expect(login).toContain('<title>sign in · letsmeet.lol</title>');
+    expect(login).toContain('<title>sign in with bluesky · letsmeet.lol</title>');
   });
 });
 
