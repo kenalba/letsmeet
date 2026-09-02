@@ -90,22 +90,25 @@ export function PollPage(data: PollPageData) {
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="pixel-heading">{data.title}</h1>
-            <button
-              type="button"
-              data-copy-path={path}
-              hidden
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              copy share link
-            </button>
-            {data.isHost && isActive ? (
-              <a
-                href={`/p/${data.rkey}/edit`}
+            {/* Actions at the right edge, away from the title they act on. */}
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                data-copy-path={path}
+                hidden
                 className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
-                edit
-              </a>
-            ) : null}
+                copy share link
+              </button>
+              {data.isHost && isActive ? (
+                <a
+                  href={`/p/${data.rkey}/edit`}
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
+                  edit
+                </a>
+              ) : null}
+            </div>
           </div>
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>
