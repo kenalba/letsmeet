@@ -489,14 +489,13 @@ function Grid({ data }: { data: PollData }) {
               header link and a note above the grid were both too easy to scroll past. */}
           <div className="modes" role="group" aria-label="answering as">
             <span className="hint">answering as</span>
+            {/* Prompt text, not ring buttons: this sits in a line of prose. The selected
+                one is ink with a green underline, the other grey — a two-tab tab bar. */}
             {(['guest', 'bluesky'] as const).map((id) => (
               <button
                 key={id}
                 type="button"
-                className={cn(
-                  buttonVariants({ variant: identity === id ? 'default' : 'outline', size: 'sm' }),
-                  'mode',
-                )}
+                className="prompt pixel-label toggle"
                 aria-pressed={identity === id}
                 onClick={() => setIdentity(id)}
               >{id}</button>

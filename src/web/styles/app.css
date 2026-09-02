@@ -438,9 +438,19 @@
     /* The grid ends flush with its last row; the actions below it need their own air. */
     button.save { margin-top: 12px; }
     .name { margin-top: 12px; }
-    /* Who's answering: a two-way toggle over the field it swaps. */
-    .whoami .modes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
-    .whoami .modes .hint { margin-right: 4px; }
+    /* Who's answering: a two-way toggle over the field it swaps. Prompt text rather than
+       ring buttons, since it sits in a line of prose: selected is ink with a 2px green
+       underline, the other grey, hover underlines in grey. (The paint modes stay ring
+       buttons: they live in the toolbar with the zone button.) */
+    .whoami .modes { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; margin-top: 12px; }
+    .whoami .toggle {
+      background: none; border: 0; padding: 0 0 2px; cursor: pointer;
+      color: var(--muted-foreground); box-shadow: inset 0 -2px 0 0 transparent;
+      transition: color .12s, box-shadow .12s;
+    }
+    .whoami .toggle:hover { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--border); }
+    .whoami .toggle[aria-pressed="true"] { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--primary-ink); }
+    .whoami .toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
     .whoami form.handle { display: grid; gap: 6px; }
     .whoami form.handle .name { margin-bottom: 0; }
     .edit-link code { word-break: break-all; }
