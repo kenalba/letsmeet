@@ -180,6 +180,9 @@ function Grid({ data }: { data: PollData }) {
   // a finished chart. Saving brings the heat back and their marks drop to the band. The
   // host reads results and never gets it.
   const canvas = !locked && !data.isHost && (!paintEquals(painted, saved) || !data.prefill);
+  // The host reads the plain heat; their own answer is a chip hover away. Their marks show
+  // only while unsaved, so marking still has something to look at.
+  const ownVisible = !data.isHost || !paintEquals(painted, saved);
   const dirty = !paintEquals(painted, saved)
     || name.trim() !== (data.prefill?.name ?? '').trim();
   const canSave = dirty && painted.size > 0 && (!!data.viewerDid || !!name.trim());
@@ -392,7 +395,7 @@ function Grid({ data }: { data: PollData }) {
       <div
         key={key}
         data-slot={key}
-        className={cn('cell', mine, lit)}
+        className={cn('cell', ownVisible && mine, lit)}
         style={{ backgroundColor: alpha > 0 ? `rgba(59,130,246,${alpha.toFixed(3)})` : undefined }}
         onPointerDown={locked ? undefined : onDown(key)}
         onPointerUp={locked ? undefined : onUp(key)}
