@@ -76,12 +76,6 @@
      4.5:1 against white, which is not enough for 11px pixel type, so text/borders take one
      step darker. Dark mode's primary is already light enough and reuses it. */
   --primary-ink: oklch(0.5 0.105 159.68);
-  /* The grid's three meanings: yellow for everyone else's availability, blue for the
-     viewer's own marks, green where the two meet — yellow and blue, mixed. The island mixes
-     each into the card colour at a depth set by how many can make the slot. */
-  --heat: oklch(0.88 0.17 95);
-  --mine: oklch(0.6 0.16 255);
-  --both: oklch(0.72 0.17 150);
   --primary-foreground: oklch(0.985 0.001 106.423);
   --secondary: oklch(0.97 0.001 106.424);
   --secondary-foreground: oklch(0.216 0.006 56.043);
@@ -131,9 +125,6 @@
     --popover-foreground: oklch(0.985 0.001 106.423);
     --primary: oklch(0.702 0.121 159.68);
     --primary-ink: oklch(0.702 0.121 159.68);
-    --heat: oklch(0.82 0.15 95);
-    --mine: oklch(0.66 0.14 255);
-    --both: oklch(0.72 0.15 150);
     --primary-foreground: oklch(0.216 0.006 56.043);
     --secondary: oklch(0.268 0.007 34.298);
     --secondary-foreground: oklch(0.985 0.001 106.423);
@@ -173,9 +164,6 @@
   --popover-foreground: oklch(0.985 0.001 106.423);
   --primary: oklch(0.702 0.121 159.68);
   --primary-ink: oklch(0.702 0.121 159.68);
-  --heat: oklch(0.82 0.15 95);
-  --mine: oklch(0.66 0.14 255);
-  --both: oklch(0.72 0.15 150);
   --primary-foreground: oklch(0.216 0.006 56.043);
   --secondary: oklch(0.268 0.007 34.298);
   --secondary-foreground: oklch(0.985 0.001 106.423);
@@ -424,14 +412,23 @@
     .cell + .cell { margin-top: -1px; }
     /* Rows a DST-shifted day doesn't have: keep the row height, drop the grid look. */
     .cell.gap { background: transparent; border-color: transparent; cursor: default; }
-    /* The viewer's own marks are the blue in the cell colour (see `cell` in the island);
-       if-need-be lays a blue hatch over whatever heat is there, so the two states differ
-       in shape, not just hue. */
+    /* The viewer's own paint is an outline, not a fill. The island traces each painted
+       run along its outer edges (inset box-shadows on the boundary cells only — see
+       `paintEdges` in core/gridModel.ts), green for available and amber for if-need-be,
+       so the heat tint and the tally stay readable inside. If-need-be also carries a
+       faint hatch over the tint: the two states differ in shape, not just hue. */
     .cell.ifNeedBe {
       background-image: repeating-linear-gradient(
-        45deg, color-mix(in srgb, var(--mine) 55%, transparent) 0 3px, transparent 3px 7px
+        45deg, color-mix(in srgb, var(--lol-bright) 45%, transparent) 0 3px, transparent 3px 7px
       );
     }
+    /* Your own marks carry a corner flag in the brush colour, on top of the run outline,
+       so they read as yours over any amount of heat. */
+    .cell.available::after, .cell.ifNeedBe::after {
+      content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0;
+      border-top: 8px solid var(--primary); border-left: 8px solid transparent;
+    }
+    .cell.ifNeedBe::after { border-top-color: var(--lol-bright); }
     /* Closed/cancelled polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
     /* Spotlight: one responder's answer, from their chip. Their cells get an ink outline
@@ -469,19 +466,18 @@
     }
     .toggle:not([aria-pressed="true"]):hover:not(:disabled) { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--border); }
     .toggle[aria-pressed="true"] { color: var(--foreground); box-shadow: inset 0 -2px 0 0 var(--primary-ink); }
-    /* The mark-as toggles underline in blue, the viewer's colour on the grid. */
-    .toolbar .toggle[aria-pressed="true"] { box-shadow: inset 0 -2px 0 0 var(--mine); }
+    .toggle.ifNeedBe[aria-pressed="true"] { box-shadow: inset 0 -2px 0 0 var(--lol-bright); }
     .toggle:disabled { cursor: default; opacity: .5; }
     /* The paint each option applies, as a swatch, so the toggle reads as a brush to pick
        rather than a place to go; if-need-be's shows its hatch. */
     .toggle .swatch {
       display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -1px;
-      border: 1px solid var(--mine); background: var(--mine);
+      border: 1px solid var(--primary); background: var(--primary);
     }
     .toggle.ifNeedBe .swatch {
-      background-color: var(--card);
+      border-color: var(--lol-bright); background-color: var(--card);
       background-image: repeating-linear-gradient(
-        45deg, color-mix(in srgb, var(--mine) 60%, transparent) 0 2px, transparent 2px 4px
+        45deg, color-mix(in srgb, var(--lol-bright) 60%, transparent) 0 2px, transparent 2px 4px
       );
     }
     .toolbar .zoneinfo { margin-left: auto; display: flex; align-items: center; gap: 8px; }
