@@ -407,36 +407,31 @@ function Grid({ data }: { data: PollData }) {
     <div>
       <div className="toolbar">
         <div className="modes" role="group" aria-label="paint mode">
-          <button
-            type="button"
-            className={cn(
-              buttonVariants({ variant: mode === 'available' ? 'default' : 'outline', size: 'sm' }),
-              mode === 'available' ? 'mode active' : 'mode',
-            )}
-            aria-pressed={mode === 'available'}
-            disabled={locked}
-            onClick={() => setMode('available')}
-          >available</button>
-          <button
-            type="button"
-            className={cn(
-              buttonVariants({ variant: mode === 'ifNeedBe' ? 'default' : 'outline', size: 'sm' }),
-              mode === 'ifNeedBe' ? 'mode active' : 'mode',
-            )}
-            aria-pressed={mode === 'ifNeedBe'}
-            disabled={locked}
-            onClick={() => setMode('ifNeedBe')}
-          >if need be</button>
+          {/* Prompt text with the brush colour underlined, like the identity toggle below:
+              green under available, amber under if need be, so the line says which paint
+              you are holding. */}
+          <span className="hint">paint</span>
+          {([['available', 'available'], ['ifNeedBe', 'if need be']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={cn('prompt pixel-label toggle', id)}
+              aria-pressed={mode === id}
+              disabled={locked}
+              onClick={() => setMode(id)}
+            >{label}</button>
+          ))}
         </div>
-        <button
-          type="button"
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
-          disabled={!canSwitchZone}
-          title={canSwitchZone
-            ? `switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`
-            : "your timezone matches the poll's"}
-          onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
-        >times shown in {zone}{canSwitchZone ? ' · switch' : ''}</button>
+        {/* Only when there is something to switch: a viewer in the poll's own zone needs no
+            telling, and the page's hint names the zone the list below is in. */}
+        {canSwitchZone && (
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'zone')}
+            title={`switch between your timezone (${viewerZone}) and the poll's (${data.timezone})`}
+            onClick={() => setZone(zone === viewerZone ? data.timezone : viewerZone)}
+          >times shown in {zone} · switch</button>
+        )}
       </div>
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
       {!locked && (

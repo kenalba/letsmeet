@@ -111,7 +111,10 @@ export function PollPage(data: PollPageData) {
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
           <p className="hint pixel-label text-muted-foreground">
-            {`${fmtSlotLength(data.time.slotMinutes)} slots · grid times are shown in your timezone · listed times are in the poll's timezone (${zone}).`}
+            {/* The grid's own zone is the island's business: it names it, and offers the
+                switch, only when the viewer's differs. This line covers what the island
+                can't see, the ranked list below the grid. */}
+            {`${fmtSlotLength(data.time.slotMinutes)} slots · listed times are in the poll's timezone (${zone}).`}
           </p>
           {isActive ? null : (
             <p className="hint text-sm text-muted-foreground">
