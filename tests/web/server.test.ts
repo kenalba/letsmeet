@@ -169,7 +169,7 @@ describe('server', () => {
     // A signed-out viewer's header link signs in and comes back to this poll. The fork
     // at the name field is the island's, so it is not in the server's HTML.
     expect(body).toMatch(new RegExp(
-      `href="/login\\?returnTo=${encodeURIComponent(`/p/${poll.rkey}`)}"[^>]*>sign in with bluesky</a>`,
+      `href="/login\\?returnTo=${encodeURIComponent(`/p/${poll.rkey}`)}"[^>]*>sign in<span[^>]*> with bluesky</span></a>`,
     ));
     // The island's mount point, its data block and its bundle are one contract: drop any
     // one of them and the grid silently never appears.
@@ -373,7 +373,7 @@ describe('server', () => {
 
     const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
     // Signed in: no sign-in link anywhere.
-    expect(body).not.toContain('sign in with bluesky');
+    expect(body).not.toMatch(/href="\/login\?returnTo=/);
     expect(body).toContain('"prefill"');
     expect(body).toContain(PAINT[0].start);
     // ...and a signed-out visitor still gets a blank grid.

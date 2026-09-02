@@ -107,7 +107,7 @@ export function Layout({ title, description, canonical, children, scripts, signI
         <header className="border-b">
           <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4">
             <a
-              className="brand pixel-heading no-underline hover:text-primary"
+              className="brand pixel-heading whitespace-nowrap no-underline hover:text-primary"
               href="/"
             >
               letsmeet<span className="inline-block origin-bottom-left -translate-y-px -rotate-6 text-lol">.lol</span>
@@ -115,10 +115,12 @@ export function Layout({ title, description, canonical, children, scripts, signI
             <div className="ml-auto flex items-center gap-2">
               {signInHref ? (
                 <a
-                  className="prompt pixel-label mr-2 text-muted-foreground no-underline hover:text-foreground"
+                  className="prompt pixel-label mr-2 whitespace-nowrap text-muted-foreground no-underline hover:text-foreground"
                   href={signInHref}
                 >
-                  sign in with bluesky
+                  {/* The full wording needs the room a phone's header hasn't got; the login
+                      page it leads to says "with bluesky" in its heading. */}
+                  sign in<span className="hidden sm:inline"> with bluesky</span>
                 </a>
               ) : null}
               {/*
