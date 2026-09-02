@@ -88,10 +88,12 @@ export function PollPage(data: PollPageData) {
         ) : null}
 
         <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Bottom-aligned: the buttons are taller than the title's line, and centred they
+              hung below it. */}
+          <div className="flex flex-wrap items-end gap-3">
             <h1 className="pixel-heading">{data.title}</h1>
             {/* Actions at the right edge, away from the title they act on. */}
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-end gap-3">
               <button
                 type="button"
                 data-copy-path={path}
