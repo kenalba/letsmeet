@@ -12,6 +12,7 @@ import { cn } from '../lib/cn.js';
 // data-slot="button", which would land inside #grid-root and start matching the same
 // `[data-slot]` selector the e2e grid-cell locator uses to find painted cells.
 import { buttonVariants } from '../ui/button.js';
+import { attachHandleTypeahead } from './handleTypeahead.js';
 
 interface PollData {
   rkey: string;
@@ -125,13 +126,21 @@ function Grid({ data }: { data: PollData }) {
     data.prefill
       ? intervalsToPaint(data.prefill.available, data.prefill.ifNeedBe, data.slots)
       : new Map(), []);
-  // Paint stashed on the way to sign-in (the fork at the name field) comes back here, signed
-  // in or not, over whatever the server had; it is cleared once read.
+  // Paint stashed on the way to sign-in (the bluesky side of the identity toggle, or the
+  // header link) comes back here, signed in or not, over whatever the server had; it is
+  // cleared once read. What happens to it next is decided after `submit` is defined.
   const draft = useMemo(() => takeDraft(data.rkey, data.slots), []);
-  const [painted, setPainted] = useState<PaintMap>(draft ?? saved);
+  const [painted, setPainted] = useState<PaintMap>(draft?.paint ?? saved);
+  // A guest answers under a name, or signs in right here; the field swaps with the toggle
+  // and both values survive switching back and forth.
+  const [identity, setIdentity] = useState<'guest' | 'bluesky'>('guest');
+  const [handle, setHandle] = useState('');
+  const handleInput = useRef<HTMLInputElement>(null);
+  const handleList = useRef<HTMLUListElement>(null);
   useEffect(() => {
-    if (draft) setStatus('your paint from before signing in is back. save it when you\u2019re ready.');
-  }, []);
+    if (identity !== 'bluesky' || !handleInput.current || !handleList.current) return;
+    return attachHandleTypeahead(handleInput.current, handleList.current);
+  }, [identity]);
 
   // Columns are bucketed by calendar date *in the displayed zone*, so the whole geometry —
   // not just the labels — is rebuilt when the zone toggles.
@@ -329,6 +338,14 @@ function Grid({ data }: { data: PollData }) {
     }
   };
 
+  // "sign in & save" asked for the save: finish it now that the sign-in is back. Paint
+  // that came back any other way (the header link, a cancelled sign-in) waits to be saved.
+  useEffect(() => {
+    if (!draft) return;
+    if (draft.save && data.viewerDid) void submit();
+    else setStatus('your paint from before signing in is back. save it when you\u2019re ready.');
+  }, []);
+
   const canSwitchZone = viewerZone !== data.timezone;
 
   const cell = (key: string, ci: number, ri: number) => {
@@ -468,30 +485,68 @@ function Grid({ data }: { data: PollData }) {
       )}
       {!data.viewerDid && !locked && (
         <div className="whoami">
-          <label className="name">
-            your name <span className="note">(shown on this poll)</span>
-            {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
-            <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
-          </label>
-          {/* The other way to answer, right where a name is asked for: the header link is
-              too quiet and a note above the grid gets scrolled past. The paint goes along
-              (sessionStorage, same tab) and is back once the sign-in returns to this poll. */}
-          <p className="hint or">
-            or{' '}
-            <a
-              className="prompt text-foreground"
-              href={`/login?returnTo=${encodeURIComponent(`/p/${data.rkey}`)}`}
-              onClick={() => stashDraft(
+          {/* Two equal ways to answer, at the one place a guest says who they are. The
+              header link and a note above the grid were both too easy to scroll past. */}
+          <div className="modes" role="group" aria-label="answering as">
+            <span className="hint">answering as</span>
+            {(['guest', 'bluesky'] as const).map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={cn(
+                  buttonVariants({ variant: identity === id ? 'default' : 'outline', size: 'sm' }),
+                  'mode',
+                )}
+                aria-pressed={identity === id}
+                onClick={() => setIdentity(id)}
+              >{id}</button>
+            ))}
+          </div>
+          {identity === 'guest' ? (
+            <label className="name">
+              your name <span className="note">(shown on this poll)</span>
+              {/* React's onChange is Preact's onInput: it fires on every keystroke. */}
+              <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
+            </label>
+          ) : (
+            /* The sign-in page's form, inline: same route, same typeahead. The paint goes
+               along for the tab (sessionStorage) with a note to save it on return. */
+            <form
+              method="post"
+              action="/login"
+              className="handle"
+              onSubmit={() => stashDraft(
                 data.rkey,
                 paintToIntervals(painted, data.slots, 'available'),
                 paintToIntervals(painted, data.slots, 'ifNeedBe'),
+                true,
               )}
-            >sign in with bluesky</a>
-            {' '}to answer as yourself. your paint comes along.
-          </p>
+            >
+              <input type="hidden" name="returnTo" value={`/p/${data.rkey}`} />
+              <label className="name" htmlFor="handle">your bluesky handle</label>
+              <div className="relative">
+                <input
+                  ref={handleInput}
+                  id="handle"
+                  name="handle"
+                  placeholder="you.bsky.social"
+                  autoComplete="username"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  required
+                  defaultValue={handle}
+                  onInput={(e) => setHandle(e.currentTarget.value)}
+                />
+                <ul ref={handleList} id="handle-suggestions" hidden />
+              </div>
+              <button type="submit" className={cn(buttonVariants({ variant: 'default' }), 'save')}>
+                sign in &amp; save
+              </button>
+            </form>
+          )}
         </div>
       )}
-      {!locked && (
+      {!locked && (data.viewerDid || identity === 'guest') && (
         <button
           className={cn(buttonVariants({ variant: 'default' }), 'save')}
           type="button"
@@ -538,19 +593,24 @@ function writeEditSecret(rkey: string, token: string | null): boolean {
   } catch { return false; }
 }
 
-/** Unsaved paint carried across the sign-in round trip: same tab, gone once read. */
+/**
+ * Unsaved paint carried across the sign-in round trip: same tab, gone once read. `save`
+ * records that "sign in & save" was pressed, so the return trip finishes the save.
+ */
 const draftKey = (rkey: string) => `letsmeet.draft.${rkey}`;
 type Intervals = ReturnType<typeof paintToIntervals>;
-function stashDraft(rkey: string, available: Intervals, ifNeedBe: Intervals): void {
-  try { sessionStorage.setItem(draftKey(rkey), JSON.stringify({ available, ifNeedBe })); } catch { /* then it is lost, as before */ }
+function stashDraft(rkey: string, available: Intervals, ifNeedBe: Intervals, save = false): void {
+  try {
+    sessionStorage.setItem(draftKey(rkey), JSON.stringify({ available, ifNeedBe, save }));
+  } catch { /* then it is lost, as before */ }
 }
-function takeDraft(rkey: string, slots: PollData['slots']): PaintMap | null {
+function takeDraft(rkey: string, slots: PollData['slots']): { paint: PaintMap; save: boolean } | null {
   try {
     const raw = sessionStorage.getItem(draftKey(rkey));
     if (!raw) return null;
     sessionStorage.removeItem(draftKey(rkey));
-    const d = JSON.parse(raw) as { available?: Intervals; ifNeedBe?: Intervals };
-    return intervalsToPaint(d.available ?? [], d.ifNeedBe ?? [], slots);
+    const d = JSON.parse(raw) as { available?: Intervals; ifNeedBe?: Intervals; save?: boolean };
+    return { paint: intervalsToPaint(d.available ?? [], d.ifNeedBe ?? [], slots), save: !!d.save };
   } catch { return null; }
 }
 

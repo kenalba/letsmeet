@@ -340,10 +340,11 @@ test('touch: a swipe scrolls the grid, a held finger paints it', async ({ page, 
 });
 
 /**
- * The sign-in alternative sits at the name field, after painting, so the paint has to
- * survive the trip: stashed for the tab on the way out, restored on the way back in.
+ * A guest picks how to answer with the toggle at the name field: a name, or the same
+ * sign-in as the login page, inline. "sign in & save" carries the paint across the trip
+ * (stashed for the tab on the way out) and finishes the save on the way back in.
  */
-test("a guest's paint survives signing in at the name field", async ({ page, browser }) => {
+test('a guest can sign in at the name field and the paint is saved on return', async ({ page, browser }) => {
   const suffix = test.info().project.name.replace(/[^a-z0-9]/gi, '');
   await page.goto(`/dev/login?did=did:plc:e2efork${suffix}`);
   const pollUrl = await createPoll(page, {
@@ -356,20 +357,33 @@ test("a guest's paint survives signing in at the name field", async ({ page, bro
   await cells.nth(0).click();
   await cells.nth(1).click();
   await expect(guest.locator('.cell.available')).toHaveCount(2);
-  await guest.locator('.whoami a', { hasText: 'sign in with bluesky' }).click();
-  await expect(guest).toHaveURL(/\/login\?returnTo=/);
-  // The fake PDS signs in through /dev/login; coming back is a plain visit to the poll.
+  // Guest by default; a typed name survives a round trip through the other side.
+  await guest.fill('.name input', 'Ana');
+  const toggle = (id: string) => guest.locator('.whoami .modes button', { hasText: id });
+  await expect(toggle('guest')).toHaveAttribute('aria-pressed', 'true');
+  await toggle('bluesky').click();
+  await expect(guest.locator('.name input')).toHaveCount(0);
+  await expect(guest.locator('button.save', { hasText: 'save availability' })).toHaveCount(0);
+  await toggle('guest').click();
+  await expect(guest.locator('.name input')).toHaveValue('Ana');
+  // The inline field is the login page's: same suggestions (the fake roster), same route.
+  await toggle('bluesky').click();
+  const handle = guest.locator('#handle');
+  await handle.fill('ali');
+  await expect(guest.getByRole('option').first()).toBeVisible();
+  await guest.keyboard.press('Escape');
+  await guest.locator('form.handle button[type=submit]').click();
+  await expect(guest).toHaveURL(/\/login/);
+  // The fake PDS signs in through /dev/login; coming back is a plain visit to the poll,
+  // where the paint is already saved: no name field, no save button to press.
   await guest.goto(`/dev/login?did=did:plc:e2eforkguest${suffix}`);
   await guest.goto(pollUrl);
-  await expect(guest.locator('.cell.available')).toHaveCount(2);
-  await expect(guest.locator('.name input')).toHaveCount(0);
-  await expect(guest.getByText('your paint from before signing in is back')).toBeVisible();
-  await expect(guest.locator('button.save')).toBeEnabled();
-  await guest.click('button.save');
   await expect(guest.getByText('response stored')).toBeVisible();
-  // Read once, then gone: a reload shows the saved answer, not a second restore.
-  await guest.reload();
+  await expect(guest.locator('.whoami')).toHaveCount(0);
   await expect(guest.locator('.cell.available')).toHaveCount(2);
-  await expect(guest.getByText('your paint from before signing in is back')).toHaveCount(0);
+  // Read once, then gone: after the reload the saved answer is what shows, quietly.
+  await expect(guest.locator('button.save')).toBeDisabled({ timeout: 10_000 });
+  await expect(guest.locator('.cell.available')).toHaveCount(2);
+  await expect(guest.getByText('your paint from before signing in')).toHaveCount(0);
   await guestContext.close();
 });

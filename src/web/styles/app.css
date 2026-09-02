@@ -438,8 +438,11 @@
     /* The grid ends flush with its last row; the actions below it need their own air. */
     button.save { margin-top: 12px; }
     .name { margin-top: 12px; }
-    /* The sign-in alternative hangs off the name field, one line, one link. */
-    .whoami .or { margin-top: 6px; }
+    /* Who's answering: a two-way toggle over the field it swaps. */
+    .whoami .modes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+    .whoami .modes .hint { margin-right: 4px; }
+    .whoami form.handle { display: grid; gap: 6px; }
+    .whoami form.handle .name { margin-bottom: 0; }
     .edit-link code { word-break: break-all; }
     .responders .chip[data-who] { cursor: pointer; }
     .responders .chip.lit .text-foreground,
