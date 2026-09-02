@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint,
-  paintEquals, liveTally, paintEdges,
+  paintEquals, liveTally,
   type PaintMap, type PaintMode, type SlotCount,
 } from '../../core/gridModel.js';
 import type { Interval } from '../../core/intervals.js';
@@ -21,6 +21,8 @@ interface PollData {
   /** The poll's home zone. The grid opens in the viewer's zone and can toggle to this one. */
   timezone: string;
   viewerDid: string | null;
+  /** The host reads results; they never get the marking canvas. */
+  isHost?: boolean;
   editToken?: string;
   prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
   /** The viewer's own name inside `counts`, when they have answered before. */
@@ -94,11 +96,6 @@ function countOthers(counts: Record<string, SlotCount> | undefined, self?: strin
   return names.size;
 }
 
-const EDGE = 3;
-const EDGE_SHADOW = {
-  top: `inset 0 ${EDGE}px 0 0`, bottom: `inset 0 -${EDGE}px 0 0`,
-  left: `inset ${EDGE}px 0 0 0`, right: `inset -${EDGE}px 0 0 0`,
-} as const;
 
 /** How long a finger rests on a cell before it paints instead of scrolling. Under the
  * browsers' own long-press (~500ms), so no callout or context menu races it. */
@@ -178,6 +175,13 @@ function Grid({ data }: { data: PollData }) {
   // The viewer counts as a responder the moment they have painted anything.
   const responders = others + (painted.size > 0 ? 1 : 0);
   const locked = data.readonly === true;
+  // The canvas: while someone is marking — unsaved marks, or no saved answer yet — the
+  // heat steps back and their cells fill, so the grid reads as a place to draw rather than
+  // a finished chart. Saving brings the heat back (their marks drop to the band), as does
+  // "show everyone". The host reads results and never gets it.
+  const [showAll, setShowAll] = useState(false);
+  const canvasAuto = !locked && !data.isHost && (!paintEquals(painted, saved) || !data.prefill);
+  const canvas = canvasAuto && !showAll;
   const dirty = !paintEquals(painted, saved)
     || name.trim() !== (data.prefill?.name ?? '').trim();
   const canSave = dirty && painted.size > 0 && (!!data.viewerDid || !!name.trim());
@@ -378,28 +382,20 @@ function Grid({ data }: { data: PollData }) {
       `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`,
       c.ifNeedBe.length ? `If need be: ${c.ifNeedBe.join(', ')}` : '',
     ].filter(Boolean).join('\n');
-    const edges = mine ? paintEdges(painted, key, {
-      top: colMaps[ci].get(rows[ri - 1]?.[0]), bottom: colMaps[ci].get(rows[ri + 1]?.[0]),
-      left: colMaps[ci - 1]?.get(rows[ri][0]), right: colMaps[ci + 1]?.get(rows[ri][0]),
-    }) : [];
-    const edgeColor = mine === 'available' ? 'var(--primary)' : 'var(--lol-bright)';
+    // Blue, not the brand green: the group's heat and the viewer's own marks must never
+    // share a hue, and blue-vs-green also survives the common red-green colorblindness.
+    // The heat tops out at half strength; on the canvas it steps back to a third of that,
+    // and the viewer's own cells take no heat at all — the stylesheet fills them. Only the
+    // colour is inline, so the hatch image for if-need-be still layers over it. Text stays
+    // --card-foreground, which clears every tint in both palettes.
+    const heat = ratio > 0 ? 0.1 + 0.4 * ratio : 0;
+    const alpha = canvas ? (mine ? 0 : heat * 0.3) : heat;
     return (
       <div
         key={key}
         data-slot={key}
         className={cn('cell', mine, lit)}
-        // Blue, not the brand green: the group's heat and the viewer's own picks must never
-        // share a hue, and blue-vs-green also survives the common red-green colorblindness.
-        // Only the colour is set inline, so the stylesheet's hatch image for if-need-be
-        // still layers over it. Text color stays inherited (--card-foreground): it flips
-        // with the theme, and it clears contrast on the tint at every ratio in both
-        // palettes — a hardcoded white did not.
-        style={{
-          backgroundColor: ratio > 0 ? `rgba(59,130,246,${(0.15 + 0.85 * ratio).toFixed(3)})` : undefined,
-          boxShadow: edges.length
-            ? edges.map((side) => `${EDGE_SHADOW[side]} ${edgeColor}`).join(', ')
-            : undefined,
-        }}
+        style={{ backgroundColor: alpha > 0 ? `rgba(59,130,246,${alpha.toFixed(3)})` : undefined }}
         onPointerDown={locked ? undefined : onDown(key)}
         onPointerUp={locked ? undefined : onUp(key)}
         title={title}
@@ -559,6 +555,14 @@ function Grid({ data }: { data: PollData }) {
         {/* What used to be a line under the title: the slot length and the zone the grid is
             in, at the toolbar's right, with the switch when the viewer's zone differs. */}
         <div className="zoneinfo">
+          {canvasAuto && (
+            <button
+              type="button"
+              className="prompt pixel-label toggle peek"
+              aria-pressed={showAll}
+              onClick={() => setShowAll((v) => !v)}
+            >{showAll ? 'show mine' : 'show everyone'}</button>
+          )}
           <span className="hint">{slotMinutes}-minute slots · times in {zone}</span>
           {canSwitchZone && (
             <button
@@ -576,7 +580,7 @@ function Grid({ data }: { data: PollData }) {
       )}
       <div
         ref={gridEl}
-        className={cn('grid', locked && 'readonly', spotlight && 'spotlight')}
+        className={cn('grid', locked && 'readonly', spotlight && 'spotlight', canvas && 'canvas')}
         onPointerMove={onMove}
       >
         <div className="col axis">

@@ -412,23 +412,26 @@
     .cell + .cell { margin-top: -1px; }
     /* Rows a DST-shifted day doesn't have: keep the row height, drop the grid look. */
     .cell.gap { background: transparent; border-color: transparent; cursor: default; }
-    /* The viewer's own paint is an outline, not a fill. The island traces each painted
-       run along its outer edges (inset box-shadows on the boundary cells only — see
-       `paintEdges` in core/gridModel.ts), green for available and amber for if-need-be,
-       so the heat tint and the tally stay readable inside. If-need-be also carries a
-       faint hatch over the tint: the two states differ in shape, not just hue. */
+    /* The viewer's own marks: a 6px band down the cell's left edge in the brush colour —
+       green for available, amber for if-need-be — over whatever heat is there, so the
+       bands stack into a bar down each column. If-need-be also carries a faint hatch: the
+       two states differ in shape, not just hue. */
+    .cell.available { box-shadow: inset 6px 0 0 0 var(--primary); }
     .cell.ifNeedBe {
+      box-shadow: inset 6px 0 0 0 var(--lol-bright);
       background-image: repeating-linear-gradient(
         45deg, color-mix(in srgb, var(--lol-bright) 45%, transparent) 0 3px, transparent 3px 7px
       );
     }
-    /* Your own marks carry a corner flag in the brush colour, on top of the run outline,
-       so they read as yours over any amount of heat. */
-    .cell.available::after, .cell.ifNeedBe::after {
-      content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0;
-      border-top: 8px solid var(--primary); border-left: 8px solid transparent;
+    /* The canvas (see the island): the heat has stepped back, and the viewer's cells fill
+       solid instead of carrying a band. */
+    .grid.canvas .cell.available {
+      box-shadow: none; background-color: var(--primary); color: var(--primary-foreground);
     }
-    .cell.ifNeedBe::after { border-top-color: var(--lol-bright); }
+    .grid.canvas .cell.ifNeedBe {
+      box-shadow: none; background-color: var(--lol-bright); color: oklch(0.216 0.006 56.043);
+      background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 3px, transparent 3px 7px);
+    }
     /* Closed/cancelled polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
     /* Spotlight: one responder's answer, from their chip. Their cells get an ink outline

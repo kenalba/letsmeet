@@ -59,6 +59,7 @@ export function PollPage(data: PollPageData) {
     self: data.self,
     editToken: data.editToken,
     viewerDid: data.viewerDid,
+    isHost: data.isHost,
     timezone: zone,
     counts,
     // A closed/cancelled poll still shows the grid — heatmap, tallies and any paint the
