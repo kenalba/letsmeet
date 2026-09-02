@@ -77,7 +77,8 @@ describe('built app.css', () => {
   it('leaves touch scrolling of the grid to the browser', () => {
     // `touch-action: none` on the scroll container is what made a phone unable to scroll
     // the grid (or the page, from a finger on it): the island paints from a held finger.
-    const grid = /#grid-root \.grid\{([^}]*)\}/.exec(css);
+    // The island's rules are scoped to the grid mount and the reply slot together.
+    const grid = /:is\(#grid-root,\s*#reply-root\) \.grid\{([^}]*)\}/.exec(css);
     expect(grid).not.toBeNull();
     expect(grid![1]).toContain('touch-action:manipulation');
     expect(css).not.toContain('touch-action:none');
