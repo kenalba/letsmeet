@@ -19,6 +19,8 @@ export interface PollListItem {
   /** The poll's calendar dates (YYYY-MM-DD), for the range in the meta line. */
   dates: string[];
   responses: number;
+  /** The decided time, already formatted in the poll's zone; stands in for the dates. */
+  chosen?: string;
 }
 
 /**
@@ -39,18 +41,54 @@ function fmtDateRange(dates: string[]): string {
 }
 
 function pollMeta(p: PollListItem): string {
+  const responses = `${p.responses} ${p.responses === 1 ? 'response' : 'responses'}`;
+  // Once decided, when it is happening matters more than which days were on the table.
+  if (p.chosen) return `${p.chosen} · ${responses}`;
   return [
     fmtDateRange(p.dates),
     `${p.dates.length} ${p.dates.length === 1 ? 'day' : 'days'}`,
-    `${p.responses} ${p.responses === 1 ? 'response' : 'responses'}`,
+    responses,
   ].filter(Boolean).join(' · ');
 }
 
-export function LandingPage({ did, handle, polls = [] }: {
+function PollList({ polls }: { polls: PollListItem[] }) {
+  return (
+    <ul className="polls divide-y">
+      {polls.map((p) => (
+        // The row is a flex line, not one big <a>: the copy button can't nest inside an
+        // anchor, so the anchor takes the growing left half (title + meta) and the
+        // badge/button sit beside it.
+        <li key={p.rkey} className="flex items-center gap-3 py-2.5">
+          <a href={`/p/${p.rkey}`} className="min-w-0 flex-1 no-underline">
+            <span className="block truncate text-sm font-medium hover:text-primary">
+              {p.title}
+            </span>
+            <span className="pixel-label block text-muted-foreground">{pollMeta(p)}</span>
+          </a>
+          <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
+            {p.status}
+          </Badge>
+          <button
+            type="button"
+            data-copy-path={`/p/${p.rkey}`}
+            hidden
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            copy link
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function LandingPage({ did, handle, polls = [], answered = [] }: {
   did: string | null;
   /** The handle stored at sign-in; a session from before that existed falls back to did. */
   handle?: string;
   polls?: PollListItem[];
+  /** Polls the viewer answered from their own account and does not host. */
+  answered?: PollListItem[];
 }) {
   if (!did) {
     return (
@@ -118,35 +156,21 @@ export function LandingPage({ did, handle, polls = [] }: {
                 <a href="/new" className="text-primary underline underline-offset-4">make some obligations!</a>
               </p>
             ) : (
-              <ul className="polls divide-y">
-                {polls.map((p) => (
-                  // The row is a flex line, not one big <a>: the copy button can't nest
-                  // inside an anchor, so the anchor takes the growing left half (title +
-                  // meta) and the badge/button sit beside it.
-                  <li key={p.rkey} className="flex items-center gap-3 py-2.5">
-                    <a href={`/p/${p.rkey}`} className="min-w-0 flex-1 no-underline">
-                      <span className="block truncate text-sm font-medium hover:text-primary">
-                        {p.title}
-                      </span>
-                      <span className="pixel-label block text-muted-foreground">{pollMeta(p)}</span>
-                    </a>
-                    <Badge variant={p.status === 'active' ? 'secondary' : 'outline'}>
-                      {p.status}
-                    </Badge>
-                    <button
-                      type="button"
-                      data-copy-path={`/p/${p.rkey}`}
-                      hidden
-                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    >
-                      copy link
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <PollList polls={polls} />
             )}
           </CardContent>
         </Card>
+        {/* Only when there is something to list: an empty "you answered nothing" is noise. */}
+        {answered.length > 0 ? (
+          <div className="answered grid gap-3">
+            <h2 className="pixel-heading">polls you answered</h2>
+            <Card>
+              <CardContent>
+                <PollList polls={answered} />
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>

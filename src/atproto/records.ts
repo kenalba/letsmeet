@@ -4,6 +4,7 @@ import responseLex from '../../lexicons/lol.letsmeet.poll.response.json' with { 
 import strongRefLex from '../../lexicons/com.atproto.repo.strongRef.json' with { type: 'json' };
 import { mergeIntervals, normalizeIso, type Interval } from '../core/intervals.js';
 import type { SpecificDates } from '../core/slots.js';
+import type { RecordRef } from './types.js';
 
 export const SCHEDULE_NSID = 'lol.letsmeet.poll.schedule';
 export const RESPONSE_NSID = 'lol.letsmeet.poll.response';
@@ -23,6 +24,8 @@ export interface ScheduleRecord {
   time: SpecificDates & { $type: string };
   status: PollStatus;
   finalized?: Interval;
+  /** The `community.lexicon.calendar.event` records filed for the chosen time, by ref. */
+  events?: RecordRef[];
   closesAt?: string;
   createdAt: string;
 }

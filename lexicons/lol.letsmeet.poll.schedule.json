@@ -15,6 +15,11 @@
           "time": { "type": "union", "refs": ["#specificDates"] },
           "status": { "type": "string", "enum": ["active", "closed", "finalized", "cancelled"] },
           "finalized": { "type": "ref", "ref": "#interval" },
+          "events": {
+            "type": "array", "maxLength": 8,
+            "description": "The calendar event records filed in the host's repo for the chosen time(s), so a repick or reopen can remove them.",
+            "items": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+          },
           "closesAt": { "type": "string", "format": "datetime" },
           "createdAt": { "type": "string", "format": "datetime" }
         }

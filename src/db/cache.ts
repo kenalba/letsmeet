@@ -46,6 +46,21 @@ export function listPollsByHost(db: Database.Database, hostDid: string): CachedP
   }));
 }
 
+/** Every live poll `did` answered from their own repo and does not host, newest activity
+ *  first — the landing's "polls you answered". Guest answers carry no DID and never show
+ *  here; a host who answered their own poll finds it under "your polls" instead. */
+export function listPollsAnswered(db: Database.Database, did: string): CachedPoll[] {
+  const rows = db.prepare(
+    `SELECT p.* FROM poll_cache p JOIN participant a ON a.poll_rkey = p.rkey
+     WHERE a.did = ? AND p.host_did != ? AND p.tombstoned = 0 ORDER BY p.updated_at DESC`,
+  ).all(did, did) as
+    Array<{ rkey: string; uri: string; host_did: string; cid: string | null; record_json: string; tombstoned: number }>;
+  return rows.map((r) => ({
+    rkey: r.rkey, uri: r.uri, hostDid: r.host_did, cid: r.cid,
+    record: JSON.parse(r.record_json) as ScheduleRecord, tombstoned: r.tombstoned === 1,
+  }));
+}
+
 /** Response tallies for every poll in one grouped query — the landing list's "N responses". */
 export function countResponsesByPoll(db: Database.Database): Map<string, number> {
   const rows = db.prepare(

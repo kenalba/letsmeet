@@ -7,7 +7,7 @@ import { openDb } from '../../src/db/db.js';
 import {
   upsertPollCache, getPollCache, tombstonePoll,
   upsertResponseCache, listResponseCache, countResponses,
-  addParticipant, listParticipants,
+  addParticipant, listParticipants, listPollsAnswered,
 } from '../../src/db/cache.js';
 import { buildScheduleRecord, buildResponseRecord } from '../../src/atproto/records.js';
 
@@ -81,5 +81,26 @@ describe('participants', () => {
     expect(listParticipants(db, '3kpoll')[0].handle).toBe('sam.example');
     // Opening again must not trip over the column it already added.
     expect(() => openDb(path)).not.toThrow();
+  });
+});
+
+describe('answered polls', () => {
+  it('lists live polls a DID answered from their own repo, never their own polls', () => {
+    const db = openDb(':memory:');
+    const theirs = (rkey: string) => ({
+      ...poll, rkey, uri: `at://did:plc:other/lol.letsmeet.poll.schedule/${rkey}`, hostDid: 'did:plc:other',
+    });
+    upsertPollCache(db, poll);
+    upsertPollCache(db, theirs('3kfirst'));
+    upsertPollCache(db, theirs('3ksecond'));
+    upsertPollCache(db, theirs('3kgone'));
+    tombstonePoll(db, '3kgone');
+    for (const rkey of ['3kpoll', '3kfirst', '3ksecond', '3kgone']) addParticipant(db, rkey, 'did:plc:host');
+    addParticipant(db, '3kfirst', 'did:plc:someone');
+    // Newest activity first, like the host's own list.
+    db.prepare('UPDATE poll_cache SET updated_at = ? WHERE rkey = ?').run(1, '3ksecond');
+    expect(listPollsAnswered(db, 'did:plc:host').map((p) => p.rkey)).toEqual(['3kfirst', '3ksecond']);
+    expect(listPollsAnswered(db, 'did:plc:someone').map((p) => p.rkey)).toEqual(['3kfirst']);
+    expect(listPollsAnswered(db, 'did:plc:nobody')).toEqual([]);
   });
 });

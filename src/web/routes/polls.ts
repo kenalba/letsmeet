@@ -7,9 +7,12 @@ import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
 import { GENERIC_ERROR, UserError } from '../../core/errors.js';
 import { readSession, type SessionEnv } from '../session.js';
-import { countResponses, countResponsesByPoll, listPollsByHost } from '../../db/cache.js';
 import {
-  createPoll, getPollWithRevalidate, finalizePoll, updatePollMeta, updatePollTime, withdrawPoll,
+  countResponses, countResponsesByPoll, listPollsByHost, listPollsAnswered, type CachedPoll,
+} from '../../db/cache.js';
+import {
+  createPoll, getPollWithRevalidate, finalizePoll, closePoll, reopenPoll, updatePollMeta,
+  updatePollTime, withdrawPoll,
 } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
@@ -20,8 +23,8 @@ import { buildIcs } from '../../core/ics.js';
 import { TokenBucket } from '../rateLimit.js';
 import { clientIp } from '../clientIp.js';
 import { page } from '../respond.js';
-import { LandingPage } from '../pages/Landing.js';
-import { DecidedPage } from '../pages/Decided.js';
+import { fmtRange } from '../lib/fmtRange.js';
+import { LandingPage, type PollListItem } from '../pages/Landing.js';
 import { TombstonePage } from '../pages/Tombstone.js';
 import { NewPollPage } from '../pages/NewPoll.js';
 import { EditPollPage } from '../pages/EditPoll.js';
@@ -74,14 +77,16 @@ export function pollRoutes(
     const who = await readSession(c, session, deps.now().getTime());
     const did = who?.did ?? null;
     const counts = did ? countResponsesByPoll(deps.db) : new Map<string, number>();
-    const polls = did
-      ? listPollsByHost(deps.db, did).map((p) => ({
-          rkey: p.rkey, title: p.record.title, status: p.record.status,
-          dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
-        }))
-      : [];
+    const item = (p: CachedPoll): PollListItem => ({
+      rkey: p.rkey, title: p.record.title, status: p.record.status,
+      dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
+      chosen: p.record.finalized ? fmtRange(p.record.finalized, p.record.time.timezone) : undefined,
+    });
     return page(c, createElement(LandingPage, {
-      did, handle: who?.handle ?? undefined, polls,
+      did,
+      handle: who?.handle ?? undefined,
+      polls: did ? listPollsByHost(deps.db, did).map(item) : [],
+      answered: did ? listPollsAnswered(deps.db, did).map(item) : [],
     }));
   });
 
@@ -127,11 +132,6 @@ export function pollRoutes(
     if (!results) return c.notFound();
     if (results.poll.tombstoned) return page(c, createElement(TombstonePage), 410);
     const viewerDid = await sessionDid(c);
-    if (results.poll.record.status === 'finalized' && results.poll.record.finalized) {
-      return page(c, createElement(DecidedPage, {
-        rkey, record: results.poll.record, publicUrl: env.PUBLIC_URL,
-      }));
-    }
     let prefill;
     // The viewer's own name in the results, when they have answered before: the grid
     // subtracts that answer from the tallies it shows while they repaint.
@@ -171,6 +171,7 @@ export function pollRoutes(
       title: results.poll.record.title,
       description: results.poll.record.description,
       status: results.poll.record.status,
+      finalized: results.poll.record.finalized,
       time: results.poll.record.time,
       slots: results.slots,
       results,
@@ -233,11 +234,11 @@ export function pollRoutes(
    * The signed-in host's own poll, or the response that says why not: sign in first, not
    * yours (403), gone (410). Shared by the edit and withdraw routes.
    */
-  const ownPoll = async (c: import('hono').Context, rkey: string) => {
+  const ownPoll = async (
+    c: import('hono').Context, rkey: string, returnTo = `/p/${rkey}/edit`,
+  ) => {
     const did = await sessionDid(c);
-    if (!did) {
-      return { deny: c.redirect(`/login?returnTo=${encodeURIComponent(`/p/${rkey}/edit`)}`) };
-    }
+    if (!did) return { deny: c.redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`) };
     const poll = await getPollWithRevalidate(deps, rkey);
     if (!poll) return { deny: c.notFound() };
     if (poll.tombstoned) return { deny: page(c, createElement(TombstonePage), 410) };
@@ -318,6 +319,32 @@ export function pollRoutes(
       }), 400);
     }
   });
+
+  /**
+   * The host's two status flips, close and reopen: same ownership check as edit, same
+   * budget, back to the poll on success.
+   */
+  const flip = (action: 'close' | 'reopen', run: (did: string, rkey: string) => Promise<void>) => {
+    app.post(`/p/:rkey/${action}`, async (c) => {
+      const rkey = c.req.param('rkey');
+      const own = await ownPoll(c, rkey, `/p/${rkey}`);
+      if ('deny' in own) return own.deny;
+      if (!accountLimiter.allow(own.did, deps.now().getTime())) {
+        return page(c, createElement(ErrorPage, { heading: 'slow down', message: tooMany.error }), 429);
+      }
+      try {
+        await run(own.did, rkey);
+        return c.redirect(`/p/${rkey}`);
+      } catch (err) {
+        return page(c, createElement(ErrorPage, {
+          heading: `could not ${action}`,
+          message: `could not ${action}: ${explain(err, `${action}Poll`)}`,
+        }), 400);
+      }
+    });
+  };
+  flip('close', (did, rkey) => closePoll(deps, did, rkey));
+  flip('reopen', (did, rkey) => reopenPoll(deps, did, rkey));
 
   app.post('/p/:rkey/finalize', async (c) => {
     const did = await sessionDid(c);

@@ -7,7 +7,7 @@ import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { buttonVariants } from '../ui/button.js';
 import { cn } from '../lib/cn.js';
-import { Card, CardHeader, CardContent } from '../ui/card.js';
+import { Card, CardHeader, CardContent, CardDescription } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
 export interface PollPageData {
@@ -15,6 +15,8 @@ export interface PollPageData {
   title: string;
   description?: string;
   status: string;
+  /** The chosen slot, on a decided poll. */
+  finalized?: Interval;
   time: SpecificDates;
   slots: Interval[];
   results: PollResults;
@@ -43,6 +45,44 @@ function fmtSlotLength(minutes: number): string {
   return minutes === 60 ? '1-hour' : `${minutes / 60}-hour`;
 }
 
+/**
+ * The decision, above the grid it came from: the slot, and the two ways to get it into a
+ * calendar. Everyone sees this; the host's way to change their mind is further down.
+ */
+function DecidedCard({ rkey, slot, zone, publicUrl }: {
+  rkey: string; slot: Interval; zone: string; publicUrl?: string;
+}) {
+  const base = (publicUrl ?? '').replace(/\/$/, '');
+  const icsPath = `/p/${rkey}/ics`;
+  const webcal = `webcal://${base.replace(/^https?:\/\//, '')}${icsPath}`;
+  const linkClass = 'text-primary underline underline-offset-4';
+  return (
+    <Card className="decided">
+      <CardHeader>
+        <h2 className="pixel-heading text-primary">it's happening.</h2>
+        <CardDescription>the host picked a time. put it in your calendar before anyone changes their mind.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <p className="chosen text-xl font-medium tabular-nums">
+          {fmtRange(slot, zone)} ({zone})
+        </p>
+        <p className="text-sm">
+          <a href={icsPath} className={`ics ${linkClass}`}>
+            download .ics
+          </a>{' '}
+          ·{' '}
+          <a href={webcal} className={`webcal ${linkClass}`}>
+            add to calendar (webcal)
+          </a>
+        </p>
+        <p className="hint text-sm text-muted-foreground">
+          responses are closed. the event also lives in the host's atproto repo.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PollPage(data: PollPageData) {
   const zone = data.time.timezone;
   const { responses, ranked } = data.results;
@@ -50,6 +90,9 @@ export function PollPage(data: PollPageData) {
   for (const r of ranked) counts[r.slot.start] = { available: r.available, ifNeedBe: r.ifNeedBe };
 
   const isActive = data.status === 'active';
+  const decided = data.status === 'finalized' && data.finalized !== undefined;
+  const isChosen = (slot: Interval) =>
+    decided && slot.start === data.finalized!.start && slot.end === data.finalized!.end;
 
   const gridData = {
     rkey: data.rkey,
@@ -62,10 +105,12 @@ export function PollPage(data: PollPageData) {
     isHost: data.isHost,
     timezone: zone,
     counts,
-    // A closed/cancelled poll still shows the grid — heatmap, tallies and any paint the
+    // A closed or decided poll still shows the grid — heatmap, tallies and any paint the
     // viewer already filed — but painting it is pointless: `submitGuestResponse` refuses
     // anything that is not active.
     readonly: !isActive,
+    // The decided slot, for the grid to ring.
+    ...(decided ? { chosen: data.finalized!.start } : {}),
   };
   const pending = data.isHost ? data.pendingCount ?? 0 : 0;
 
@@ -74,9 +119,11 @@ export function PollPage(data: PollPageData) {
   return (
     <Layout
       title={pageTitle(data.title)}
-      description={data.description ?? `${fmtSlotLength(data.time.slotMinutes)} slots · ${
-        data.results.responses.length === 1 ? '1 response' : `${data.results.responses.length} responses`
-      } so far. mark the times you're free.`}
+      description={data.description ?? (decided
+        ? "it's happening. the time is set."
+        : `${fmtSlotLength(data.time.slotMinutes)} slots · ${
+          data.results.responses.length === 1 ? '1 response' : `${data.results.responses.length} responses`
+        } so far. mark the times you're free.`)}
       canonical={data.publicUrl ? `${data.publicUrl}${path}` : undefined}
       scripts={GRID_SCRIPTS}
       signInHref={signInHref}
@@ -104,24 +151,44 @@ export function PollPage(data: PollPageData) {
                 copy share link
               </button>
               {data.isHost && isActive ? (
-                <a
-                  href={`/p/${data.rkey}/edit`}
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                >
-                  edit
-                </a>
+                <>
+                  <a
+                    href={`/p/${data.rkey}/edit`}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  >
+                    edit
+                  </a>
+                  {/* Freeze the tally without deciding; the grid locks for everyone. */}
+                  <form method="post" action={`/p/${data.rkey}/close`}>
+                    <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                      close responses
+                    </button>
+                  </form>
+                </>
+              ) : null}
+              {data.isHost && !isActive ? (
+                // Closed or decided: back to taking answers. A decision is undone with it.
+                <form method="post" action={`/p/${data.rkey}/reopen`}>
+                  <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                    reopen poll
+                  </button>
+                </form>
               ) : null}
             </div>
           </div>
           {data.description ? (
             <p className="description text-muted-foreground">{data.description}</p>
           ) : null}
-          {isActive ? null : (
+          {isActive || decided ? null : (
             <p className="hint text-sm text-muted-foreground">
               {`this poll is ${data.status}. responses are closed.`}
             </p>
           )}
         </div>
+
+        {decided ? (
+          <DecidedCard rkey={data.rkey} slot={data.finalized!} zone={zone} publicUrl={data.publicUrl} />
+        ) : null}
 
         <div className="flex flex-col gap-3">
           <div id="grid-root" />
@@ -171,12 +238,12 @@ export function PollPage(data: PollPageData) {
         <div id="reply-root" />
 
         {/* Host-only: what the grid cannot carry is the host's side — picking the final
-            slot, seeing who is *missing* from each top slot, and which guest responses
-            are still syncing to their PDS. */}
+            slot (or a different one, once decided), seeing who is *missing* from each top
+            slot, and which guest responses are still syncing to their PDS. */}
         {data.isHost ? (
           <Card className="results">
             <CardHeader>
-              <h2 className="pixel-heading">pick the winner</h2>
+              <h2 className="pixel-heading">{decided ? 'pick a different time' : 'pick the winner'}</h2>
               {/* The grid may be showing the viewer's zone; this list is always the poll's. */}
               <p className="hint text-sm text-muted-foreground">{`times in ${zone}`}</p>
             </CardHeader>
@@ -191,16 +258,18 @@ export function PollPage(data: PollPageData) {
                       <span className="slot font-medium tabular-nums">{fmtRange(r.slot, zone)}</span>
                       {` · ${r.available.length} available + ${r.ifNeedBe.length} if need be`}
                       {r.missing.length ? `, missing: ${r.missing.join(', ')}` : null}
-                      {isActive ? (
+                      {isChosen(r.slot) ? (
+                        <span className="pick ml-2 font-medium text-primary">the pick</span>
+                      ) : (
                         <form method="post" action={`/p/${data.rkey}/finalize`} className="ml-2 inline">
                           <input type="hidden" name="start" value={r.slot.start} />
                           <input type="hidden" name="end" value={r.slot.end} />
                           {/* Five of these in a row; the host is choosing, not being pushed, so grey. */}
                           <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                            pick this time
+                            {decided ? 'pick this time instead' : 'pick this time'}
                           </button>
                         </form>
-                      ) : null}
+                      )}
                     </li>
                   ))}
                 </ol>

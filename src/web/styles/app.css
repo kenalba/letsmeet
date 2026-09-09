@@ -432,8 +432,12 @@
       box-shadow: none; background-color: var(--lol-bright); color: oklch(0.216 0.006 56.043);
       background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 3px, transparent 3px 7px);
     }
-    /* Closed/cancelled polls: same heatmap and tallies, no painting. */
+    /* Closed and decided polls: same heatmap and tallies, no painting. */
     .grid.readonly .cell { cursor: default; }
+    /* The decided time: a heavy ring in the brand green, which the heat never uses, so it
+       reads as the decision and not as a tally. Declared before `.lit` so a spotlight
+       from a chip still wins while it is up. */
+    .cell.chosen { outline: 3px solid var(--primary); outline-offset: -3px; }
     /* Spotlight: one responder's answer, from their chip. Their cells get an ink outline
        (solid available, dashed if-need-be) and everything else dims; ink rather than a
        status colour, so it can't be read as heat, you, or if-need-be. */

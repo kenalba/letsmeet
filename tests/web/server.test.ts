@@ -107,6 +107,45 @@ describe('server', () => {
     expect(otherBody).toContain('no events planned yet');
   });
 
+  it('lists the polls you answered below your own, and names the chosen time', async () => {
+    const { deps, poll } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const sam = await dev.request('/dev/login?did=did:plc:sam');
+    const samCookie = sam.headers.get('set-cookie')!.split(';')[0];
+    // Nothing answered yet: no section at all, not an empty one.
+    expect(await (await dev.request('/', { headers: { cookie: samCookie } })).text())
+      .not.toContain('polls you answered');
+    const posted = await dev.request(`/p/${poll.rkey}/respond-auth`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie: samCookie },
+      body: JSON.stringify({ available: PAINT }),
+    });
+    expect(posted.status).toBe(200);
+    const samHome = await (await dev.request('/', { headers: { cookie: samCookie } })).text();
+    expect(samHome).toContain('polls you answered');
+    expect(samHome).toContain(`href="/p/${poll.rkey}"`);
+    expect(samHome).toContain('1 response');
+    // Not under "your polls" though: Sam did not make it.
+    expect(samHome.indexOf('polls you answered')).toBeLessThan(samHome.indexOf(`href="/p/${poll.rkey}"`));
+
+    // The host's landing lists it once, as theirs, and once decided says when.
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const hostHome = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(hostHome).not.toContain('polls you answered');
+    expect(hostHome.match(new RegExp(`href="/p/${poll.rkey}"`, 'g'))).toHaveLength(1);
+    const { finalizePoll } = await import('../../src/services/polls.js');
+    await finalizePoll(deps, HOST, poll.rkey, {
+      start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T17:30:00.000Z',
+    });
+    const decided = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(decided).toContain('17:00–17:30 Wed Sep 2');
+    expect(decided).toContain('finalized');
+    const samDecided = await (await dev.request('/', { headers: { cookie: samCookie } })).text();
+    expect(samDecided).toContain('17:00–17:30 Wed Sep 2');
+  });
+
   it('serves the create form with the calendar island at GET /new', async () => {
     const { deps } = await setup();
     const dev = createServer(deps, stubAuth, {
@@ -356,6 +395,39 @@ describe('server', () => {
     expect(body).toContain('/assets/app.css');
   });
 
+  it('keeps the grid and the answers on a decided poll, marking the pick', async () => {
+    const { deps, poll } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    await dev.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: PAINT }),
+    });
+    const { finalizePoll } = await import('../../src/services/polls.js');
+    await finalizePoll(deps, HOST, poll.rkey, {
+      start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T17:30:00.000Z',
+    });
+    // Anyone: the decision, then the same locked grid and chips a closed poll shows.
+    const guest = await (await dev.request(`/p/${poll.rkey}`)).text();
+    expect(guest).toContain('happening');
+    expect(guest).toContain('id="poll-data"');
+    expect(guest).toContain('"readonly":true');
+    expect(guest).toContain('"chosen":"2026-09-02T17:00:00.000Z"');
+    expect(guest).toMatch(/class="responders[^"]*">[\s\S]*?\[<span[^>]*>Sam<\/span>\]/);
+    expect(guest).not.toContain('/reopen');
+    expect(guest).not.toContain('/finalize');
+    // The host can undo the decision or swap the time from the same page.
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    const host = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(host).toContain(`action="/p/${poll.rkey}/reopen"`);
+    expect(host).toContain('pick a different time');
+    expect(host).toContain('pick this time instead');
+    expect(host).not.toContain(`/p/${poll.rkey}/edit`);
+    expect(host).not.toContain('/close');
+  });
+
   it('prefills the grid for a signed-in responder without an edit link', async () => {
     const { deps, poll } = await setup();
     const dev = createServer(deps, stubAuth, {
@@ -505,6 +577,67 @@ describe('host edits', () => {
     expect(live.title).toBe('Game night');
     expect(live.time.dates).toEqual(['2026-09-02']);
     expect(live.time.slotMinutes).toBe(30);
+  });
+
+  it('closes responses and reopens them: the grid locks, the page says so, guests are refused', async () => {
+    const { deps, poll } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    const open = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(open).toContain(`action="/p/${poll.rkey}/close"`);
+    expect(open).not.toContain('/reopen');
+    const answer = () => dev.request(`/p/${poll.rkey}/respond`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sam', available: PAINT }),
+    });
+    expect((await answer()).status).toBe(200);
+
+    const closed = await dev.request(`/p/${poll.rkey}/close`, form({}, cookie));
+    expect(closed.status).toBe(302);
+    expect(closed.headers.get('location')).toBe(`/p/${poll.rkey}`);
+    const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(body).toContain('"readonly":true');
+    expect(body).toContain('responses are closed');
+    expect(body).toContain(`action="/p/${poll.rkey}/reopen"`);
+    expect(body).not.toContain('/close"');
+    // Still the host's to decide, from the answers that came in before the close.
+    expect(body).toContain(`action="/p/${poll.rkey}/finalize"`);
+    expect((await answer()).status).toBe(400);
+
+    const reopened = await dev.request(`/p/${poll.rkey}/reopen`, form({}, cookie));
+    expect(reopened.status).toBe(302);
+    const again = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(again).toContain('"readonly":false');
+    expect(again).toContain(`action="/p/${poll.rkey}/close"`);
+  });
+
+  it('reopening a decided poll brings the grid back to life', async () => {
+    const { deps, poll, repo } = await setup();
+    const { dev, cookie } = await hostSession(deps);
+    const { finalizePoll, EVENT_NSID } = await import('../../src/services/polls.js');
+    await finalizePoll(deps, HOST, poll.rkey, {
+      start: '2026-09-02T17:00:00.000Z', end: '2026-09-02T17:30:00.000Z',
+    });
+    expect(await repo.listRecords(HOST, EVENT_NSID)).toHaveLength(1);
+    const res = await dev.request(`/p/${poll.rkey}/reopen`, form({}, cookie));
+    expect(res.status).toBe(302);
+    const body = await (await dev.request(`/p/${poll.rkey}`, { headers: { cookie } })).text();
+    expect(body).not.toContain('happening');
+    expect(body).toContain('"readonly":false');
+    expect(body).toContain('pick the winner');
+    expect(await repo.listRecords(HOST, EVENT_NSID)).toHaveLength(0);
+    expect((await dev.request(`/p/${poll.rkey}/ics`)).status).toBe(404);
+  });
+
+  it('refuses a stranger\'s close and reopen, and sends a signed-out one to sign in', async () => {
+    const { deps, poll } = await setup();
+    const { dev, cookie: other } = await hostSession(deps, 'did:plc:stranger');
+    expect((await dev.request(`/p/${poll.rkey}/close`, form({}, other))).status).toBe(403);
+    expect((await dev.request(`/p/${poll.rkey}/reopen`, form({}, other))).status).toBe(403);
+    const out = await dev.request(`/p/${poll.rkey}/close`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: '',
+    });
+    expect(out.status).toBe(302);
+    expect(out.headers.get('location')).toBe(`/login?returnTo=${encodeURIComponent(`/p/${poll.rkey}`)}`);
   });
 
   it('withdraws: the record is gone, the link answers 410, the list forgets it', async () => {

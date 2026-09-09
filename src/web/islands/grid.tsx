@@ -31,6 +31,8 @@ interface PollData {
   /** Poll is no longer active: show the same grid, but painting is off (the server would
    *  refuse the response anyway — see `services/responses.ts`). */
   readonly?: boolean;
+  /** The start of the decided slot, on a decided poll: that cell gets a ring. */
+  chosen?: string;
 }
 
 const NO_COUNT: SlotCount = { available: [], ifNeedBe: [] };
@@ -378,9 +380,13 @@ function Grid({ data }: { data: PollData }) {
       : null;
     const ratio = responders > 0 ? c.available.length / responders : 0;
     const tally = c.available.length + c.ifNeedBe.length;
-    const title = responders === 0 ? range : [
+    const chosen = data.chosen === key;
+    const title = responders === 0 && !chosen ? range : [
+      chosen ? 'the pick' : '',
       range,
-      `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`,
+      responders > 0
+        ? `Available (${c.available.length}/${responders}): ${c.available.join(', ') || 'nobody yet'}`
+        : '',
       c.ifNeedBe.length ? `If need be: ${c.ifNeedBe.join(', ')}` : '',
     ].filter(Boolean).join('\n');
     // Blue, not the brand green: the group's heat and the viewer's own marks must never
@@ -395,7 +401,7 @@ function Grid({ data }: { data: PollData }) {
       <div
         key={key}
         data-slot={key}
-        className={cn('cell', ownVisible && mine, lit)}
+        className={cn('cell', ownVisible && mine, lit, chosen && 'chosen')}
         style={{ backgroundColor: alpha > 0 ? `rgba(59,130,246,${alpha.toFixed(3)})` : undefined }}
         onPointerDown={locked ? undefined : onDown(key)}
         onPointerUp={locked ? undefined : onUp(key)}

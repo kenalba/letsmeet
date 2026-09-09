@@ -183,6 +183,31 @@ test('host creates, guest paints, host finalizes', async ({ page, browser }) => 
   await page.locator('form[action$="/finalize"] button').first().click();
   await expect(page.getByText(/happening|decided|finalized/i)).toBeVisible();
   await expect(page.locator('a.ics[href$="/ics"]')).toBeVisible();
+  // Deciding hides nothing: the grid is still there, locked, with the pick ringed and
+  // Sam's chip still listed.
+  await expect(page.locator('#grid-root .grid.readonly')).toBeVisible();
+  await expect(page.locator('.cell.chosen')).toHaveCount(1);
+  const picked = await page.locator('.cell.chosen').getAttribute('data-slot');
+  await expect(page.locator('.responders').getByText('Sam')).toBeVisible();
+
+  // The host changes their mind: the second-ranked slot becomes the pick instead.
+  await page.locator('form[action$="/finalize"] button').first().click();
+  await expect(page.locator('.cell.chosen')).toHaveCount(1);
+  expect(await page.locator('.cell.chosen').getAttribute('data-slot')).not.toBe(picked);
+
+  // ...then undoes the decision altogether: painting is back on, nothing is picked.
+  await page.locator('form[action$="/reopen"] button').click();
+  await expect(page.getByText(/happening/i)).toHaveCount(0);
+  await expect(page.locator('.cell.chosen')).toHaveCount(0);
+  await expect(page.locator('#grid-root .grid:not(.readonly)')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'pick the winner' })).toBeVisible();
+
+  // ...and freezes the tally without deciding, then reopens once more.
+  await page.locator('form[action$="/close"] button').click();
+  await expect(page.getByText('responses are closed')).toBeVisible();
+  await expect(page.locator('#grid-root .grid.readonly')).toBeVisible();
+  await page.locator('form[action$="/reopen"] button').click();
+  await expect(page.locator('#grid-root .grid:not(.readonly)')).toBeVisible();
 });
 
 test('guest edit link round-trips', async ({ page, browser }) => {

@@ -129,27 +129,53 @@ export async function updatePollTime(
 
 export { EVENT_NSID };
 
+/**
+ * Delete the calendar events a decision filed in the host's repo. Best effort, like the
+ * write that made them: the decision itself is already recorded, and a missing or
+ * unreachable event costs a stale calendar entry, not the poll.
+ */
+async function dropEvents(deps: Deps, hostDid: string, poll: CachedPoll): Promise<void> {
+  const writer = await deps.writerFor(hostDid);
+  for (const ref of poll.record.events ?? []) {
+    try {
+      await writer.deleteRecord(hostDid, EVENT_NSID, parseRkey(ref.uri));
+    } catch (err) {
+      console.error('community event delete failed:', err);
+    }
+  }
+}
+
+/**
+ * Pick the time. From an open or closed poll this decides it; from a decided poll it is a
+ * repick: the earlier event leaves the host's repo and a fresh one is filed for the new
+ * slot. The event refs ride on the schedule record so the cleanup is exact — and so a
+ * later "several sessions" poll can carry more than one.
+ */
 export async function finalizePoll(
   deps: Deps, hostDid: string, rkey: string, slot: Interval,
 ): Promise<void> {
   const poll = loadOwned(deps, hostDid, rkey);
-  if (poll.record.status === 'finalized') throw new UserError('poll is already finalized');
+  const before = poll.record.finalized;
+  if (poll.record.status === 'finalized' && before
+    && before.start === slot.start && before.end === slot.end) {
+    throw new UserError('that time is already picked');
+  }
   const slots = materializeSlots(poll.record.time);
   const winning = slots.some((s) => s.start === slot.start && s.end === slot.end);
   if (!winning) throw new UserError('not a slot of this poll');
 
-  const next = validateScheduleRecord({ ...poll.record, status: 'finalized', finalized: slot });
-  await putUpdated(deps, hostDid, rkey, next);
+  if (poll.record.status === 'finalized') await dropEvents(deps, hostDid, poll);
 
   // NOTE for the implementer: before first deploy, diff these fields against the published
   // community.lexicon.calendar.event schema at https://github.com/lexicon-community/lexicon
   // and adjust names to match exactly. The test asserts only `name`.
   //
-  // Best effort: the poll is already finalized in the host's repo and in our cache, so a
-  // failure here costs a calendar record, not the decision.
+  // Best effort: a failure here costs a calendar record, not the decision, which is
+  // written below either way.
+  let events: ScheduleRecord['events'];
   try {
     const writer = await deps.writerFor(hostDid);
-    await writer.createRecord(hostDid, EVENT_NSID, {
+    const ref = await writer.createRecord(hostDid, EVENT_NSID, {
       $type: EVENT_NSID,
       name: poll.record.title,
       ...(poll.record.description ? { description: poll.record.description } : {}),
@@ -157,7 +183,33 @@ export async function finalizePoll(
       endsAt: slot.end,
       createdAt: deps.now().toISOString(),
     });
+    events = [{ uri: ref.uri, cid: ref.cid }];
   } catch (err) {
     console.error('community event write failed:', err);
   }
+
+  const { events: _dropped, ...rest } = poll.record;
+  const next = validateScheduleRecord({
+    ...rest, status: 'finalized', finalized: slot, ...(events ? { events } : {}),
+  });
+  await putUpdated(deps, hostDid, rkey, next);
+}
+
+/** Stop taking responses without deciding anything; the tally freezes where it is. */
+export async function closePoll(deps: Deps, hostDid: string, rkey: string): Promise<void> {
+  const poll = loadOwned(deps, hostDid, rkey);
+  if (poll.record.status !== 'active') throw new UserError('poll is not open');
+  await putUpdated(deps, hostDid, rkey, validateScheduleRecord({ ...poll.record, status: 'closed' }));
+}
+
+/**
+ * Back to taking responses, from closed or decided. A decision is undone entirely: the
+ * slot is forgotten and its calendar event leaves the host's repo.
+ */
+export async function reopenPoll(deps: Deps, hostDid: string, rkey: string): Promise<void> {
+  const poll = loadOwned(deps, hostDid, rkey);
+  if (poll.record.status === 'active') throw new UserError('poll is already open');
+  if (poll.record.status === 'finalized') await dropEvents(deps, hostDid, poll);
+  const { finalized: _slot, events: _events, ...rest } = poll.record;
+  await putUpdated(deps, hostDid, rkey, validateScheduleRecord({ ...rest, status: 'active' }));
 }
