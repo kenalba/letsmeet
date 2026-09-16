@@ -1,6 +1,7 @@
 import { Lexicons, type LexiconDoc } from '@atproto/lexicon';
 import scheduleLex from '../../lexicons/lol.letsmeet.poll.schedule.json' with { type: 'json' };
 import responseLex from '../../lexicons/lol.letsmeet.poll.response.json' with { type: 'json' };
+import availabilityLex from '../../lexicons/lol.letsmeet.availability.json' with { type: 'json' };
 import strongRefLex from '../../lexicons/com.atproto.repo.strongRef.json' with { type: 'json' };
 import { mergeIntervals, normalizeIso, type Interval } from '../core/intervals.js';
 import type { SpecificDates } from '../core/slots.js';
@@ -12,7 +13,7 @@ export const RESPONSE_NSID = 'lol.letsmeet.poll.response';
 export const EVENT_NSID = 'community.lexicon.calendar.event';
 
 export const lexicons = new Lexicons(
-  [scheduleLex, responseLex, strongRefLex] as unknown as LexiconDoc[],
+  [scheduleLex, responseLex, availabilityLex, strongRefLex] as unknown as LexiconDoc[],
 );
 
 export type PollStatus = 'active' | 'closed' | 'finalized' | 'cancelled';
@@ -86,4 +87,42 @@ export function buildResponseRecord(input: {
     createdAt: new Date().toISOString(),
   };
   return validateResponseRecord(rec);
+}
+
+export const AVAILABILITY_NSID = 'lol.letsmeet.availability';
+export const AVAILABILITY_RKEY = 'self';
+
+export interface WeeklyBlock { day: number; start: string; end: string }
+export interface AwayEntry {
+  start: string; end: string; startTime?: string; endTime?: string; note?: string;
+}
+export interface AvailabilityRecord {
+  $type: typeof AVAILABILITY_NSID;
+  timezone: string;
+  weekly: WeeklyBlock[];
+  away: AwayEntry[];
+  note?: string;
+  validUntil?: string;
+  updatedAt: string;
+}
+
+export function validateAvailabilityRecord(v: unknown): AvailabilityRecord {
+  lexicons.assertValidRecord(AVAILABILITY_NSID, v);
+  return v as AvailabilityRecord;
+}
+
+/** Stamp and validate. Snapping, merging and ordering happen in core/availability.ts first. */
+export function buildAvailabilityRecord(
+  input: Omit<AvailabilityRecord, '$type' | 'updatedAt'>, now: Date,
+): AvailabilityRecord {
+  const rec: AvailabilityRecord = {
+    $type: AVAILABILITY_NSID,
+    timezone: input.timezone,
+    weekly: input.weekly,
+    away: input.away,
+    ...(input.note ? { note: input.note } : {}),
+    ...(input.validUntil ? { validUntil: normalizeIso(input.validUntil) } : {}),
+    updatedAt: now.toISOString(),
+  };
+  return validateAvailabilityRecord(rec);
 }

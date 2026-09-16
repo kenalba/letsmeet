@@ -1,0 +1,45 @@
+{
+  "lexicon": 1,
+  "id": "lol.letsmeet.availability",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "When this account is generally free: a usual week of half-hour blocks in a home timezone, plus dated ranges when they are away. One record per account, rkey `self`.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["timezone", "weekly", "away", "updatedAt"],
+        "properties": {
+          "timezone": { "type": "string", "maxLength": 64, "description": "IANA zone every HH:MM below is read in." },
+          "weekly": { "type": "array", "maxLength": 112, "items": { "type": "ref", "ref": "#block" } },
+          "away": { "type": "array", "maxLength": 100, "items": { "type": "ref", "ref": "#away" } },
+          "note": { "type": "string", "maxGraphemes": 300, "maxLength": 1200, "description": "Shown to anyone reading the record." },
+          "validUntil": { "type": "string", "format": "datetime", "description": "After this the record is stale and should be read as unknown, not empty." },
+          "updatedAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "description": "A usually-free stretch on one weekday. `end` at or before `start` means the block runs past midnight.",
+      "required": ["day", "start", "end"],
+      "properties": {
+        "day": { "type": "integer", "minimum": 0, "maximum": 6, "description": "0 = Sunday." },
+        "start": { "type": "string", "maxLength": 5, "description": "HH:MM, half-hour aligned." },
+        "end": { "type": "string", "maxLength": 5, "description": "HH:MM, half-hour aligned." }
+      }
+    },
+    "away": {
+      "type": "object",
+      "description": "An inclusive date range the account is not free, all day unless startTime/endTime narrow it to a window on each day.",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "maxLength": 10, "description": "YYYY-MM-DD in `timezone`." },
+        "end": { "type": "string", "maxLength": 10, "description": "YYYY-MM-DD in `timezone`, on or after start." },
+        "startTime": { "type": "string", "maxLength": 5 },
+        "endTime": { "type": "string", "maxLength": 5 },
+        "note": { "type": "string", "maxGraphemes": 80, "maxLength": 320 }
+      }
+    }
+  }
+}

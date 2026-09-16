@@ -1,6 +1,7 @@
 import { AtpAgent } from '@atproto/api';
 import scheduleLex from '../lexicons/lol.letsmeet.poll.schedule.json' with { type: 'json' };
 import responseLex from '../lexicons/lol.letsmeet.poll.response.json' with { type: 'json' };
+import availabilityLex from '../lexicons/lol.letsmeet.availability.json' with { type: 'json' };
 
 const { LEX_HANDLE, LEX_APP_PASSWORD, LEX_PDS = 'https://bsky.social' } = process.env;
 if (!LEX_HANDLE || !LEX_APP_PASSWORD) {
@@ -11,7 +12,7 @@ if (!LEX_HANDLE || !LEX_APP_PASSWORD) {
 const agent = new AtpAgent({ service: LEX_PDS });
 await agent.login({ identifier: LEX_HANDLE, password: LEX_APP_PASSWORD });
 
-for (const lex of [scheduleLex, responseLex]) {
+for (const lex of [scheduleLex, responseLex, availabilityLex]) {
   const res = await agent.com.atproto.repo.putRecord({
     repo: agent.session!.did,
     collection: 'com.atproto.lexicon.schema',
