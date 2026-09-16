@@ -1,3 +1,6 @@
+import type { AvailabilityInput } from './availability.js';
+import { TEMPLATE_SUNDAY } from './availability.js';
+
 const toBasic = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
 /**
@@ -57,4 +60,66 @@ export function buildIcs(input: {
     'END:VCALENDAR',
   ];
   return lines.map(foldLine).join('\r\n') + '\r\n';
+}
+
+const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const ymd = (d: string) => d.replace(/-/g, '');
+const hm = (t: string) => `${t.replace(':', '')}00`;
+/** ISO date + n days, as YYYYMMDD; noon anchoring keeps the arithmetic away from DST. */
+function plusDays(date: string, n: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+/**
+ * The standing record as a subscribable calendar: each weekly block is a repeating
+ * transparent event anchored on the editor's template week (so BYDAY and DTSTART agree),
+ * each away entry a busy event, all-day or timed. TZID names the record's IANA zone
+ * without a VTIMEZONE block — Apple and Google resolve IANA names; revisit if a client
+ * refuses the feed.
+ */
+export function buildAvailabilityIcs(
+  rec: AvailabilityInput & { updatedAt: string },
+  opts: { uidHost: string; name: string; now: Date },
+): string {
+  const stamp = toBasic(opts.now.toISOString());
+  const tz = rec.timezone;
+  const until = rec.validUntil ? `;UNTIL=${toBasic(rec.validUntil)}` : '';
+  const L: string[] = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//letsmeet//availability//EN',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${esc(`${opts.name} · availability`)}`,
+    `X-WR-TIMEZONE:${esc(tz)}`,
+  ];
+  for (const b of rec.weekly) {
+    const date = plusDays(TEMPLATE_SUNDAY, b.day);
+    // A past-midnight block ends on the next calendar day.
+    const endDate = b.end <= b.start ? plusDays(TEMPLATE_SUNDAY, b.day + 1) : date;
+    L.push(
+      'BEGIN:VEVENT',
+      `UID:weekly-${BYDAY[b.day]}-${b.start.replace(':', '')}@${opts.uidHost}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=${tz}:${date}T${hm(b.start)}`,
+      `DTEND;TZID=${tz}:${endDate}T${hm(b.end)}`,
+      `RRULE:FREQ=WEEKLY;BYDAY=${BYDAY[b.day]}${until}`,
+      'SUMMARY:usually free', 'TRANSP:TRANSPARENT', 'END:VEVENT',
+    );
+  }
+  for (const a of rec.away) {
+    const summary = `SUMMARY:${esc(a.note ? `away · ${a.note}` : 'away')}`;
+    L.push('BEGIN:VEVENT',
+      `UID:away-${ymd(a.start)}-${a.startTime ? a.startTime.replace(':', '') : 'allday'}@${opts.uidHost}`,
+      `DTSTAMP:${stamp}`);
+    if (a.startTime && a.endTime) {
+      L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(a.startTime)}`,
+        `DTEND;TZID=${tz}:${ymd(a.start)}T${hm(a.endTime)}`);
+      if (a.end !== a.start) L.push(`RRULE:FREQ=DAILY;UNTIL=${ymd(a.end)}T235959`);
+    } else {
+      L.push(`DTSTART;VALUE=DATE:${ymd(a.start)}`, `DTEND;VALUE=DATE:${plusDays(a.end, 1)}`);
+    }
+    L.push(summary, 'TRANSP:OPAQUE', 'END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return L.map(foldLine).join('\r\n') + '\r\n';
 }
