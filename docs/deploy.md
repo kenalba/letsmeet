@@ -30,6 +30,8 @@ On top of the share links, a lost DB also costs:
 - Guest edit-link tokens (a guest who lost their link submits fresh; no
   data loss, just an inconvenience).
 
+Note: `availability_cache` is rebuilt on any read, so its loss costs nothing.
+
 *v1.1 notes:* put the host DID in the share URL (`/p/<did>/<rkey>`) so a poll
 page is self-describing and the cache is genuinely rebuildable from the PDSes
 — that, plus a `poll_cache` repair path, is what would make this DB
@@ -371,19 +373,34 @@ Once that's confirmed:
    from step 4, and confirm `guest.name` and `available[]` look right.
 7. As the host, finalize the poll (pick a slot from the ranked results).
    Confirm the poll page flips to "decided" mode showing the chosen slot.
-8. Verify the `community.lexicon.calendar.event` record's field names
-   against the schema published at
-   [github.com/lexicon-community/lexicon](https://github.com/lexicon-community/lexicon)
-   — `src/services/polls.ts` (`finalizePoll`) has a `NOTE for the
-   implementer` comment flagging that only `name` is asserted by the test
-   suite; `startsAt`/`endsAt`/`description`/`createdAt` need a manual diff
-   against the real schema before this step is considered passed. Fetch the
-   record the same way as step 4/6 (`collection=community.lexicon.calendar.event`)
-   and compare field-by-field.
-9. Download the ICS file from the decided page (or its `webcal:` link) and
-   import it into an actual calendar app (Google Calendar's "Import" screen,
-   Apple Calendar's File → Import, or similar). Confirm the event appears
-   with the right title, start/end time, and timezone.
+8. Open `/availability`, mark a couple of blocks, add an away day, post. Verify the record
+   landed at rkey `self`:
+
+   ```bash
+   curl -s 'https://<your-pds>/xrpc/com.atproto.repo.getRecord?repo=<your-did>&collection=lol.letsmeet.availability&rkey=self' | jq .
+   ```
+
+9. Open `https://letsmeet.lol/u/<your-handle>` in a private window and confirm the sentence,
+   the away entry and the feed link. Subscribe to the `webcal:` link from a calendar app and
+   confirm the weekly blocks appear on the right weekday at the right local time.
+10. Open an active poll you have not answered while signed in and confirm the grid arrives
+    pre-marked with the hint "marked from your availability."
+11. Publish the new lexicon: `npx tsx scripts/publishLexicons.ts` with `LEX_HANDLE` and
+    `LEX_APP_PASSWORD` set (see §1). `_lexicon.letsmeet.lol` already resolves to the authority
+    DID, so no DNS change.
+12. Verify the `community.lexicon.calendar.event` record's field names
+    against the schema published at
+    [github.com/lexicon-community/lexicon](https://github.com/lexicon-community/lexicon)
+    — `src/services/polls.ts` (`finalizePoll`) has a `NOTE for the
+    implementer` comment flagging that only `name` is asserted by the test
+    suite; `startsAt`/`endsAt`/`description`/`createdAt` need a manual diff
+    against the real schema before this step is considered passed. Fetch the
+    record the same way as step 4/6 (`collection=community.lexicon.calendar.event`)
+    and compare field-by-field.
+13. Download the ICS file from the decided page (or its `webcal:` link) and
+    import it into an actual calendar app (Google Calendar's "Import" screen,
+    Apple Calendar's File → Import, or similar). Confirm the event appears
+    with the right title, start/end time, and timezone.
 
 If any step fails, do not consider the deploy announcement-ready — fix
 forward and re-run the whole checklist from step 2, since OAuth, the outbox,

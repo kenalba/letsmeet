@@ -166,9 +166,8 @@ export async function finalizePoll(
 
   if (poll.record.status === 'finalized') await dropEvents(deps, hostDid, poll);
 
-  // NOTE for the implementer: before first deploy, diff these fields against the published
-  // community.lexicon.calendar.event schema at https://github.com/lexicon-community/lexicon
-  // and adjust names to match exactly. The test asserts only `name`.
+  // Field names checked against the published community.lexicon.calendar.event schema on
+  // 2026-09-16: name, description, startsAt, endsAt, createdAt all match.
   //
   // Best effort: a failure here costs a calendar record, not the decision, which is
   // written below either way.
