@@ -87,6 +87,14 @@ describe('describeWeekly', () => {
     expect(describeWeekly([1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '12:00' }))))
       .toBe('usually free weekdays 9am to 12pm.');
   });
+  it('orders clauses Monday-first regardless of input order, e.g. a day-ascending array', () => {
+    // This is the shape normalizeAvailability actually hands back: sorted by day
+    // ascending, so Sunday (day 0) comes first even though it reads last in the sentence.
+    expect(describeWeekly([
+      { day: 0, start: '13:00', end: '17:00' }, { day: 2, start: '19:00', end: '22:00' },
+      { day: 4, start: '19:00', end: '22:00' }, { day: 6, start: '13:00', end: '17:00' },
+    ])).toBe('usually free tuesdays and thursdays 7pm to 10pm, and weekends 1pm to 5pm.');
+  });
   it('says so when nothing is marked', () => {
     expect(describeWeekly([])).toBe('nothing marked yet.');
   });

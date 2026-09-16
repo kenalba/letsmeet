@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../atproto/records.js';
 import { UserError } from './errors.js';
-import { mergeIntervals, type Interval } from './intervals.js';
+import { mergeIntervals, normalizeIso, type Interval } from './intervals.js';
 import { materializeSlots } from './slots.js';
 
 export interface AvailabilityInput {
@@ -118,9 +118,11 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
   const note = cleanText(raw.note, 'the note', 300);
   if (note) out.note = note;
   if (raw.validUntil) {
-    const d = new Date(String(raw.validUntil));
-    if (Number.isNaN(d.getTime())) throw new UserError('"good through" must be a date');
-    out.validUntil = d.toISOString();
+    try {
+      out.validUntil = normalizeIso(String(raw.validUntil));
+    } catch {
+      throw new UserError('"good through" must be a date');
+    }
   }
   return out;
 }
@@ -172,9 +174,12 @@ export function describeWeekly(weekly: WeeklyBlock[]): string {
     if (!byRange.has(k)) byRange.set(k, []);
     byRange.get(k)!.push(b.day);
   }
-  // Groups appear in the order their range is first seen, not re-sorted by day: callers
-  // pass already-ordered weekly blocks (normalizeAvailability sorts by day, then start).
+  // Clauses read Monday-first regardless of input order: day 0 (Sunday) sorts as if it
+  // were 7, so a Sunday-inclusive group (e.g. "weekends") lands after a Monday..Saturday
+  // group it shares no days with, matching how people say their week out loud.
+  const mondayFirst = (days: number[]) => Math.min(...days.map((d) => (d === 0 ? 7 : d)));
   const parts = [...byRange.entries()]
+    .sort((a, b) => mondayFirst(a[1]) - mondayFirst(b[1]))
     .map(([k, days]) => {
       const [s, e] = k.split('|');
       return `${nameDays(days)} ${fmtClock(s)} to ${fmtClock(e)}`;
