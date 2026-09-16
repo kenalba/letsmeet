@@ -5,7 +5,7 @@ import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint, type PaintMap,
 } from '../../core/gridModel.js';
 import {
-  describeWeekly, normalizeAvailability, splitAtTemplateStart, templateSlots,
+  describeWeekly, endOfLocalDay, normalizeAvailability, splitAtTemplateStart, templateSlots,
   templateIntervalsToWeekly, weeklyToTemplateIntervals,
 } from '../../core/availability.js';
 import { UserError } from '../../core/errors.js';
@@ -16,7 +16,6 @@ import { buttonVariants } from '../ui/button.js';
 import { cn } from '../lib/cn.js';
 
 interface AvailabilityData {
-  handle: string | null;
   timezone: string | null;
   weekly: WeeklyBlock[];
   away: AwayEntry[];
@@ -237,8 +236,9 @@ function Editor({ data }: { data: AvailabilityData }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           timezone: zone, weekly, away, note,
-          // A date the viewer picked, good until the end of that day.
-          validUntil: validUntil ? `${validUntil}T23:59:59Z` : undefined,
+          // A date the viewer picked, good until the end of that day where they are —
+          // end-of-day UTC would expire an American record the evening before.
+          validUntil: validUntil ? endOfLocalDay(validUntil, zone) : undefined,
         }),
       });
       const out = (await res.json().catch(() => ({}))) as

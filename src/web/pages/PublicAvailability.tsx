@@ -1,11 +1,10 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
-import { describeWeekly, freeIntervals, isKnownZone, isStale } from '../../core/availability.js';
+import { describeWeekly, freeIntervals, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
 export interface PublicAvailabilityData {
   handle: string;
-  did: string;
   record: AvailabilityRecord | null;
   now: Date;
   publicUrl: string;
@@ -76,9 +75,9 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               <CardTitle>{stale ? 'this might be out of date' : describeWeekly(rec.weekly)}</CardTitle>
               <CardDescription>
                 {stale
-                  ? `expired ${fmtDate(rec.validUntil!.slice(0, 10))}. treat as unknown and ask.`
+                  ? `expired ${fmtDate(localDateOf(rec.validUntil!, rec.timezone))}. treat as unknown and ask.`
                   : `updated ${daysAgo(rec.updatedAt, data.now) === 0 ? 'today' : `${daysAgo(rec.updatedAt, data.now)} days ago`}`
-                    + (rec.validUntil ? ` · good through ${fmtDate(rec.validUntil.slice(0, 10))}` : '')}
+                    + (rec.validUntil ? ` · good through ${fmtDate(localDateOf(rec.validUntil, rec.timezone))}` : '')}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">

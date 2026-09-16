@@ -1,5 +1,5 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
-import { describeWeekly } from '../../core/availability.js';
+import { describeWeekly, localDateOf } from '../../core/availability.js';
 import { useNonce } from '../nonce.js';
 import { scriptJson } from '../scriptJson.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
@@ -13,7 +13,6 @@ import { Layout, pageTitle } from './Layout.js';
 export const AVAILABILITY_SCRIPTS = ['/assets/availability.js'];
 
 export interface AvailabilityPageData {
-  did: string;
   handle?: string;
   record: AvailabilityRecord | null;
   /** The live read failed: the editor opens empty and says a save will overwrite. */
@@ -25,13 +24,13 @@ export interface AvailabilityPageData {
 export function AvailabilityPage(data: AvailabilityPageData) {
   const rec = data.record;
   const islandData = {
-    handle: data.handle ?? null,
     timezone: rec?.timezone ?? null,
     weekly: rec?.weekly ?? [],
     away: rec?.away ?? [],
     note: rec?.note ?? '',
-    // The island's <input type="date"> speaks calendar dates; the record stamps an instant.
-    validUntil: rec?.validUntil ? rec.validUntil.slice(0, 10) : '',
+    // The island's <input type="date"> speaks calendar dates; the record stamps an instant,
+    // which is the end of that date where the record's own zone is.
+    validUntil: rec?.validUntil ? localDateOf(rec.validUntil, rec.timezone) : '',
   };
   const base = data.publicUrl.replace(/\/$/, '');
   const publicPath = data.handle ? `/u/${data.handle}` : null;

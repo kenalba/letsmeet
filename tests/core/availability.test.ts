@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeAvailability, describeWeekly, isStale, splitAtTemplateStart, templateSlots,
   weeklyToTemplateIntervals, templateIntervalsToWeekly, sanitizeForeignRecord, isKnownZone,
+  endOfLocalDay, localDateOf,
 } from '../../src/core/availability.js';
 
 const TZ = 'America/New_York';
@@ -203,5 +204,23 @@ describe('isKnownZone', () => {
     expect(isKnownZone('Mars/Olympus')).toBe(false);
     expect(isKnownZone('')).toBe(false);
     expect(isKnownZone(undefined)).toBe(false);
+  });
+});
+
+describe('"good through" dates', () => {
+  it('ends the day in the record\'s zone, not in UTC', () => {
+    // 23:59:59.999 on the 31st in New York is already January in UTC — and midnight UTC
+    // would have expired the record at 7pm on the 30th, local.
+    expect(endOfLocalDay('2026-12-31', TZ)).toBe('2027-01-01T04:59:59.999Z');
+    expect(endOfLocalDay('2026-12-31', 'Asia/Tokyo')).toBe('2026-12-31T14:59:59.999Z');
+    expect(endOfLocalDay('2026-12-31', 'UTC')).toBe('2026-12-31T23:59:59.999Z');
+  });
+  it('reads that instant back as the same date the visitor picked', () => {
+    for (const zone of [TZ, 'Asia/Tokyo', 'UTC']) {
+      expect(localDateOf(endOfLocalDay('2026-12-31', zone), zone)).toBe('2026-12-31');
+    }
+  });
+  it('falls back to the UTC date when the zone is one it cannot use', () => {
+    expect(localDateOf('2027-01-01T04:59:59.999Z', 'Mars/Olympus')).toBe('2027-01-01');
   });
 });

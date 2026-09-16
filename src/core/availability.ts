@@ -158,6 +158,22 @@ export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
   return { ...rec, weekly, away };
 }
 
+/**
+ * The instant a "good through <date>" runs out: the last millisecond of that local date in
+ * `tz`, as a UTC ISO. The date is what the editor asks for and what a reader is shown; the
+ * record stores the instant, and midnight UTC would expire an American record at seven the
+ * evening before.
+ */
+export function endOfLocalDay(date: string, tz: string): string {
+  return DateTime.fromISO(date, { zone: tz }).endOf('day').toUTC().toISO()!;
+}
+
+/** The inverse: the local date `iso` falls on in `tz`, for the editor field and the page. */
+export function localDateOf(iso: string, tz: string): string {
+  const d = DateTime.fromISO(iso, { zone: isKnownZone(tz) ? tz : 'utc' });
+  return d.isValid ? d.toISODate()! : iso.slice(0, 10);
+}
+
 export function isStale(rec: { validUntil?: string }, now: Date): boolean {
   return !!rec.validUntil && new Date(rec.validUntil).getTime() < now.getTime();
 }
@@ -223,7 +239,6 @@ export function describeWeekly(weekly: WeeklyBlock[]): string {
 /** A Sunday. The editor grid is these seven dates; only the weekday of each matters. */
 export const TEMPLATE_SUNDAY = '2026-01-04';
 export const TEMPLATE_START = '07:00';
-export const TEMPLATE_END = '24:00';
 
 function templateDates(): string[] {
   return Array.from({ length: 7 }, (_, i) =>

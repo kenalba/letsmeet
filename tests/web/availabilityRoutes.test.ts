@@ -59,6 +59,18 @@ describe('/availability', () => {
     expect(html).toContain('out of town');
     expect(html).toContain('usually free tuesdays 7pm to 10pm.');
   });
+  it('shows "good through" as the date the viewer picked, read in the record\'s zone', async () => {
+    const { app, repo } = setup();
+    const cookie = await signIn(app, ME);
+    await repo.putRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY, {
+      $type: AVAILABILITY_NSID, ...body, timezone: 'America/New_York',
+      // The end of 2026-12-31 in New York — already January in UTC.
+      validUntil: '2027-01-01T04:59:59.999Z', updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    const html = await (await app.request('/availability', { headers: { cookie } })).text();
+    expect(html).toContain('2026-12-31');
+    expect(html).not.toContain('2027-01-01');
+  });
   it('saves a record for the signed-in viewer and reports the sentence', async () => {
     const { app, repo } = setup();
     const cookie = await signIn(app, ME);

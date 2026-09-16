@@ -52,6 +52,13 @@ describe('/u/:handle', () => {
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
     expect((await app.request(`/u/${KEN}`)).status).toBe(200);
   });
+  it('takes no did literal once a real resolver is configured', async () => {
+    // The literal is a fake-mode stand-in for a handle. In production only a resolution
+    // proves the DID is the one behind the name in the URL.
+    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null));
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    expect((await app.request(`/u/${KEN}`)).status).toBe(404);
+  });
   it('says so when there is no record, and 404s an unknown handle', async () => {
     const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null));
     const none = await app.request('/u/ken.wzrdz.cool');
@@ -68,6 +75,14 @@ describe('/u/:handle', () => {
       expect((await app.request('/u/ken.wzrdz.cool/availability.ics')).status).toBe(503);
       expect((await app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol')).status).toBe(404);
     } finally { warned.mockRestore(); }
+  });
+  it('names the good-through day in the record\'s zone, not in UTC', async () => {
+    const { app, repo } = setup();
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, {
+      ...rec, validUntil: '2027-01-01T04:59:59.999Z', // the end of Dec 31 in New York
+    });
+    const html = await (await app.request(`/u/${KEN}`)).text();
+    expect(html).toContain('good through Dec 31');
   });
   it('reads an expired record as unknown', async () => {
     const { app, repo } = setup();
@@ -103,7 +118,7 @@ describe('the two-week strip', () => {
     // The lexicon allows startTime without endTime, and freeIntervals treats a lone one as
     // all day — the strip has to agree, or the bar reads empty with no away marking on it.
     const html = renderToString(createElement(PublicAvailabilityPage, {
-      handle: 'ken.wzrdz.cool', did: KEN, now: new Date('2026-09-16T12:00:00Z'),
+      handle: 'ken.wzrdz.cool', now: new Date('2026-09-16T12:00:00Z'),
       publicUrl: 'https://letsmeet.lol',
       record: {
         ...rec, away: [{ start: '2026-09-18', end: '2026-09-18', startTime: '09:00' }],

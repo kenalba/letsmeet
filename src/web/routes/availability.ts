@@ -78,7 +78,7 @@ export function availabilityRoutes(
       readFailed = true;
     }
     return page(c, createElement(AvailabilityPage, {
-      did: who.did, handle: who.handle ?? undefined, record, readFailed, publicUrl: env.PUBLIC_URL,
+      handle: who.handle ?? undefined, record, readFailed, publicUrl: env.PUBLIC_URL,
     }));
   });
 
@@ -109,10 +109,15 @@ export function availabilityRoutes(
   // 120 public reads per ten minutes per address: each cold read is a PDS round trip.
   const readLimiter = new TokenBucket(120, 120 / 600);
 
-  /** The DID behind `/u/<handle>`, or null. Fake mode has no resolver and takes a DID literal. */
+  /**
+   * The DID behind `/u/<handle>`, or null. With no resolver configured — fake mode, which
+   * is what the e2e rig runs — a `did:` literal stands in for a handle. Where there is a
+   * resolver, the literal is not accepted: only a real resolution says that this DID is
+   * the one behind the name in the URL.
+   */
   const didFor = async (handle: string): Promise<string | null> => {
-    if (handle.startsWith('did:')) return /^did:(plc|web):[a-zA-Z0-9._:%-]+$/.test(handle) ? handle : null;
-    return deps.resolveDid ? deps.resolveDid(handle) : null;
+    if (deps.resolveDid) return deps.resolveDid(handle);
+    return /^did:(plc|web):[a-zA-Z0-9._:%-]+$/.test(handle) ? handle : null;
   };
 
   /** Resolve + read, or the response that says why not. Shared by the page and the feed. */
@@ -147,7 +152,7 @@ export function availabilityRoutes(
     const r = await lookup(c, handle);
     if ('deny' in r) return r.deny;
     return page(c, createElement(PublicAvailabilityPage, {
-      handle: r.handle, did: r.did, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
+      handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
     }));
   };
 

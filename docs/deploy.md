@@ -319,8 +319,9 @@ exactly this.
 
 ## 4. Publishing the lexicons
 
-The two custom record schemas (`lol.letsmeet.poll.schedule` and
-`lol.letsmeet.poll.response`, in `lexicons/`) need to be discoverable per the
+The three custom record schemas (`lol.letsmeet.poll.schedule`,
+`lol.letsmeet.poll.response` and `lol.letsmeet.availability`, in `lexicons/`)
+need to be discoverable per the
 atproto lexicon-publishing convention: a DNS TXT record naming the owning
 DID, plus a `com.atproto.lexicon.schema` record for each schema in that DID's
 repo. This is a one-time (or one-time-per-schema-change) admin task, not
@@ -339,9 +340,10 @@ something the running server does.
    if you don't already have it recorded.
 
    **Done 2026-09-01:** the record points at
-   `did:plc:s6bsxutpplnkmlllri6nif6d` (the `ken.wzrdz.cool` account) and
-   both lexicons are published there. Repeat steps 2–4 only when a lexicon
-   changes — `putRecord` overwrites in place.
+   `did:plc:s6bsxutpplnkmlllri6nif6d` (the `ken.wzrdz.cool` account) and the
+   two poll lexicons are published there. `lol.letsmeet.availability` is the
+   third and goes up with the same script (§5 checklist step 11). Repeat
+   steps 2–4 only when a lexicon changes — `putRecord` overwrites in place.
 
 2. **Get an app password.** Log into that account and
    create an app password (Settings → App Passwords). Do **not** use the
@@ -361,12 +363,12 @@ something the running server does.
    `wzrdz.cool`) is rejected with `Invalid identifier or password` — which
    reads like a bad app password but isn't. Add `LEX_PDS=...` only if the
    account isn't behind the `bsky.social` entryway. Delete the app password
-   afterwards; the script is one-shot. Expect two lines of output, one per
-   lexicon:
+   afterwards; the script is one-shot. Expect one line of output per lexicon:
 
    ```
    published lol.letsmeet.poll.schedule -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.poll.schedule
    published lol.letsmeet.poll.response -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.poll.response
+   published lol.letsmeet.availability -> at://did:plc:.../com.atproto.lexicon.schema/lol.letsmeet.availability
    ```
 
    The script exits 1 with a usage message if `LEX_HANDLE`/`LEX_APP_PASSWORD`
@@ -382,9 +384,9 @@ something the running server does.
    curl -s 'https://bsky.social/xrpc/com.atproto.repo.getRecord?repo=did:plc:...&collection=com.atproto.lexicon.schema&rkey=lol.letsmeet.poll.schedule' | jq .
    ```
 
-   Repeat the `getRecord` check for `lol.letsmeet.poll.response`. Both should
-   return the full lexicon JSON with `$type: "com.atproto.lexicon.schema"`
-   added.
+   Repeat the `getRecord` check for `lol.letsmeet.poll.response` and
+   `lol.letsmeet.availability`. All three should return the full lexicon JSON
+   with `$type: "com.atproto.lexicon.schema"` added.
 
 Re-run the script (same rkeys, since `rkey = lex.id`) whenever a lexicon JSON
 changes — `putRecord` overwrites in place.
@@ -452,15 +454,14 @@ Once that's confirmed:
 11. Publish the new lexicon: `npx tsx scripts/publishLexicons.ts` with `LEX_HANDLE` and
     `LEX_APP_PASSWORD` set (see §1). `_lexicon.letsmeet.lol` already resolves to the authority
     DID, so no DNS change.
-12. Verify the `community.lexicon.calendar.event` record's field names
+12. Fetch the `community.lexicon.calendar.event` record the decision filed,
+    the same way as step 4/6 (`collection=community.lexicon.calendar.event`),
+    and confirm it is there and readable. Its field names
+    (`name`, `description`, `startsAt`, `endsAt`, `createdAt`) were checked
     against the schema published at
     [github.com/lexicon-community/lexicon](https://github.com/lexicon-community/lexicon)
-    — `src/services/polls.ts` (`finalizePoll`) has a `NOTE for the
-    implementer` comment flagging that only `name` is asserted by the test
-    suite; `startsAt`/`endsAt`/`description`/`createdAt` need a manual diff
-    against the real schema before this step is considered passed. Fetch the
-    record the same way as step 4/6 (`collection=community.lexicon.calendar.event`)
-    and compare field-by-field.
+    on 2026-09-16 and match — there is nothing left to diff by hand unless
+    that schema changes.
 13. Download the ICS file from the decided page (or its `webcal:` link) and
     import it into an actual calendar app (Google Calendar's "Import" screen,
     Apple Calendar's File → Import, or similar). Confirm the event appears
