@@ -218,6 +218,35 @@ export function weeklyToTemplateIntervals(weekly: WeeklyBlock[], timezone: strin
   return ivs.length ? mergeIntervals(ivs) : [];
 }
 
+/**
+ * `weekly` cut at the grid's first row. The editor can only show what falls in the template
+ * window, and it rebuilds the marked half from the grid on every stroke — so the early part,
+ * which no cell stands for, has to be carried through untouched or a record written by another
+ * client would lose its small-hours blocks the moment anyone marked anything. A block that
+ * straddles `TEMPLATE_START` is split, so unmarking its visible half still works and the
+ * sliver survives; `normalizeAvailability` merges the two back together on the way out.
+ */
+export function splitAtTemplateStart(
+  weekly: WeeklyBlock[],
+): { onGrid: WeeklyBlock[]; offGrid: WeeklyBlock[] } {
+  const first = toMinutes(TEMPLATE_START, 'the template start', false);
+  const onGrid: WeeklyBlock[] = [];
+  const offGrid: WeeklyBlock[] = [];
+  for (const b of weekly) {
+    const s = toMinutes(b.start, 'a block start', false);
+    const e0 = toMinutes(b.end, 'a block end', false);
+    // As normalizeAvailability writes them, an end at or before the start means end of day.
+    const e = e0 <= s ? 1440 : e0;
+    if (s >= first) onGrid.push(b);
+    else if (e <= first) offGrid.push(b);
+    else {
+      offGrid.push({ day: b.day, start: b.start, end: TEMPLATE_START });
+      onGrid.push({ day: b.day, start: TEMPLATE_START, end: b.end });
+    }
+  }
+  return { onGrid, offGrid };
+}
+
 export function templateIntervalsToWeekly(ivs: Interval[], timezone: string): WeeklyBlock[] {
   const out: WeeklyBlock[] = [];
   for (const iv of ivs) {

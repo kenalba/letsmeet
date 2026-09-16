@@ -81,6 +81,28 @@ describe('/availability', () => {
     expect(res.status).toBe(400);
     expect((await res.json() as { error: string }).error).toMatch(/timezone/);
   });
+  it('explains a body that is not json at all', async () => {
+    const { app } = setup();
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: 'not json',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('malformed request body.');
+  });
+  it('turns saves away once the account has spent its budget', async () => {
+    const { app } = setup();
+    const cookie = await signIn(app, ME);
+    const save = () => app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    // The bucket holds 20 and the clock does not move, so the 21st finds it empty.
+    for (let i = 0; i < 20; i++) expect((await save()).status).toBe(200);
+    const res = await save();
+    expect(res.status).toBe(429);
+    expect((await res.json() as { error: string }).error).toBe('easy there. try again in a minute.');
+  });
   it('opens the editor empty, and says so, when the pds will not answer the read', async () => {
     const reader: RepoReader = {
       getRecord: async () => { throw new Error('pds unreachable'); },

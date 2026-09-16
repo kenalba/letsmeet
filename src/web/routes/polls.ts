@@ -1,11 +1,10 @@
 import { createElement } from 'react';
 import { Hono } from 'hono';
-import { ValidationError } from '@atproto/lexicon';
 import type { Deps } from '../../atproto/types.js';
 import type { AuthClient } from '../../atproto/oauthClient.js';
 import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
-import { GENERIC_ERROR, UserError } from '../../core/errors.js';
+import { UserError } from '../../core/errors.js';
 import { readSession, type SessionEnv } from '../session.js';
 import {
   countResponses, countResponsesByPoll, listPollsByHost, listPollsAnswered, type CachedPoll,
@@ -22,7 +21,7 @@ import { pendingOutboxCount } from '../../db/outbox.js';
 import { buildIcs } from '../../core/ics.js';
 import { TokenBucket } from '../rateLimit.js';
 import { clientIp } from '../clientIp.js';
-import { page } from '../respond.js';
+import { explain, page } from '../respond.js';
 import { fmtRange } from '../lib/fmtRange.js';
 import { LandingPage, type PollListItem } from '../pages/Landing.js';
 import { TombstonePage } from '../pages/Tombstone.js';
@@ -30,17 +29,6 @@ import { NewPollPage } from '../pages/NewPoll.js';
 import { EditPollPage } from '../pages/EditPoll.js';
 import { PollPage } from '../pages/Poll.js';
 import { ErrorPage } from '../pages/ErrorPage.js';
-
-/**
- * What a failed request tells the client. Messages written for a person (UserError) and
- * the lexicon's own field-level complaints ("title must not be longer than…") are shown
- * as they are; anything else is logged here and replaced with a line that names nothing.
- */
-function explain(err: unknown, where: string): string {
-  if (err instanceof UserError || err instanceof ValidationError) return err.message;
-  console.error(`${where} failed:`, err);
-  return GENERIC_ERROR;
-}
 
 /**
  * The poll's geometry, straight off the create/edit form. `slotMinutes` is an unchecked

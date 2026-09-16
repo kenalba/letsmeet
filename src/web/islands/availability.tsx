@@ -5,8 +5,10 @@ import {
   buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint, type PaintMap,
 } from '../../core/gridModel.js';
 import {
-  describeWeekly, templateSlots, weeklyToTemplateIntervals, templateIntervalsToWeekly,
+  describeWeekly, normalizeAvailability, splitAtTemplateStart, templateSlots,
+  templateIntervalsToWeekly, weeklyToTemplateIntervals,
 } from '../../core/availability.js';
+import { UserError } from '../../core/errors.js';
 // Only the class-string generator, never the <Button> component: <Button> stamps
 // data-slot="button", which would land inside #availability-root and start matching the
 // same `[data-slot]` selector the grid cells use.
@@ -101,18 +103,41 @@ function Editor({ data }: { data: AvailabilityData }) {
     [geom, zone],
   );
 
+  const [status, setStatus] = useState<string | null>(null);
+
   // Marks live as weekly blocks; the grid is a view of them in the current zone. Changing
   // the zone keeps the wall-clock blocks (a Tuesday 7pm stays a Tuesday 7pm).
   const [weekly, setWeekly] = useState<WeeklyBlock[]>(data.weekly);
+  // The part of the week the grid has no row for, held aside for the life of the editor: a
+  // stroke rebuilds everything the cells cover, so without this a record written elsewhere
+  // would lose its small-hours blocks at the first touch. A record so odd that it cannot even
+  // be split (times off the half hour, which only another client can write) holds nothing
+  // aside rather than taking the editor down with it.
+  const [offGrid] = useState<WeeklyBlock[]>(() => {
+    try { return splitAtTemplateStart(data.weekly).offGrid; } catch { return []; }
+  });
   const painted = useMemo<PaintMap>(
     () => intervalsToPaint(weeklyToTemplateIntervals(weekly, zone), [], slots), [weekly, zone, slots]);
-  const setPainted = (p: PaintMap) =>
-    setWeekly(templateIntervalsToWeekly(paintToIntervals(p, slots, 'available'), zone));
+  /**
+   * A stroke, written back as the record: what the cells now say, plus the blocks the grid
+   * cannot show, merged and re-sorted. The one thing that can be refused here is a week of
+   * more separate blocks than the record holds — so it is said out loud, and the marks stay
+   * as they were rather than the stroke vanishing.
+   */
+  const setPainted = (p: PaintMap) => {
+    try {
+      const marked = templateIntervalsToWeekly(paintToIntervals(p, slots, 'available'), zone);
+      setWeekly(normalizeAvailability(
+        { timezone: zone, weekly: [...offGrid, ...marked], away: [] }).weekly);
+      setStatus(null);
+    } catch (err) {
+      setStatus(err instanceof UserError ? err.message : 'could not mark that.');
+    }
+  };
 
   const [away, setAway] = useState<AwayEntry[]>(data.away);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
-  const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // What the server already has. The button lights up only when the editor differs from it —
   // an editor with no record to open stands at "nothing marked", which is not worth posting.
@@ -273,7 +298,9 @@ function Editor({ data }: { data: AvailabilityData }) {
           <li key={`${a.start}-${a.startTime ?? ''}-${i}`}>
             <span className="when">
               {a.start === a.end ? fmtDate(a.start) : `${fmtDate(a.start)} – ${fmtDate(a.end)}`}
-              {a.startTime && ` · ${fmtClock(a.startTime)}–${fmtClock(a.endTime!)}`}
+              {/* Both are optional in the lexicon and only paired by our own normalize, so a
+                  record written by another client can carry one without the other. */}
+              {a.startTime && a.endTime && ` · ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
             </span>
             {a.note && <span className="note"> {a.note}</span>}
             <button

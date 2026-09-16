@@ -1,25 +1,13 @@
 import { createElement } from 'react';
 import { Hono } from 'hono';
-import { ValidationError } from '@atproto/lexicon';
 import type { Deps } from '../../atproto/types.js';
-import { GENERIC_ERROR, UserError } from '../../core/errors.js';
+import { UserError } from '../../core/errors.js';
 import { describeWeekly } from '../../core/availability.js';
 import { readSession, type SessionEnv } from '../session.js';
-import { page } from '../respond.js';
+import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
 import { getOwnAvailability, saveAvailability } from '../../services/availability.js';
 import { AvailabilityPage } from '../pages/Availability.js';
-
-/**
- * What a failed save tells the editor. Messages written for a person (UserError) and the
- * lexicon's own field-level complaints are shown as they are; anything else is logged here
- * and replaced with a line that names nothing. Same rule as `routes/polls.ts`.
- */
-function explain(err: unknown, where: string): string {
-  if (err instanceof UserError || err instanceof ValidationError) return err.message;
-  console.error(`${where} failed:`, err);
-  return GENERIC_ERROR;
-}
 
 /** A PDS refusing the write for want of scope: the session predates the availability scope. */
 function needsReauth(err: unknown): boolean {

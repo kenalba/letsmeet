@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeAvailability, describeWeekly, isStale, templateSlots,
+  normalizeAvailability, describeWeekly, isStale, splitAtTemplateStart, templateSlots,
   weeklyToTemplateIntervals, templateIntervalsToWeekly,
 } from '../../src/core/availability.js';
 
@@ -123,5 +123,35 @@ describe('template week', () => {
     const weekly = [{ day: 2, start: '19:00', end: '22:00' }, { day: 5, start: '22:00', end: '00:00' }];
     const ivs = weeklyToTemplateIntervals(weekly, TZ);
     expect(templateIntervalsToWeekly(ivs, TZ)).toEqual(weekly);
+  });
+  it('cuts the week at the grid\'s first row, splitting a block that straddles it', () => {
+    // The editor rebuilds everything on the grid from the cells, so what is off the grid has
+    // to come back out of here or a foreign record loses its small hours at the first stroke.
+    const { onGrid, offGrid } = splitAtTemplateStart([
+      { day: 1, start: '02:00', end: '06:00' }, // wholly before the first row
+      { day: 2, start: '06:00', end: '10:00' }, // straddles it
+      { day: 3, start: '19:00', end: '22:00' }, // wholly on the grid
+      { day: 4, start: '23:00', end: '00:00' }, // runs to end of day
+    ]);
+    expect(offGrid).toEqual([
+      { day: 1, start: '02:00', end: '06:00' },
+      { day: 2, start: '06:00', end: '07:00' },
+    ]);
+    expect(onGrid).toEqual([
+      { day: 2, start: '07:00', end: '10:00' },
+      { day: 3, start: '19:00', end: '22:00' },
+      { day: 4, start: '23:00', end: '00:00' },
+    ]);
+  });
+  it('puts a split block back together once the grid half is marked again', () => {
+    const { onGrid, offGrid } = splitAtTemplateStart([{ day: 2, start: '06:00', end: '10:00' }]);
+    // What the editor does on every stroke: the cells' half, plus what it held aside.
+    const rejoined = normalizeAvailability({
+      timezone: TZ, weekly: [...offGrid, ...onGrid], away: [],
+    }).weekly;
+    expect(rejoined).toEqual([{ day: 2, start: '06:00', end: '10:00' }]);
+    // And unmarking that half leaves the sliver the grid could never show.
+    const unmarked = normalizeAvailability({ timezone: TZ, weekly: offGrid, away: [] }).weekly;
+    expect(unmarked).toEqual([{ day: 2, start: '06:00', end: '07:00' }]);
   });
 });

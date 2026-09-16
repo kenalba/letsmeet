@@ -99,8 +99,10 @@ npm run build:client
 ```
 
 If you skip this, the app boots fine but every page loads with 404s for
-`/assets/grid.js`, `/assets/createForm.js`, and `/assets/app.css` — a broken
-grid, a plain-text dates fallback on the create form, and unstyled markup.
+`/assets/grid.js`, `/assets/createForm.js`, `/assets/login.js`,
+`/assets/availability.js`, and `/assets/app.css` — a broken grid, a plain-text
+dates fallback on the create form, no handle typeahead, no availability editor,
+and unstyled markup.
 
 ### A local dev-sign-in quirk
 
