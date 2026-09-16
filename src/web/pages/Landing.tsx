@@ -82,13 +82,15 @@ function PollList({ polls }: { polls: PollListItem[] }) {
   );
 }
 
-export function LandingPage({ did, handle, polls = [], answered = [] }: {
+export function LandingPage({ did, handle, polls = [], answered = [], availability }: {
   did: string | null;
   /** The handle stored at sign-in; a session from before that existed falls back to did. */
   handle?: string;
   polls?: PollListItem[];
   /** Polls the viewer answered from their own account and does not host. */
   answered?: PollListItem[];
+  /** The viewer's standing availability: a sentence, or `null` for no record. Absent when signed out. */
+  availability?: { sentence: string; stale: boolean; handle?: string } | null;
 }) {
   if (!did) {
     return (
@@ -160,6 +162,25 @@ export function LandingPage({ did, handle, polls = [], answered = [] }: {
             )}
           </CardContent>
         </Card>
+        <div className="availability grid gap-3">
+          <h2 className="pixel-heading">your availability</h2>
+          <Card>
+            <CardContent className="flex flex-wrap items-baseline justify-between gap-3">
+              <p className="text-sm">
+                {availability ? availability.sentence : 'nothing marked yet.'}
+                {availability?.stale && <span className="text-muted-foreground"> (out of date)</span>}
+              </p>
+              <p className="text-sm">
+                <a href="/availability" className="text-primary underline underline-offset-4">
+                  {availability ? 'update' : 'mark your week'}
+                </a>
+                {availability?.handle && (
+                  <>{' '}· <a href={`/u/${availability.handle}`} className="text-primary underline underline-offset-4">your public page</a></>
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
         {/* Only when there is something to list: an empty "you answered nothing" is noise. */}
         {answered.length > 0 ? (
           <div className="answered grid gap-3">

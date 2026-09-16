@@ -15,7 +15,8 @@ import {
 } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
-import { prefillForPoll } from '../../services/availability.js';
+import { prefillForPoll, getAvailabilityCached } from '../../services/availability.js';
+import { describeWeekly, isStale } from '../../core/availability.js';
 import { lookupEditSecret } from '../../db/editSecrets.js';
 import { listResponseCache } from '../../db/cache.js';
 import { pendingOutboxCount } from '../../db/outbox.js';
@@ -71,11 +72,24 @@ export function pollRoutes(
       dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
       chosen: p.record.finalized ? fmtRange(p.record.finalized, p.record.time.timezone) : undefined,
     });
+    let availability: { sentence: string; stale: boolean; handle?: string } | null | undefined;
+    if (did) {
+      try {
+        const rec = await getAvailabilityCached(deps, did);
+        availability = rec
+          ? { sentence: describeWeekly(rec.weekly), stale: isStale(rec, deps.now()), handle: who?.handle ?? undefined }
+          : null;
+      } catch (err) {
+        console.warn(`landing availability read failed for ${did}:`, err);
+        availability = null;
+      }
+    }
     return page(c, createElement(LandingPage, {
       did,
       handle: who?.handle ?? undefined,
       polls: did ? listPollsByHost(deps.db, did).map(item) : [],
       answered: did ? listPollsAnswered(deps.db, did).map(item) : [],
+      availability,
     }));
   });
 

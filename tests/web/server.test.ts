@@ -5,6 +5,7 @@ import { FakeRepo } from '../helpers/fakeRepo.js';
 import { createServer } from '../../src/web/server.js';
 import { scriptJson } from '../../src/web/scriptJson.js';
 import { createPoll } from '../../src/services/polls.js';
+import { saveAvailability } from '../../src/services/availability.js';
 import { enqueueOutbox } from '../../src/db/outbox.js';
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
@@ -105,6 +106,25 @@ describe('server', () => {
     const otherBody = await (await dev.request('/', { headers: { cookie: otherCookie } })).text();
     expect(otherBody).not.toContain(`/p/${poll.rkey}`);
     expect(otherBody).toContain('no events planned yet');
+  });
+
+  it('shows the signed-in viewer their availability block', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}&handle=host.test`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    let html = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(html).toContain('your availability');
+    expect(html).toContain('nothing marked yet');
+    expect(html).toContain('href="/availability"');
+    await saveAvailability(deps, HOST, {
+      timezone: 'UTC', weekly: [{ day: 1, start: '09:00', end: '12:00' }], away: [],
+    });
+    html = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(html).toContain('usually free mondays 9am to 12pm.');
+    expect(html).toContain('href="/u/host.test"');
   });
 
   it('lists the polls you answered below your own, and names the chosen time', async () => {
