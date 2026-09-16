@@ -220,7 +220,8 @@ describe('"good through" dates', () => {
       expect(localDateOf(endOfLocalDay('2026-12-31', zone), zone)).toBe('2026-12-31');
     }
   });
-  it('falls back to the UTC date when the zone is one it cannot use', () => {
+  it('falls back to UTC when the zone is one it cannot use', () => {
     expect(localDateOf('2027-01-01T04:59:59.999Z', 'Mars/Olympus')).toBe('2027-01-01');
+    expect(endOfLocalDay('2026-12-31', 'Mars/Olympus')).toBe('2026-12-31T23:59:59.999Z');
   });
 });

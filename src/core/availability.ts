@@ -30,13 +30,13 @@ const fromMinutes = (n: number): string => {
 };
 
 /** A zone luxon can do wall-clock arithmetic in. The lexicon only checks it is ≤64 chars. */
-export function isKnownZone(tz: unknown): boolean {
+export function isKnownZone(tz: unknown): tz is string {
   return typeof tz === 'string' && DateTime.now().setZone(tz).isValid;
 }
 
 function checkZone(tz: unknown): string {
   if (!isKnownZone(tz)) throw new UserError('that timezone is not one this app knows');
-  return tz as string;
+  return tz;
 }
 
 function checkDate(d: unknown, tz: string, what: string): string {
@@ -165,7 +165,8 @@ export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
  * evening before.
  */
 export function endOfLocalDay(date: string, tz: string): string {
-  return DateTime.fromISO(date, { zone: tz }).endOf('day').toUTC().toISO()!;
+  return DateTime.fromISO(date, { zone: isKnownZone(tz) ? tz : 'utc' })
+    .endOf('day').toUTC().toISO()!;
 }
 
 /** The inverse: the local date `iso` falls on in `tz`, for the editor field and the page. */

@@ -194,11 +194,11 @@ export function availabilityRoutes(
   });
 
   /**
-   * One ask per handle per thirty seconds is far more than Caddy needs (it asks once, on
-   * the first handshake for a name it has no certificate for), and the key is the domain
-   * being asked about — the thing an attacker varies — so a flood of made-up names can
-   * never spend the budget a real first visit needs. Keying on the caller instead would
-   * pool every legitimate ask into one bucket, since the caller is always Caddy.
+   * Twenty asks per handle, one back every thirty seconds — far more than Caddy needs, since
+   * it asks once, on the first handshake for a name it has no certificate for. The key is
+   * the domain being asked about, which is the thing an attacker varies, so a flood of
+   * made-up names cannot spend the budget a real first visit needs. Keying on the caller
+   * instead pools every legitimate ask into one bucket: the caller is always Caddy.
    */
   const askLimiter = new TokenBucket(20, 20 / 600);
 
@@ -215,12 +215,11 @@ export function availabilityRoutes(
    */
   app.get('/internal/tls-ask', async (c) => {
     if (!isLoopbackPeer(c)) return c.text('no', 404);
+    // The handle-shape check in `aliasHandleOf` is also what keeps a `did:` literal out:
+    // `didFor`'s fake-mode shortcut matches by regex alone, so without it
+    // `?domain=did:plc:anything.sez.letsmeet.lol` would mint a cert for an unverified DID.
     const handle = aliasHandle(c.req.query('domain'));
-    // The alias suffix is stripped off a hostname, never a `did:` literal — that shortcut
-    // in `didFor` exists only for fake-mode `/u/:handle` and matches by regex alone, so
-    // without this check `?domain=did:plc:anything.sez.letsmeet.lol` would mint a cert for
-    // an unverified DID.
-    if (!handle || handle.startsWith('did:')) return c.text('no', 404);
+    if (!handle) return c.text('no', 404);
     if (!askLimiter.allow(handle.toLowerCase(), deps.now().getTime())) return c.text('no', 429);
     try {
       return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
