@@ -49,6 +49,33 @@ describe('saveAvailability', () => {
     await expect(saveAvailability(deps, DID, { ...input, timezone: 'Nowhere/Here' }))
       .rejects.toThrow(/timezone/);
   });
+  it('does not rewrite when the live record differs only in key order (dag-cbor round trip)', async () => {
+    const { deps, repo } = setup();
+    const { record } = await saveAvailability(deps, DID, input);
+    // A real PDS canonicalises (sorts) map keys on a dag-cbor round trip; FakeRepo keeps
+    // whatever object it is given, so reorder both top-level and nested keys by hand to
+    // simulate what a live read would actually come back as.
+    const reordered = {
+      updatedAt: record.updatedAt,
+      weekly: record.weekly.map(({ day, start, end }) => ({ end, day, start })),
+      away: record.away.map(({ start, end, ...rest }) => ({ end, ...rest, start })),
+      timezone: record.timezone,
+      $type: record.$type,
+      ...(record.note ? { note: record.note } : {}),
+    };
+    await repo.putRecord(DID, AVAILABILITY_NSID, AVAILABILITY_RKEY, reordered);
+    const put = vi.spyOn(repo, 'putRecord');
+    const { written } = await saveAvailability(deps, DID, input);
+    expect(written).toBe(false);
+    expect(put).not.toHaveBeenCalled();
+  });
+});
+
+describe('getOwnAvailability', () => {
+  it('returns null when no record exists', async () => {
+    const { deps } = setup();
+    expect(await getOwnAvailability(deps, DID)).toBeNull();
+  });
 });
 
 describe('getAvailabilityCached', () => {

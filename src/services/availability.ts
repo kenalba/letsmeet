@@ -23,10 +23,26 @@ export function getOwnAvailability(deps: Deps, did: string): Promise<Availabilit
   return readLive(deps, did);
 }
 
+/**
+ * `JSON.stringify` with object keys sorted (arrays keep their order), so two objects
+ * that differ only in key order serialize identically. A live record answers by a real
+ * PDS comes back through a dag-cbor round trip, which canonicalises (sorts) map keys —
+ * a plain `JSON.stringify` compare would then see every save as a change.
+ */
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  if (v !== null && typeof v === 'object') {
+    const entries = Object.keys(v as Record<string, unknown>).sort()
+      .map((k) => `${JSON.stringify(k)}:${stableStringify((v as Record<string, unknown>)[k])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
 const sameButForStamp = (a: AvailabilityRecord, b: AvailabilityRecord): boolean => {
   const { updatedAt: _a, ...ra } = a;
   const { updatedAt: _b, ...rb } = b;
-  return JSON.stringify(ra) === JSON.stringify(rb);
+  return stableStringify(ra) === stableStringify(rb);
 };
 
 /**
