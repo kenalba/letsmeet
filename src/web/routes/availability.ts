@@ -97,16 +97,18 @@ export function availabilityRoutes(
     }
   };
 
-  app.get('/u/:handle', async (c) => {
-    const r = await lookup(c, c.req.param('handle'));
+  /** The friend view for `handle`. Shared by `/u/:handle` and the `<handle>.sez.<site>` alias. */
+  const friendView = async (c: import('hono').Context, handle: string) => {
+    const r = await lookup(c, handle);
     if ('deny' in r) return r.deny;
     return page(c, createElement(PublicAvailabilityPage, {
       handle: r.handle, did: r.did, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
     }));
-  });
+  };
 
-  app.get('/u/:handle/availability.ics', async (c) => {
-    const r = await lookup(c, c.req.param('handle'));
+  /** The ICS feed for `handle`. Shared by `/u/:handle/availability.ics` and the alias. */
+  const feed = async (c: import('hono').Context, handle: string) => {
+    const r = await lookup(c, handle);
     if ('deny' in r) return r.deny;
     if (!r.record) return c.notFound();
     const ics = buildAvailabilityIcs(r.record, {
@@ -116,6 +118,46 @@ export function availabilityRoutes(
       'content-type': 'text/calendar; charset=utf-8',
       'cache-control': 'public, max-age=900',
     });
+  };
+
+  app.get('/u/:handle', (c) => friendView(c, c.req.param('handle')));
+  app.get('/u/:handle/availability.ics', (c) => feed(c, c.req.param('handle')));
+
+  // `<handle>.sez.<site>`: an alternate host that serves the same friend view and feed as
+  // `/u/<handle>`, so a share can read `ken.wzrdz.cool.sez.letsmeet.lol` instead of a path.
+  // A wildcard DNS record and Caddy's on-demand TLS (deploy/Caddyfile, docs/deploy.md §3)
+  // are what make the certificate exist; this dispatch is what makes the host answer.
+  const aliasSuffix = '.sez.' + new URL(env.PUBLIC_URL).host;
+
+  /** `<handle>.sez.<site>`: the handle is every label before the suffix, verbatim. */
+  const aliasHandle = (host: string | undefined): string | null =>
+    host && host.endsWith(aliasSuffix) && host.length > aliasSuffix.length
+      ? host.slice(0, -aliasSuffix.length) : null;
+
+  app.get('/', async (c, next) => {
+    const handle = aliasHandle(c.req.header('host'));
+    if (!handle) return next();
+    return friendView(c, handle);
+  });
+  app.get('/availability.ics', async (c, next) => {
+    const handle = aliasHandle(c.req.header('host'));
+    if (!handle) return next();
+    return feed(c, handle);
+  });
+
+  /**
+   * Caddy's on-demand TLS `ask` (deploy/Caddyfile): issue a certificate only for a host
+   * that is both under the alias suffix and a handle that actually resolves — otherwise
+   * anyone could mint a valid cert for `whatever.sez.letsmeet.lol`. Reuses `readLimiter`
+   * since Caddy is the only caller (bound to loopback in prod) and each ask can cost a
+   * real DID resolution; a burst of bogus SNI hostnames from the public internet still
+   * reaches this endpoint via Caddy before a cert exists, so it stays cheap to reject.
+   */
+  app.get('/internal/tls-ask', async (c) => {
+    const handle = aliasHandle(c.req.query('domain'));
+    if (!handle) return c.text('no', 404);
+    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return c.text('no', 404);
+    return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
   });
 
   return app;

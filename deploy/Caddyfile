@@ -1,0 +1,27 @@
+# Caddyfile for letsmeet.lol + the <handle>.sez.letsmeet.lol alias (docs/deploy.md §3,
+# "Caddy for the alias host"). The global block must come first in a real Caddyfile.
+#
+# This REPLACES nginx (deploy/nginx-letsmeet.lol.conf) for these two hostnames only — the
+# rest of the box's vhosts stay on nginx. Caddy and nginx can't both bind :80/:443 for the
+# same host, so disable/remove the nginx server block for letsmeet.lol before starting Caddy.
+{
+  on_demand_tls {
+    # Caddy calls this before issuing a certificate for any *.sez.letsmeet.lol SNI it sees
+    # from the public internet. The app answers 200 only when the domain both matches the
+    # alias suffix and resolves to a DID (src/web/routes/availability.ts) — anything else,
+    # including a made-up subdomain, gets 404 and no certificate. Loopback-only: nothing but
+    # this Caddy process can reach :8787 to ask.
+    ask http://127.0.0.1:8787/internal/tls-ask
+  }
+}
+
+letsmeet.lol {
+  reverse_proxy 127.0.0.1:8787
+}
+
+*.sez.letsmeet.lol {
+  tls {
+    on_demand
+  }
+  reverse_proxy 127.0.0.1:8787
+}

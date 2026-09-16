@@ -154,7 +154,12 @@ export function createServer(
   }
   app.route('/', authRoutes(auth, { ...session, publicUrl: env.PUBLIC_URL, now: deps.now }));
   app.route('/', apiRoutes(cachedHandleSearch(env.handleSearch ?? bskyHandleSearch()), deps.now));
-  app.route('/', pollRoutes(deps, auth, env));
+  // Mounted before pollRoutes: its `<handle>.sez.<site>` alias handler for `/` needs first
+  // crack at the request so it can fall through via `next()` on a non-alias host. Hono
+  // composes same-path handlers from merged sub-apps in mount order and stops at the first
+  // one that doesn't call `next()` — pollRoutes' landing `/` handler never does, so it would
+  // shadow the alias entirely if mounted first.
   app.route('/', availabilityRoutes(deps, env));
+  app.route('/', pollRoutes(deps, auth, env));
   return app;
 }

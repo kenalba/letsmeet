@@ -253,6 +253,51 @@ call), the limiter keys on the socket's peer address. If you ever put
 another proxy in front of nginx, confirm it preserves the "append, don't
 replace" behavior.
 
+### Optional: `<handle>.sez.letsmeet.lol` (Caddy for the alias host)
+
+**Do this only after Tasks 1–14 are deployed and the `/u/<handle>` pages
+above are confirmed working against nginx in production.** It is a later,
+optional step, not part of the base deploy — skip this subsection entirely
+until that's true. nginx + certbot (above) stays the primary path for
+`letsmeet.lol` and every other vhost on the box.
+
+The alias lets a share read `ken.wzrdz.cool.sez.letsmeet.lol` instead of
+`letsmeet.lol/u/ken.wzrdz.cool`. It needs a certificate for *any* handle
+someone chooses, minted on first use rather than issued in advance, which is
+what pushes this one host onto Caddy: nginx + certbot has no on-demand-TLS
+equivalent, and Caddy's `on_demand_tls` with an `ask` endpoint is built for
+exactly this.
+
+- **DNS.** One wildcard `A` record, `*.sez.letsmeet.lol`, pointed at the box.
+  DNS wildcards match every label under the suffix, so
+  `ken.wzrdz.cool.sez.letsmeet.lol` (a handle that is itself a subdomain) is
+  covered by the same record — no per-user DNS entry.
+- **Caddy replaces nginx for `letsmeet.lol` and `*.sez.letsmeet.lol` only.**
+  `deploy/Caddyfile` in this repo has both hosts: the apex reverse-proxies to
+  the app exactly like the nginx vhost did, and the wildcard host adds
+  `tls { on_demand }`. Caddy and nginx can't both hold `:80`/`:443` for the
+  same hostname, so disable or remove the nginx server block for
+  `letsmeet.lol` (`deploy/nginx-letsmeet.lol.conf`) before pointing Caddy at
+  these two hosts — the box's other vhosts are untouched and stay on nginx.
+- **The `ask` endpoint must never be reachable from outside.** Caddy's
+  `on_demand_tls` block in the Caddyfile calls
+  `http://127.0.0.1:8787/internal/tls-ask?domain=<sni-host>` before issuing a
+  certificate for any hostname it sees. The app (§1's `compose.yaml` already
+  binds it to `127.0.0.1:8787`) answers `200` only when `<sni-host>` ends in
+  `.sez.letsmeet.lol` **and** the handle part resolves to a DID
+  (`src/web/routes/availability.ts`); anything else — an unresolvable
+  handle, or a domain outside the suffix entirely — gets `404` and no
+  certificate is issued. Since this runs on the public internet's attack
+  surface (anyone can request a TLS handshake for a made-up
+  `whatever.sez.letsmeet.lol` and Caddy will call this endpoint), it must
+  stay loopback-only — the same trust boundary as the rest of `:8787` — and
+  it shares the app's per-IP read limiter so a burst of bogus hostnames
+  can't turn into a burst of handle-resolution calls.
+- **The alias never carries a session.** The session cookie is scoped to the
+  `letsmeet.lol` apex, so a request to `ken.wzrdz.cool.sez.letsmeet.lol`
+  never sees it — the alias only ever serves the public friend view and
+  feed, the same as `/u/<handle>`, never a signed-in page.
+
 ## 4. Publishing the lexicons
 
 The two custom record schemas (`lol.letsmeet.poll.schedule` and

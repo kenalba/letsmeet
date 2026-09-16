@@ -20,13 +20,13 @@ const rec = {
   note: 'text first', validUntil: '2026-12-31T23:59:59.000Z', updatedAt: '2026-09-10T12:00:00.000Z',
 };
 
-function setup(resolveDid?: Deps['resolveDid']) {
+function setup(resolveDid?: Deps['resolveDid'], publicUrl = 'http://localhost:8787') {
   const repo = new FakeRepo();
   const deps: Deps = {
     db: openDb(':memory:'), reader: repo, writerFor: async () => repo,
     now: () => new Date('2026-09-16T12:00:00Z'), revalidateTtlMs: 0, resolveDid,
   };
-  const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: 'http://localhost:8787' });
+  const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: publicUrl });
   return { app, deps, repo };
 }
 
@@ -82,5 +82,23 @@ describe('/u/:handle', () => {
     expect(body).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU');
     expect(body).toContain('SUMMARY:away · out of town');
     expect((await app.request('/u/did:plc:nobody/availability.ics')).status).toBe(404);
+  });
+});
+
+describe('<handle>.sez.letsmeet.lol', () => {
+  it('serves the friend view and feed on <handle>.sez.letsmeet.lol', async () => {
+    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    const html = await (await app.request('/', { headers: { host: 'ken.wzrdz.cool.sez.letsmeet.lol' } })).text();
+    expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
+    expect(html).toContain('<link rel="canonical" href="https://letsmeet.lol/u/ken.wzrdz.cool"');
+    const ics = await app.request('/availability.ics', { headers: { host: 'ken.wzrdz.cool.sez.letsmeet.lol' } });
+    expect(ics.headers.get('content-type')).toContain('text/calendar');
+  });
+  it("answers caddy's ask endpoint only for handles that resolve", async () => {
+    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    expect((await app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol')).status).toBe(200);
+    expect((await app.request('/internal/tls-ask?domain=nobody.example.sez.letsmeet.lol')).status).toBe(404);
+    expect((await app.request('/internal/tls-ask?domain=evil.example')).status).toBe(404);
   });
 });
