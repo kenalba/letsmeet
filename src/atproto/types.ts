@@ -22,4 +22,9 @@ export interface Deps {
    * mode, where responders are shown by DID.
    */
   resolveHandle?(did: string): Promise<string | null>;
+  /**
+   * The DID a handle points at, for the public `/u/<handle>` pages. Absent in fake mode,
+   * where the routes accept a `did:` literal in the handle's place.
+   */
+  resolveDid?(handle: string): Promise<string | null>;
 }

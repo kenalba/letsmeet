@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { openDb } from './db/db.js';
 import { createOAuthClient, type AuthClient } from './atproto/oauthClient.js';
-import { PublicPdsReader, resolveHandle, writerForAgent } from './atproto/pds.js';
+import { PublicPdsReader, resolveHandle, resolveDid, cachedResolveDid, writerForAgent } from './atproto/pds.js';
 import { FakeRepo } from './atproto/fakeRepo.js';
 import { flushOutbox } from './services/responses.js';
 import { pruneOutbox } from './db/outbox.js';
@@ -85,6 +85,7 @@ if (FAKE_PDS) {
     writerFor: async (did) => writerForAgent(await auth.restore(did)),
     now: () => new Date(),
     resolveHandle,
+    resolveDid: cachedResolveDid(resolveDid),
   };
 }
 

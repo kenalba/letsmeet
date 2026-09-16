@@ -87,6 +87,44 @@ export async function resolveHandle(did: string, opts: NetOpts = {}): Promise<st
   }
 }
 
+const RESOLVE_HANDLE_URL = 'https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle';
+const HANDLE_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+/** The DID a handle currently points at, or null when it points nowhere. Public read. */
+export async function resolveDid(handle: string, opts: NetOpts = {}): Promise<string | null> {
+  if (!HANDLE_RE.test(handle) || handle.length > 253) return null;
+  const u = new URL(RESOLVE_HANDLE_URL);
+  u.searchParams.set('handle', handle.toLowerCase());
+  try {
+    const res = await safeFetch(u, opts);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { did?: unknown };
+    return typeof body.did === 'string' && body.did.startsWith('did:') ? body.did : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Handles are attacker-influenced keys, so the memo is capped and evicts oldest-first. */
+export function cachedResolveDid(
+  inner: (handle: string) => Promise<string | null>, ttlMs = 60 * 60_000, max = 5_000,
+): (handle: string) => Promise<string | null> {
+  const memo = new Map<string, { did: string | null; at: number }>();
+  return async (handle) => {
+    const key = handle.toLowerCase();
+    const hit = memo.get(key);
+    const now = Date.now();
+    if (hit && now - hit.at < ttlMs) return hit.did;
+    const did = await inner(key);
+    if (memo.size >= max && !memo.has(key)) {
+      const oldest = memo.keys().next().value;
+      if (oldest !== undefined) memo.delete(oldest);
+    }
+    memo.set(key, { did, at: now });
+    return did;
+  };
+}
+
 /** Unauthenticated reads straight from each participant's PDS. No firehose, no appview. */
 export class PublicPdsReader implements RepoReader {
   private pdsCache = new Map<string, { pds: string; at: number }>();
