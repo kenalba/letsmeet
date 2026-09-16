@@ -185,6 +185,21 @@ describe('<handle>.sez.letsmeet.lol', () => {
     expect(html).toContain('<link rel="canonical" href="https://letsmeet.lol/u/ken.wzrdz.cool"');
     const ics = await app.request('/availability.ics', { headers: { host: 'ken.wzrdz.cool.sez.letsmeet.lol' } });
     expect(ics.headers.get('content-type')).toContain('text/calendar');
+    // Both feed links point at the apex: /u/<handle>/availability.ics does not answer on
+    // an alias host, so a relative href here would hand the visitor a 404.
+    expect(html).toContain('href="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
+    expect(html).toContain('webcal://letsmeet.lol/u/ken.wzrdz.cool/availability.ics');
+  });
+  it('scopes the alias host whatever case or trailing dot the Host header arrives in', async () => {
+    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    for (const host of ['ken.wzrdz.cool.sez.LETSMEET.lol', 'ken.wzrdz.cool.sez.letsmeet.lol.',
+      'KEN.WZRDZ.COOL.sez.letsmeet.lol']) {
+      expect([host, (await app.request('/new', { headers: { host } })).status]).toEqual([host, 404]);
+    }
+    // ...and the friend view still answers on them, under the same (lowercased) handle.
+    const html = await (await app.request('/', { headers: { host: 'KEN.WZRDZ.COOL.sez.LETSMEET.lol.' } })).text();
+    expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
   });
   it("answers caddy's ask endpoint only for handles that resolve", async () => {
     const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');

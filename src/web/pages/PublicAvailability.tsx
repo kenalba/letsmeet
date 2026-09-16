@@ -115,7 +115,10 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
                 </div>
               )}
               <p className="hint text-sm text-muted-foreground">
-                <a href={`${path}/availability.ics`} className="text-primary underline underline-offset-4">download .ics</a>
+                {/* Absolute, like the webcal link beside it: this page also serves on
+                    `<handle>.sez.<site>`, where only `/` and `/availability.ics` answer —
+                    a relative `/u/<handle>/availability.ics` would 404 there. */}
+                <a href={`${base}${path}/availability.ics`} className="text-primary underline underline-offset-4">download .ics</a>
                 {' '}·{' '}
                 <a href={`webcal://${base.replace(/^https?:\/\//, '')}${path}/availability.ics`} className="text-primary underline underline-offset-4">subscribe (webcal)</a>
               </p>

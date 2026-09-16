@@ -26,13 +26,19 @@ export const aliasSuffixFor = (publicUrl: string): string => '.sez.' + new URL(p
 const HANDLE_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 
 /**
- * The handle `host` is an alias for: every label before `suffix`, verbatim. Null when the
+ * The handle `host` is an alias for: every label before `suffix`, lowercased. Null when the
  * host is not under the suffix at all, or when what precedes it is not handle-shaped —
  * `evil.example/?x=.sez.letsmeet.lol` ends in the suffix and is nobody's handle.
+ *
+ * A Host header is case-insensitive and may carry the root's trailing dot, and both forms
+ * reach us verbatim: `ken.wzrdz.cool.sez.LETSMEET.lol` and `…letsmeet.lol.` are the same
+ * host as the plain one, and matching them literally would let the alias origin slip past
+ * the guard below and serve the whole app. Handles are lowercase, so the answer is too.
  */
 export function aliasHandleOf(host: string | undefined, suffix: string): string | null {
-  if (!host || !host.endsWith(suffix) || host.length === suffix.length) return null;
-  const handle = host.slice(0, -suffix.length);
+  const name = host?.toLowerCase().replace(/\.$/, '');
+  if (!name || !name.endsWith(suffix) || name.length === suffix.length) return null;
+  const handle = name.slice(0, -suffix.length);
   return HANDLE_RE.test(handle) && handle.length <= 253 ? handle : null;
 }
 
@@ -220,7 +226,8 @@ export function availabilityRoutes(
     // `?domain=did:plc:anything.sez.letsmeet.lol` would mint a cert for an unverified DID.
     const handle = aliasHandle(c.req.query('domain'));
     if (!handle) return c.text('no', 404);
-    if (!askLimiter.allow(handle.toLowerCase(), deps.now().getTime())) return c.text('no', 429);
+    // One key per name: `aliasHandleOf` has already lowercased it.
+    if (!askLimiter.allow(handle, deps.now().getTime())) return c.text('no', 429);
     try {
       return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
     } catch (err) {
