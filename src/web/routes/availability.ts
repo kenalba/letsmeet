@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { Deps } from '../../atproto/types.js';
 import { UserError } from '../../core/errors.js';
-import { describeWeekly } from '../../core/availability.js';
+import { describeWeekly, isKnownZone } from '../../core/availability.js';
 import { readSession, type SessionEnv } from '../session.js';
 import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
@@ -145,7 +145,9 @@ export function availabilityRoutes(
   const feed = async (c: import('hono').Context, handle: string) => {
     const r = await lookup(c, handle);
     if ('deny' in r) return r.deny;
-    if (!r.record) return c.notFound();
+    // Every DTSTART in the feed is anchored to the record's timezone. One this app cannot
+    // read has no feed to serve — the page says as much in words.
+    if (!r.record || !isKnownZone(r.record.timezone)) return c.notFound();
     const ics = buildAvailabilityIcs(r.record, {
       uidHost: new URL(env.PUBLIC_URL).host, name: r.handle, now: deps.now(),
     });

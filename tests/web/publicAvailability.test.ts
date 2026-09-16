@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { PublicAvailabilityPage } from '../../src/web/pages/PublicAvailability.js';
 import { openDb } from '../../src/db/db.js';
 import { FakeRepo } from '../helpers/fakeRepo.js';
 import { createServer } from '../../src/web/server.js';
-import { AVAILABILITY_NSID, AVAILABILITY_RKEY } from '../../src/atproto/records.js';
+import { AVAILABILITY_NSID, AVAILABILITY_RKEY, type AvailabilityRecord } from '../../src/atproto/records.js';
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
 
@@ -13,7 +16,7 @@ const stubAuth: AuthClient = {
   callback: async () => ({ did: KEN }),
   restore: async () => { throw new Error('not used'); },
 };
-const rec = {
+const rec: AvailabilityRecord = {
   $type: AVAILABILITY_NSID, timezone: 'America/New_York',
   weekly: [{ day: 2, start: '19:00', end: '22:00' }, { day: 4, start: '19:00', end: '22:00' }],
   away: [{ start: '2026-09-19', end: '2026-09-21', note: 'out of town' }],
@@ -82,6 +85,66 @@ describe('/u/:handle', () => {
     expect(body).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU');
     expect(body).toContain('SUMMARY:away · out of town');
     expect((await app.request('/u/did:plc:nobody/availability.ics')).status).toBe(404);
+  });
+});
+
+describe('the two-week strip', () => {
+  it('marks a day away when an away entry covers it with only half a window', () => {
+    // The lexicon allows startTime without endTime, and freeIntervals treats a lone one as
+    // all day — the strip has to agree, or the bar reads empty with no away marking on it.
+    const html = renderToString(createElement(PublicAvailabilityPage, {
+      handle: 'ken.wzrdz.cool', did: KEN, now: new Date('2026-09-16T12:00:00Z'),
+      publicUrl: 'https://letsmeet.lol',
+      record: {
+        ...rec, away: [{ start: '2026-09-18', end: '2026-09-18', startTime: '09:00' }],
+      },
+    }));
+    expect(html).toContain('Sep 18 · away');
+    // Half a window is not a window: no clock line for it either.
+    expect(html).not.toContain('9am');
+  });
+});
+
+describe('a record only the lexicon has ever seen', () => {
+  // The lexicon checks lengths, not shapes: a 12-character timezone and a 3-character
+  // `start` both validate. Another client can write this; the public page must survive it.
+  const foreign = {
+    $type: AVAILABILITY_NSID,
+    timezone: 'Mars/Olympus',
+    weekly: [{ day: 2, start: '7am', end: '10pm' }],
+    away: [{ start: 'next week', end: 'next week' }],
+    updatedAt: '2026-09-10T12:00:00.000Z',
+  };
+
+  it('says it cannot read a record in a timezone it does not know, and serves no feed for it', async () => {
+    const { app, repo } = setup();
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, foreign);
+    const res = await app.request(`/u/${KEN}`);
+    expect(res.status).toBe(200);
+    // React escapes the apostrophe in the copy; read it back the way a browser would.
+    const html = (await res.text()).replaceAll('&#x27;', "'");
+    expect(html).toContain("couldn't read this one");
+    expect(html).not.toContain('NaN');
+    expect((await app.request(`/u/${KEN}/availability.ics`)).status).toBe(404);
+  });
+
+  it('drops the blocks and away entries it cannot read and shows the rest', async () => {
+    const { app, repo } = setup();
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, {
+      ...foreign,
+      timezone: 'America/New_York',
+      weekly: [{ day: 2, start: '7am', end: '10pm' }, { day: 4, start: '19:00', end: '22:00' }],
+      away: [{ start: 'next week', end: 'next week' }, { start: '2026-09-19', end: '2026-09-21', note: 'out of town' }],
+    });
+    const html = await (await app.request(`/u/${KEN}`)).text();
+    expect(html).toContain('usually free thursdays 7pm to 10pm.');
+    expect(html).toContain('out of town');
+    expect(html).not.toContain('NaN');
+    const ics = await app.request(`/u/${KEN}/availability.ics`);
+    expect(ics.status).toBe(200);
+    const body = await ics.text();
+    expect(body).toContain('RRULE:FREQ=WEEKLY;BYDAY=TH');
+    expect(body).not.toContain('NaN');
   });
 });
 

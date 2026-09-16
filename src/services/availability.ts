@@ -3,16 +3,21 @@ import {
   AVAILABILITY_NSID, AVAILABILITY_RKEY, buildAvailabilityRecord, validateAvailabilityRecord,
   type AvailabilityRecord,
 } from '../atproto/records.js';
-import { normalizeAvailability, prefillFromAvailability } from '../core/availability.js';
+import { normalizeAvailability, prefillFromAvailability, sanitizeForeignRecord } from '../core/availability.js';
 import type { Interval } from '../core/intervals.js';
 import { getAvailabilityCache, upsertAvailabilityCache } from '../db/availabilityCache.js';
 import { freshnessFor } from './freshness.js';
 
-/** Live read of a DID's own record; the cache is refreshed as a side effect. */
+/**
+ * Live read of a DID's own record; the cache is refreshed as a side effect. This is the one
+ * boundary every record crosses, so it is where a record written by some other client —
+ * lexicon-valid but full of values this app cannot read — is cut down to size
+ * (`sanitizeForeignRecord`). Everything downstream, including the cache, holds the clean one.
+ */
 async function readLive(deps: Deps, did: string): Promise<AvailabilityRecord | null> {
   const found = await deps.reader.getRecord(did, AVAILABILITY_NSID, AVAILABILITY_RKEY);
   if (!found) { upsertAvailabilityCache(deps.db, did, null); return null; }
-  const record = validateAvailabilityRecord(found.value);
+  const record = sanitizeForeignRecord(validateAvailabilityRecord(found.value));
   upsertAvailabilityCache(deps.db, did, { uri: found.uri, cid: found.cid, record });
   freshnessFor(deps).mark(`avail:${did}`, deps.now().getTime());
   return record;

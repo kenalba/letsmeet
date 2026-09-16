@@ -1,5 +1,5 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
-import { describeWeekly, freeIntervals, isStale } from '../../core/availability.js';
+import { describeWeekly, freeIntervals, isKnownZone, isStale } from '../../core/availability.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
@@ -35,7 +35,9 @@ function strip(rec: AvailabilityRecord, now: Date) {
     days.push({
       date, dow: d.toLocaleDateString('en-US', { weekday: 'narrow', timeZone: 'UTC' }),
       free: Math.min(1, minutes / (17 * 60)),
-      away: rec.away.some((a) => !a.startTime && a.start <= date && date <= a.end),
+      // Half a window is not a window: freeIntervals cuts the whole day for a lone
+      // startTime or endTime, so the strip has to mark the whole day too.
+      away: rec.away.some((a) => (!a.startTime || !a.endTime) && a.start <= date && date <= a.end),
     });
   }
   return days;
@@ -45,21 +47,29 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   const path = `/u/${data.handle}`;
   const base = data.publicUrl.replace(/\/$/, '');
   const rec = data.record;
+  // Every clock in the record is read in its timezone; one this app cannot use makes the
+  // whole record unreadable (the sentence would be the only honest part, and the strip
+  // below would throw). Say so rather than guess a zone or claim they posted nothing.
+  const unreadable = !!rec && !isKnownZone(rec.timezone);
   const stale = rec ? isStale(rec, data.now) : false;
   const upcoming = rec ? rec.away.filter((a) => a.end >= data.now.toISOString().slice(0, 10)) : [];
   return (
     <Layout
       title={pageTitle(`${data.handle} · availability`)}
-      description={rec ? describeWeekly(rec.weekly) : 'no availability posted.'}
+      description={!rec || unreadable ? 'no availability posted.' : describeWeekly(rec.weekly)}
       canonical={`${base}${path}`}
     >
       <div className="grid gap-6">
         <div className="grid gap-1">
           <h1 className="pixel-heading">{data.handle}</h1>
-          {rec && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
+          {rec && !unreadable && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
         </div>
         {!rec ? (
           <Card><CardContent><p className="hint text-sm text-muted-foreground">no availability posted. ask them.</p></CardContent></Card>
+        ) : unreadable ? (
+          <Card><CardContent><p className="hint text-sm text-muted-foreground">
+            couldn't read this one — it is posted in a timezone this app doesn't know. ask them.
+          </p></CardContent></Card>
         ) : (
           <Card>
             <CardHeader>

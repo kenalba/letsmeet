@@ -29,11 +29,14 @@ const fromMinutes = (n: number): string => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 };
 
+/** A zone luxon can do wall-clock arithmetic in. The lexicon only checks it is ≤64 chars. */
+export function isKnownZone(tz: unknown): boolean {
+  return typeof tz === 'string' && DateTime.now().setZone(tz).isValid;
+}
+
 function checkZone(tz: unknown): string {
-  if (typeof tz !== 'string' || !DateTime.now().setZone(tz).isValid) {
-    throw new UserError('that timezone is not one this app knows');
-  }
-  return tz;
+  if (!isKnownZone(tz)) throw new UserError('that timezone is not one this app knows');
+  return tz as string;
 }
 
 function checkDate(d: unknown, tz: string, what: string): string {
@@ -125,6 +128,34 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
     }
   }
   return out;
+}
+
+/**
+ * A record read back from a repo, cut down to what this app can actually read.
+ *
+ * Only the lexicon has vetted it, and the lexicon checks lengths, not shapes: `"7am"`,
+ * `"25:00"` and `"next week"` are all valid values, and each of them either throws
+ * (`localWindow`, `toLocaleDateString`) or prints as `NaNam` further down. Any client can
+ * write the record — including to your own repo — so every read goes through here once, at
+ * the boundary, and the page, the sentence, the feed and the prefill all inherit one clean
+ * record. The unreadable blocks and away entries are dropped; a lone `startTime` or
+ * `endTime` degrades to all day, which is how the rest of the app reads it anyway. An
+ * unusable `timezone` is the one thing that cannot be dropped — callers check
+ * `isKnownZone` and say they cannot read the record.
+ */
+export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
+  const weekly = rec.weekly.filter((b) =>
+    Number.isInteger(b.day) && b.day >= 0 && b.day <= 6 && HHMM.test(b.start) && HHMM.test(b.end));
+  const away: AwayEntry[] = [];
+  for (const a of rec.away) {
+    if (!YMD.test(a.start) || !YMD.test(a.end) || a.end < a.start) continue;
+    const timed = a.startTime !== undefined && a.endTime !== undefined
+      && HHMM.test(a.startTime) && HHMM.test(a.endTime);
+    if (timed) { away.push(a); continue; }
+    const { startTime: _s, endTime: _e, ...allDay } = a;
+    away.push(allDay);
+  }
+  return { ...rec, weekly, away };
 }
 
 export function isStale(rec: { validUntil?: string }, now: Date): boolean {
@@ -330,7 +361,9 @@ export function freeIntervals(rec: AvailabilityInput, from: string, to: string):
 export function prefillFromAvailability(
   rec: AvailabilityInput, slots: Interval[], now: Date,
 ): Interval[] | null {
-  if (isStale(rec, now)) return null;
+  // Nothing in the record can be placed on a clock this app cannot read: that is "don't
+  // know", not "free nowhere".
+  if (!isKnownZone(rec.timezone) || isStale(rec, now)) return null;
   if (slots.length === 0 || rec.weekly.length === 0) return [];
   // A day of slack either side: a poll slot near midnight in the poll's zone can fall on
   // the neighbouring local date in the record's zone.

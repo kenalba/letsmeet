@@ -106,6 +106,37 @@ describe('getAvailabilityCached', () => {
   });
 });
 
+describe('a record only the lexicon has ever seen', () => {
+  // `timezone: 'Mars/Olympus'` and `start: '7am'` both pass the lexicon (it checks lengths,
+  // not shapes) and both throw further down. The read boundary is where that stops.
+  const foreign = {
+    $type: AVAILABILITY_NSID, timezone: 'America/New_York',
+    weekly: [{ day: 2, start: '7am', end: '10pm' }, { day: 4, start: '19:00', end: '22:00' }],
+    away: [{ start: 'next week', end: 'next week' }],
+    updatedAt: '2026-09-10T12:00:00.000Z',
+  };
+  const slots = materializeSlots({
+    dates: ['2026-10-15'], window: { start: '19:00', end: '21:00' },
+    slotMinutes: 30, timezone: 'America/New_York',
+  });
+
+  it('drops what it cannot read and prefills from the rest', async () => {
+    const { deps, repo } = setup(0);
+    await repo.putRecord(DID, AVAILABILITY_NSID, AVAILABILITY_RKEY, foreign);
+    const rec = await getAvailabilityCached(deps, DID);
+    expect(rec?.weekly).toEqual([{ day: 4, start: '19:00', end: '22:00' }]);
+    expect(rec?.away).toEqual([]);
+    expect(await prefillForPoll(deps, DID, slots)).toEqual([
+      { start: '2026-10-15T23:00:00.000Z', end: '2026-10-16T01:00:00.000Z' },
+    ]);
+  });
+  it('says "don\'t know" rather than "free nowhere" when the timezone is unusable', async () => {
+    const { deps, repo } = setup(0);
+    await repo.putRecord(DID, AVAILABILITY_NSID, AVAILABILITY_RKEY, { ...foreign, timezone: 'Mars/Olympus' });
+    expect(await prefillForPoll(deps, DID, slots)).toBeNull();
+  });
+});
+
 describe('prefillForPoll', () => {
   const slots = materializeSlots({
     dates: ['2026-10-13', '2026-10-15'], window: { start: '19:00', end: '21:00' },

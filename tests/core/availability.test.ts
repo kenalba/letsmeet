@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeAvailability, describeWeekly, isStale, splitAtTemplateStart, templateSlots,
-  weeklyToTemplateIntervals, templateIntervalsToWeekly,
+  weeklyToTemplateIntervals, templateIntervalsToWeekly, sanitizeForeignRecord, isKnownZone,
 } from '../../src/core/availability.js';
 
 const TZ = 'America/New_York';
@@ -153,5 +153,55 @@ describe('template week', () => {
     // And unmarking that half leaves the sliver the grid could never show.
     const unmarked = normalizeAvailability({ timezone: TZ, weekly: offGrid, away: [] }).weekly;
     expect(unmarked).toEqual([{ day: 2, start: '06:00', end: '07:00' }]);
+  });
+});
+
+describe('sanitizeForeignRecord', () => {
+  // Everything below passes the lexicon — it checks lengths, not shapes — and every one of
+  // these values throws or prints as NaN somewhere in the read path.
+  const foreign = {
+    timezone: TZ,
+    weekly: [
+      { day: 2, start: '19:00', end: '22:00' },
+      { day: 3, start: '7am', end: '10pm' },
+      { day: 4, start: '19:00', end: '25:00' },
+      { day: 9, start: '19:00', end: '22:00' },
+    ],
+    away: [
+      { start: '2026-09-19', end: '2026-09-21', note: 'out of town' },
+      { start: 'next week', end: 'next week' },
+      { start: '2026-10-12', end: '2026-10-14', startTime: '09:00' },
+      { start: '2026-10-20', end: '2026-10-20', startTime: '9am', endTime: '10am' },
+    ],
+  } as unknown as Parameters<typeof sanitizeForeignRecord>[0];
+
+  it('keeps only the blocks and away entries this app can read', () => {
+    const out = sanitizeForeignRecord(foreign);
+    expect(out.weekly).toEqual([{ day: 2, start: '19:00', end: '22:00' }]);
+    expect(out.away).toEqual([
+      { start: '2026-09-19', end: '2026-09-21', note: 'out of town' },
+      // A window needs both ends to be a window; a lone one reads as all day.
+      { start: '2026-10-12', end: '2026-10-14' },
+      { start: '2026-10-20', end: '2026-10-20' },
+    ]);
+    expect(out.timezone).toBe(TZ);
+  });
+  it('leaves a record this app wrote exactly as it is', () => {
+    const ours = normalizeAvailability({
+      timezone: TZ, weekly: [{ day: 2, start: '19:00', end: '22:00' }],
+      away: [{ start: '2026-09-19', end: '2026-09-21', startTime: '09:00', endTime: '10:00' }],
+      note: 'text first',
+    });
+    expect(sanitizeForeignRecord(ours)).toEqual(ours);
+  });
+});
+
+describe('isKnownZone', () => {
+  it('is true for an IANA zone and false for anything luxon cannot use', () => {
+    expect(isKnownZone(TZ)).toBe(true);
+    expect(isKnownZone('UTC')).toBe(true);
+    expect(isKnownZone('Mars/Olympus')).toBe(false);
+    expect(isKnownZone('')).toBe(false);
+    expect(isKnownZone(undefined)).toBe(false);
   });
 });
