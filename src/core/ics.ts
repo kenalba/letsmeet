@@ -1,5 +1,6 @@
 import type { AvailabilityInput } from './availability.js';
 import { TEMPLATE_SUNDAY } from './availability.js';
+import { localWindow } from './slots.js';
 
 const toBasic = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
@@ -78,6 +79,9 @@ function plusDays(date: string, n: number): string {
  * each away entry a busy event, all-day or timed. TZID names the record's IANA zone
  * without a VTIMEZONE block — Apple and Google resolve IANA names; revisit if a client
  * refuses the feed.
+ *
+ * `rec` must have been through `sanitizeForeignRecord` and its timezone through
+ * `isKnownZone` — a wall clock this app cannot read has no calendar to become.
  */
 export function buildAvailabilityIcs(
   rec: AvailabilityInput & { updatedAt: string },
@@ -119,7 +123,14 @@ export function buildAvailabilityIcs(
     if (window) {
       L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(window.start)}`,
         `DTEND;TZID=${tz}:${ymd(a.start)}T${hm(window.end)}`);
-      if (a.end !== a.start) L.push(`RRULE:FREQ=DAILY;UNTIL=${ymd(a.end)}T235959`);
+      if (a.end !== a.start) {
+        // RFC 5545 §3.3.10: UNTIL must be UTC when DTSTART carries a TZID, and it bounds
+        // the series by the last occurrence's *start*. A local `T235959` is neither, and a
+        // strict client drops the final day of an evening window (22:00 PDT is already
+        // tomorrow in UTC).
+        const last = localWindow(a.end, window.start, window.end, tz).start.toUTC();
+        L.push(`RRULE:FREQ=DAILY;UNTIL=${toBasic(last.toISO()!)}`);
+      }
     } else {
       L.push(`DTSTART;VALUE=DATE:${ymd(a.start)}`, `DTEND;VALUE=DATE:${plusDays(a.end, 1)}`);
     }

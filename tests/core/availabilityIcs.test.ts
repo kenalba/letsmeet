@@ -38,8 +38,20 @@ describe('buildAvailabilityIcs', () => {
   });
   it('emits a timed multi-day away entry as a daily repeat and escapes the note', () => {
     expect(lines).toContain('DTSTART;TZID=America/New_York:20261012T090000');
-    expect(lines).toContain('RRULE:FREQ=DAILY;UNTIL=20261014T235959');
+    // RFC 5545 §3.3.10: DTSTART carries a TZID, so UNTIL must be UTC — and it bounds the
+    // series by the last occurrence's start, 09:00 New York on the 14th = 13:00Z. The old
+    // local `T235959` let a strict client drop the last day of an evening window.
+    expect(lines).toContain('RRULE:FREQ=DAILY;UNTIL=20261014T130000Z');
     expect(lines).toContain('SUMMARY:away · a\\; note\\, with punctuation');
+  });
+  it('keeps the last day of a late window, where UNTIL lands on the next UTC day', () => {
+    const late = buildAvailabilityIcs({
+      ...rec, timezone: 'America/Los_Angeles',
+      away: [{ start: '2026-10-12', end: '2026-10-14', startTime: '22:00', endTime: '23:00' }],
+    }, opts);
+    // 22:00 PDT on the 14th is 05:00Z on the 15th; an UNTIL of 20261014T235959Z would end
+    // the series before that last occurrence ever started.
+    expect(late.split('\r\n')).toContain('RRULE:FREQ=DAILY;UNTIL=20261015T050000Z');
   });
   it('gives every event a stable UID and folds long lines', () => {
     const uids = lines.filter((l) => l.startsWith('UID:'));
