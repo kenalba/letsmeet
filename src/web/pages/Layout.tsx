@@ -25,6 +25,12 @@ export interface LayoutProps {
    * viewer, and pages whose viewer is already signed in, render no dangling invitation.
    */
   signInHref?: string;
+  /**
+   * Where the wordmark goes. Relative `/` by default; a page served on an alias host
+   * (`<handle>.sez.<site>`, where `/` is the page itself) passes the apex so the wordmark
+   * still leads home.
+   */
+  homeHref?: string;
 }
 
 /**
@@ -78,7 +84,7 @@ export function pageTitle(name: string): string {
   return `${name} · ${SITE}`;
 }
 
-export function Layout({ title, description, canonical, children, scripts, signInHref }: LayoutProps) {
+export function Layout({ title, description, canonical, children, scripts, signInHref, homeHref = '/' }: LayoutProps) {
   const nonce = useNonce();
   const desc = description ?? DEFAULT_DESCRIPTION;
   return (
@@ -108,7 +114,7 @@ export function Layout({ title, description, canonical, children, scripts, signI
           <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4">
             <a
               className="brand pixel-heading whitespace-nowrap no-underline hover:text-primary"
-              href="/"
+              href={homeHref}
             >
               letsmeet<span className="inline-block origin-bottom-left -translate-y-px -rotate-6 text-lol">.lol</span>
             </a>

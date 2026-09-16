@@ -189,6 +189,8 @@ describe('<handle>.sez.letsmeet.lol', () => {
     // an alias host, so a relative href here would hand the visitor a 404.
     expect(html).toContain('href="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
     expect(html).toContain('webcal://letsmeet.lol/u/ken.wzrdz.cool/availability.ics');
+    // The wordmark goes home to the apex: on an alias host `/` is this very page.
+    expect(html).toMatch(/class="brand[^"]*"\s+href="https:\/\/letsmeet\.lol\/"/);
   });
   it('scopes the alias host whatever case or trailing dot the Host header arrives in', async () => {
     const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');

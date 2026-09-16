@@ -57,6 +57,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       title={pageTitle(`${data.handle} · availability`)}
       description={!rec || unreadable ? 'no availability posted.' : describeWeekly(rec.weekly)}
       canonical={`${base}${path}`}
+      homeHref={`${base}/`}
     >
       <div className="grid gap-6">
         <div className="grid gap-1">
