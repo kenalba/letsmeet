@@ -311,9 +311,11 @@ export function freeIntervals(rec: AvailabilityInput, from: string, to: string):
   for (const a of rec.away) {
     for (const date of dates) {
       if (date < a.start || date > a.end) continue;
-      cuts.push(a.startTime
-        // endTime is always present when startTime is: normalizeAvailability enforces the pairing.
-        ? localRange(date, a.startTime, a.endTime!, tz)
+      // normalizeAvailability enforces the pairing, but a record can arrive from another
+      // client that only validated against the lexicon, which allows either alone — treat
+      // a lone start or end as all-day rather than throwing on the read path.
+      cuts.push(a.startTime && a.endTime
+        ? localRange(date, a.startTime, a.endTime, tz)
         : localRange(date, '00:00', '00:00', tz)); // whole local day
     }
   }

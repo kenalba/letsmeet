@@ -37,6 +37,15 @@ describe('freeIntervals', () => {
     }, '2026-10-15', '2026-10-15');
     expect(out).toEqual([{ start: '2026-10-15T20:30:00.000Z', end: '2026-10-15T22:00:00.000Z' }]);
   });
+  it('treats an away entry with only startTime (no endTime) as all-day, not a crash', () => {
+    // The lexicon allows startTime or endTime alone; a record written by another client
+    // could arrive this way, and the read path only validates against the lexicon.
+    const out = freeIntervals({
+      timezone: 'UTC', weekly: [{ day: 2, start: '19:00', end: '22:00' }],
+      away: [{ start: '2026-10-13', end: '2026-10-13', startTime: '19:00' }],
+    }, '2026-10-12', '2026-10-14');
+    expect(out).toEqual([]);
+  });
   it('applies a multi-day timed window to each day in the range', () => {
     const out = freeIntervals({
       timezone: 'UTC', weekly: [1, 2, 3].map((day) => ({ day, start: '09:00', end: '12:00' })),

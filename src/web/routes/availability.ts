@@ -6,8 +6,12 @@ import { describeWeekly } from '../../core/availability.js';
 import { readSession, type SessionEnv } from '../session.js';
 import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
-import { getOwnAvailability, saveAvailability } from '../../services/availability.js';
+import { clientIp } from '../clientIp.js';
+import { buildAvailabilityIcs } from '../../core/ics.js';
+import { getOwnAvailability, saveAvailability, getAvailabilityCached } from '../../services/availability.js';
 import { AvailabilityPage } from '../pages/Availability.js';
+import { PublicAvailabilityPage } from '../pages/PublicAvailability.js';
+import { ErrorPage } from '../pages/ErrorPage.js';
 
 /** A PDS refusing the write for want of scope: the session predates the availability scope. */
 function needsReauth(err: unknown): boolean {
@@ -65,6 +69,53 @@ export function availabilityRoutes(
       }
       return c.json({ error: explain(err, 'saveAvailability') }, 400);
     }
+  });
+
+  // 120 public reads per ten minutes per address: each cold read is a PDS round trip.
+  const readLimiter = new TokenBucket(120, 120 / 600);
+
+  /** The DID behind `/u/<handle>`, or null. Fake mode has no resolver and takes a DID literal. */
+  const didFor = async (handle: string): Promise<string | null> => {
+    if (handle.startsWith('did:')) return /^did:(plc|web):[a-zA-Z0-9._:%-]+$/.test(handle) ? handle : null;
+    return deps.resolveDid ? deps.resolveDid(handle) : null;
+  };
+
+  /** Resolve + read, or the response that says why not. Shared by the page and the feed. */
+  const lookup = async (c: import('hono').Context, handle: string) => {
+    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) {
+      return { deny: page(c, createElement(ErrorPage, { heading: 'slow down', message: 'easy there. try again in a minute.' }), 429) };
+    }
+    const did = await didFor(handle);
+    if (!did) return { deny: c.notFound() };
+    try {
+      return { handle, did, record: await getAvailabilityCached(deps, did) };
+    } catch (err) {
+      console.error(`availability read failed for ${did}:`, err);
+      return { deny: page(c, createElement(ErrorPage, {
+        heading: 'their pds is not answering', message: "couldn't reach their pds right now. try again in a minute.",
+      }), 503) };
+    }
+  };
+
+  app.get('/u/:handle', async (c) => {
+    const r = await lookup(c, c.req.param('handle'));
+    if ('deny' in r) return r.deny;
+    return page(c, createElement(PublicAvailabilityPage, {
+      handle: r.handle, did: r.did, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
+    }));
+  });
+
+  app.get('/u/:handle/availability.ics', async (c) => {
+    const r = await lookup(c, c.req.param('handle'));
+    if ('deny' in r) return r.deny;
+    if (!r.record) return c.notFound();
+    const ics = buildAvailabilityIcs(r.record, {
+      uidHost: new URL(env.PUBLIC_URL).host, name: r.handle, now: deps.now(),
+    });
+    return c.body(ics, 200, {
+      'content-type': 'text/calendar; charset=utf-8',
+      'cache-control': 'public, max-age=900',
+    });
   });
 
   return app;

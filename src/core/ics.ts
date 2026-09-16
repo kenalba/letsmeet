@@ -108,12 +108,17 @@ export function buildAvailabilityIcs(
   }
   for (const a of rec.away) {
     const summary = `SUMMARY:${esc(a.note ? `away · ${a.note}` : 'away')}`;
+    // A record can arrive from another client that only validated against the lexicon,
+    // which allows startTime or endTime alone — treat a lone one as all-day, same as the
+    // DTSTART/DTEND branch below, rather than asserting the pairing normalizeAvailability
+    // enforces on our own writes.
+    const window = a.startTime && a.endTime ? { start: a.startTime, end: a.endTime } : undefined;
     L.push('BEGIN:VEVENT',
-      `UID:away-${ymd(a.start)}-${ymd(a.end)}-${a.startTime ? `${a.startTime.replace(':', '')}-${a.endTime!.replace(':', '')}` : 'allday'}@${opts.uidHost}`,
+      `UID:away-${ymd(a.start)}-${ymd(a.end)}-${window ? `${window.start.replace(':', '')}-${window.end.replace(':', '')}` : 'allday'}@${opts.uidHost}`,
       `DTSTAMP:${stamp}`);
-    if (a.startTime && a.endTime) {
-      L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(a.startTime)}`,
-        `DTEND;TZID=${tz}:${ymd(a.start)}T${hm(a.endTime)}`);
+    if (window) {
+      L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(window.start)}`,
+        `DTEND;TZID=${tz}:${ymd(a.start)}T${hm(window.end)}`);
       if (a.end !== a.start) L.push(`RRULE:FREQ=DAILY;UNTIL=${ymd(a.end)}T235959`);
     } else {
       L.push(`DTSTART;VALUE=DATE:${ymd(a.start)}`, `DTEND;VALUE=DATE:${plusDays(a.end, 1)}`);

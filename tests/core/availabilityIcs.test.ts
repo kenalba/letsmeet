@@ -49,6 +49,17 @@ describe('buildAvailabilityIcs', () => {
     const long = buildAvailabilityIcs({ ...rec, away: [{ start: '2026-09-19', end: '2026-09-19', note: 'é'.repeat(80) }] }, opts);
     for (const l of long.split('\r\n')) expect(new TextEncoder().encode(l).length).toBeLessThanOrEqual(75);
   });
+  it('treats an away entry with only startTime (no endTime) as all-day, not a crash', () => {
+    // The lexicon allows startTime or endTime alone; a record written by another client
+    // could arrive this way, and the read path only validates against the lexicon.
+    const half = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-10-20', end: '2026-10-20', startTime: '09:00' }],
+    }, opts);
+    const halfLines = half.split('\r\n');
+    expect(halfLines).toContain('UID:away-20261020-20261020-allday@letsmeet.lol');
+    expect(halfLines).toContain('DTSTART;VALUE=DATE:20261020');
+    expect(halfLines).toContain('DTEND;VALUE=DATE:20261021');
+  });
   it('gives away entries that share a start date distinct UIDs', () => {
     const ics2 = buildAvailabilityIcs({
       ...rec,
