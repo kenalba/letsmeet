@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../atproto/records.js';
 import { UserError } from './errors.js';
 import { mergeIntervals, normalizeIso, snapToSlots, type Interval } from './intervals.js';
-import { materializeSlots } from './slots.js';
+import { localWindow, materializeSlots } from './slots.js';
 
 export interface AvailabilityInput {
   timezone: string;
@@ -235,16 +235,18 @@ function eachDate(from: string, to: string, tz: string): string[] {
   const out: string[] = [];
   let d = DateTime.fromISO(from, { zone: tz });
   const end = DateTime.fromISO(to, { zone: tz });
-  while (d <= end && out.length <= 366) { out.push(d.toISODate()!); d = d.plus({ days: 1 }); }
+  while (d <= end && out.length < 366) { out.push(d.toISODate()!); d = d.plus({ days: 1 }); }
   return out;
 }
 
-/** [start, end) on local `date` in `tz`, in UTC. A past-midnight end rolls to the next day. */
+/**
+ * [start, end) on local `date` in `tz`, in UTC. A past-midnight end rolls to the next day.
+ * Thin wrapper around `localWindow` (`./slots.js`), which does the same wall-clock
+ * arithmetic for `materializeSlots`.
+ */
 function localRange(date: string, start: string, end: string, tz: string): Interval {
-  const s = DateTime.fromISO(`${date}T${start}`, { zone: tz });
-  let e = DateTime.fromISO(`${date}T${end}`, { zone: tz });
-  if (e <= s) e = e.plus({ days: 1 });
-  return { start: s.toUTC().toISO()!, end: e.toUTC().toISO()! };
+  const w = localWindow(date, start, end, tz);
+  return { start: w.start.toUTC().toISO()!, end: w.end.toUTC().toISO()! };
 }
 
 /** `ivs` minus `cut`, both merged and sorted. Pure interval arithmetic on ISO strings. */
@@ -281,6 +283,7 @@ export function freeIntervals(rec: AvailabilityInput, from: string, to: string):
     for (const date of dates) {
       if (date < a.start || date > a.end) continue;
       cuts.push(a.startTime
+        // endTime is always present when startTime is: normalizeAvailability enforces the pairing.
         ? localRange(date, a.startTime, a.endTime!, tz)
         : localRange(date, '00:00', '00:00', tz)); // whole local day
     }
