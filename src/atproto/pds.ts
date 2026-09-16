@@ -163,9 +163,15 @@ export class PublicPdsReader implements RepoReader {
     u.searchParams.set('collection', collection);
     u.searchParams.set('rkey', rkey);
     const res = await safeFetch(u, this.opts);
-    // Only a real 404 means "the host withdrew this record" — anything else is our problem,
-    // and must not be mistaken for a deletion by the tombstoning caller.
+    // Only "this record is not there" means the host withdrew (or never wrote) it: a 404,
+    // or the `400 RecordNotFound` a real PDS actually sends for a missing record. Anything
+    // else is our problem, and must not be mistaken for a deletion by the tombstoning caller.
     if (res.status === 404) return null;
+    if (res.status === 400) {
+      const err = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (err?.error === 'RecordNotFound') return null;
+      throw new Error(`getRecord failed for ${did}: 400 ${err?.error ?? ''}`.trim());
+    }
     if (!res.ok) throw new Error(`getRecord failed for ${did}: ${res.status}`);
     const body = (await res.json()) as { uri: string; cid: string; value: Record<string, unknown> };
     return { uri: body.uri, cid: body.cid, value: body.value };

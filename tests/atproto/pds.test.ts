@@ -58,6 +58,22 @@ describe('PublicPdsReader', () => {
     const r404 = new PublicPdsReader(fakeFetch({ 'https://plc.directory/did:plc:abc': plcDoc }), publicLookup);
     expect(await r404.getRecord('did:plc:abc', 'c', 'rk')).toBeNull();
   });
+  it('getRecord returns null on the 400 RecordNotFound a real PDS sends for a missing record', async () => {
+    const getRecordUrl = 'https://pds.example.com/xrpc/com.atproto.repo.getRecord';
+    const r400 = new PublicPdsReader(fakeFetch(
+      { 'https://plc.directory/did:plc:abc': plcDoc, [getRecordUrl]: { error: 'RecordNotFound', message: 'Could not locate record' } },
+      { [getRecordUrl]: 400 },
+    ), publicLookup);
+    expect(await r400.getRecord('did:plc:abc', 'c', 'rk')).toBeNull();
+  });
+  it('getRecord throws on a 400 that is not RecordNotFound', async () => {
+    const getRecordUrl = 'https://pds.example.com/xrpc/com.atproto.repo.getRecord';
+    const r400 = new PublicPdsReader(fakeFetch(
+      { 'https://plc.directory/did:plc:abc': plcDoc, [getRecordUrl]: { error: 'InvalidRequest', message: 'bad rkey' } },
+      { [getRecordUrl]: 400 },
+    ), publicLookup);
+    await expect(r400.getRecord('did:plc:abc', 'c', 'rk')).rejects.toThrow(/getRecord failed/);
+  });
   it('getRecord throws — never returns null — when the PDS is merely broken', async () => {
     const getRecordUrl = 'https://pds.example.com/xrpc/com.atproto.repo.getRecord';
     const r503 = new PublicPdsReader(fakeFetch(
