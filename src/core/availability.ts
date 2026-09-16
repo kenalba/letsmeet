@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../atproto/records.js';
 import { UserError } from './errors.js';
-import { mergeIntervals, normalizeIso, type Interval } from './intervals.js';
+import { mergeIntervals, normalizeIso, snapToSlots, type Interval } from './intervals.js';
 import { materializeSlots } from './slots.js';
 
 export interface AvailabilityInput {
@@ -226,4 +226,82 @@ export function templateIntervalsToWeekly(ivs: Interval[], timezone: string): We
     out.push({ day: s.weekday % 7, start: s.toFormat('HH:mm'), end: e.toFormat('HH:mm') });
   }
   return normalizeAvailability({ timezone, weekly: out, away: [] }).weekly;
+}
+
+// ---- Materializing the record over real dates ---------------------------------------
+
+/** Every local date from `from` to `to` inclusive, as ISO dates. Bounded to a year. */
+function eachDate(from: string, to: string, tz: string): string[] {
+  const out: string[] = [];
+  let d = DateTime.fromISO(from, { zone: tz });
+  const end = DateTime.fromISO(to, { zone: tz });
+  while (d <= end && out.length <= 366) { out.push(d.toISODate()!); d = d.plus({ days: 1 }); }
+  return out;
+}
+
+/** [start, end) on local `date` in `tz`, in UTC. A past-midnight end rolls to the next day. */
+function localRange(date: string, start: string, end: string, tz: string): Interval {
+  const s = DateTime.fromISO(`${date}T${start}`, { zone: tz });
+  let e = DateTime.fromISO(`${date}T${end}`, { zone: tz });
+  if (e <= s) e = e.plus({ days: 1 });
+  return { start: s.toUTC().toISO()!, end: e.toUTC().toISO()! };
+}
+
+/** `ivs` minus `cut`, both merged and sorted. Pure interval arithmetic on ISO strings. */
+function subtract(ivs: Interval[], cut: Interval[]): Interval[] {
+  let out = ivs;
+  for (const c of cut) {
+    const next: Interval[] = [];
+    for (const iv of out) {
+      if (c.end <= iv.start || c.start >= iv.end) { next.push(iv); continue; }
+      if (c.start > iv.start) next.push({ start: iv.start, end: c.start });
+      if (c.end < iv.end) next.push({ start: c.end, end: iv.end });
+    }
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * The record, read over real dates: each weekly block on each matching date, minus every
+ * away entry that touches those dates. Local wall-clock in, UTC intervals out, DST handled
+ * per date by luxon exactly as `materializeSlots` does for polls.
+ */
+export function freeIntervals(rec: AvailabilityInput, from: string, to: string): Interval[] {
+  const tz = rec.timezone;
+  const dates = eachDate(from, to, tz);
+  const free: Interval[] = [];
+  for (const date of dates) {
+    const weekday = DateTime.fromISO(date, { zone: tz }).weekday % 7; // luxon: 7 = Sunday
+    for (const b of rec.weekly) if (b.day === weekday) free.push(localRange(date, b.start, b.end, tz));
+  }
+  if (free.length === 0) return [];
+  const cuts: Interval[] = [];
+  for (const a of rec.away) {
+    for (const date of dates) {
+      if (date < a.start || date > a.end) continue;
+      cuts.push(a.startTime
+        ? localRange(date, a.startTime, a.endTime!, tz)
+        : localRange(date, '00:00', '00:00', tz)); // whole local day
+    }
+  }
+  const merged = mergeIntervals(free);
+  return cuts.length ? subtract(merged, mergeIntervals(cuts)) : merged;
+}
+
+/**
+ * The poll slots this record says the viewer can make. `null` means "don't know" (the
+ * record has expired), which the caller must treat differently from "none".
+ */
+export function prefillFromAvailability(
+  rec: AvailabilityInput, slots: Interval[], now: Date,
+): Interval[] | null {
+  if (isStale(rec, now)) return null;
+  if (slots.length === 0 || rec.weekly.length === 0) return [];
+  // A day of slack either side: a poll slot near midnight in the poll's zone can fall on
+  // the neighbouring local date in the record's zone.
+  const first = DateTime.fromISO(slots[0].start, { zone: 'utc' }).setZone(rec.timezone).minus({ days: 1 });
+  const last = DateTime.fromISO(slots[slots.length - 1].end, { zone: 'utc' }).setZone(rec.timezone).plus({ days: 1 });
+  const free = freeIntervals(rec, first.toISODate()!, last.toISODate()!);
+  return free.length ? snapToSlots(free, slots) : [];
 }
