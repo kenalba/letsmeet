@@ -3,7 +3,7 @@ import { Agent } from '@atproto/api';
 import type { Database } from '../db/db.js';
 import { StateStore, SessionStore } from '../db/sessions.js';
 import { resolveHandle } from './pds.js';
-import { SCHEDULE_NSID, RESPONSE_NSID, EVENT_NSID } from './records.js';
+import { SCHEDULE_NSID, RESPONSE_NSID, EVENT_NSID, AVAILABILITY_NSID } from './records.js';
 
 export interface AuthClient {
   clientMetadata: Record<string, unknown>;
@@ -28,9 +28,10 @@ export interface AuthClient {
 /**
  * Exactly what the app writes, and nothing it doesn't: it creates, edits and withdraws its
  * own poll records, writes availability responses (a responder's own, or a guest's on the
- * host's behalf), and files one calendar event when a time is picked. It never reads
+ * host's behalf), and files one calendar event when a time is picked. It stores availability
+ * at rkey `self`, which creates the record the first time and updates it after. It never reads
  * private data, never posts, and never acts towards any other service — so the consent
- * screen lists three record types rather than `transition:generic`'s "manage your profile,
+ * screen lists the record types it manages rather than `transition:generic`'s "manage your profile,
  * posts, likes and follows" and "any public data", which a responder rightly declined.
  * Sessions granted before this change keep their old scope until the next sign-in.
  */
@@ -39,6 +40,7 @@ export const SCOPE = [
   `repo:${SCHEDULE_NSID}`,
   `repo:${RESPONSE_NSID}?action=create&action=update`,
   `repo:${EVENT_NSID}?action=create`,
+  `repo:${AVAILABILITY_NSID}?action=create&action=update`,
 ].join(' ');
 
 export async function createOAuthClient(
