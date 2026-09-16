@@ -22,7 +22,7 @@ export interface PollPageData {
   results: PollResults;
   viewerDid: string | null;
   isHost: boolean;
-  prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
+  prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string; source?: 'availability' };
   /** The viewer's own name in `results`, when they have answered before. */
   self?: string;
   editToken?: string;

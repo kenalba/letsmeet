@@ -15,6 +15,7 @@ import {
 } from '../../services/polls.js';
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
+import { prefillForPoll } from '../../services/availability.js';
 import { lookupEditSecret } from '../../db/editSecrets.js';
 import { listResponseCache } from '../../db/cache.js';
 import { pendingOutboxCount } from '../../db/outbox.js';
@@ -120,7 +121,7 @@ export function pollRoutes(
     if (!results) return c.notFound();
     if (results.poll.tombstoned) return page(c, createElement(TombstonePage), 410);
     const viewerDid = await sessionDid(c);
-    let prefill;
+    let prefill: { available: Interval[]; ifNeedBe: Interval[]; name?: string; source?: 'availability' } | undefined;
     // The viewer's own name in the results, when they have answered before: the grid
     // subtracts that answer from the tallies it shows while they repaint.
     let self: string | undefined;
@@ -151,6 +152,11 @@ export function pollRoutes(
       if (row) {
         prefill = { available: row.record.available, ifNeedBe: row.record.ifNeedBe ?? [] };
         self = results.responses.find((r) => r.source === 'account' && r.key === viewerDid)?.who;
+      } else if (results.poll.record.status === 'active' && viewerDid !== results.poll.hostDid) {
+        // No answer yet: their standing availability marks the grid for them to fix and save.
+        // `null` (no record, expired, or unreachable) and an empty match both mean no prefill.
+        const marked = await prefillForPoll(deps, viewerDid, results.slots);
+        if (marked && marked.length > 0) prefill = { available: marked, ifNeedBe: [], source: 'availability' };
       }
     }
     const isHost = viewerDid === results.poll.hostDid;

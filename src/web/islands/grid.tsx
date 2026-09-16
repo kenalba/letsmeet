@@ -24,7 +24,7 @@ interface PollData {
   /** The host reads results; they never get the marking canvas. */
   isHost?: boolean;
   editToken?: string;
-  prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string };
+  prefill?: { available: Interval[]; ifNeedBe: Interval[]; name?: string; source?: 'availability' };
   /** The viewer's own name inside `counts`, when they have answered before. */
   self?: string;
   counts?: Record<string, SlotCount>;
@@ -120,17 +120,21 @@ function Grid({ data }: { data: PollData }) {
   // does it in passing, tapping or clicking pins it (there is no hover on a phone).
   const [spotlight, setSpotlight] = useState<{ who: string; pinned: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
-  // What the server already has for this viewer; the save button lights up only when the
-  // grid (or a guest's name) differs from it.
+  // What the server already has for this viewer. Marks that came from their standing
+  // availability are a suggestion, not a saved answer: `saved` stays empty so the save
+  // button lights up at once and the cells draw as unsaved marks.
+  const fromAvailability = data.prefill?.source === 'availability';
   const saved = useMemo<PaintMap>(() =>
-    data.prefill
+    data.prefill && !fromAvailability
       ? intervalsToPaint(data.prefill.available, data.prefill.ifNeedBe, data.slots)
       : new Map(), []);
+  const suggested = useMemo<PaintMap>(() =>
+    fromAvailability ? intervalsToPaint(data.prefill!.available, [], data.slots) : new Map(), []);
   // Paint stashed on the way to sign-in (the bluesky side of the identity toggle, or the
   // header link) comes back here, signed in or not, over whatever the server had; it is
   // cleared once read. What happens to it next is decided after `submit` is defined.
   const draft = useMemo(() => takeDraft(data.rkey, data.slots), []);
-  const [painted, setPainted] = useState<PaintMap>(draft?.paint ?? saved);
+  const [painted, setPainted] = useState<PaintMap>(draft?.paint ?? (fromAvailability ? suggested : saved));
   // A guest answers under a name, or signs in right here; the field swaps with the toggle
   // and both values survive switching back and forth.
   const [identity, setIdentity] = useState<'guest' | 'bluesky'>('guest');
@@ -576,6 +580,9 @@ function Grid({ data }: { data: PollData }) {
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
       {!locked && (
         <p className="hint touch-hint">tap a slot to mark it. hold, then drag, for a block. swipe to scroll.</p>
+      )}
+      {!locked && fromAvailability && (
+        <p className="hint from-availability">marked from your availability. fix what's off, then save.</p>
       )}
       <div
         ref={gridEl}
