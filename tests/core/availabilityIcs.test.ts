@@ -44,7 +44,23 @@ describe('buildAvailabilityIcs', () => {
   it('gives every event a stable UID and folds long lines', () => {
     const uids = lines.filter((l) => l.startsWith('UID:'));
     expect(new Set(uids).size).toBe(3);
+    expect(lines).toContain('UID:away-20260919-20260921-allday@letsmeet.lol');
+    expect(lines).toContain('UID:away-20261012-20261014-0900-1000@letsmeet.lol');
     const long = buildAvailabilityIcs({ ...rec, away: [{ start: '2026-09-19', end: '2026-09-19', note: 'é'.repeat(80) }] }, opts);
     for (const l of long.split('\r\n')) expect(new TextEncoder().encode(l).length).toBeLessThanOrEqual(75);
+  });
+  it('gives away entries that share a start date distinct UIDs', () => {
+    const ics2 = buildAvailabilityIcs({
+      ...rec,
+      away: [
+        { start: '2026-10-15', end: '2026-10-15' },
+        { start: '2026-10-15', end: '2026-10-20' },
+        { start: '2026-10-15', end: '2026-10-15', startTime: '09:00', endTime: '10:00' },
+        { start: '2026-10-15', end: '2026-10-15', startTime: '09:00', endTime: '11:00' },
+      ],
+    }, opts);
+    const uids = ics2.split('\r\n').filter((l) => l.startsWith('UID:away-'));
+    expect(uids).toHaveLength(4);
+    expect(new Set(uids).size).toBe(4);
   });
 });

@@ -109,7 +109,7 @@ export function buildAvailabilityIcs(
   for (const a of rec.away) {
     const summary = `SUMMARY:${esc(a.note ? `away · ${a.note}` : 'away')}`;
     L.push('BEGIN:VEVENT',
-      `UID:away-${ymd(a.start)}-${a.startTime ? a.startTime.replace(':', '') : 'allday'}@${opts.uidHost}`,
+      `UID:away-${ymd(a.start)}-${ymd(a.end)}-${a.startTime ? `${a.startTime.replace(':', '')}-${a.endTime!.replace(':', '')}` : 'allday'}@${opts.uidHost}`,
       `DTSTAMP:${stamp}`);
     if (a.startTime && a.endTime) {
       L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(a.startTime)}`,
