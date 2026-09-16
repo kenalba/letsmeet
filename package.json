@@ -43,7 +43,7 @@
     "tsx": "^4.23.13"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/cli": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/luxon": "^3.7.5",
