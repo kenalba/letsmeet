@@ -9,19 +9,30 @@
     # Caddy calls this before issuing a certificate for any *.sez.letsmeet.lol SNI it sees
     # from the public internet. The app answers 200 only when the domain both matches the
     # alias suffix and resolves to a DID (src/web/routes/availability.ts) — anything else,
-    # including a made-up subdomain, gets 404 and no certificate. Loopback-only: nothing but
-    # this Caddy process can reach :8787 to ask.
+    # including a made-up subdomain or a bare `did:` literal, gets 404 and no certificate.
+    # This request is made server-side by Caddy itself, never proxied from the internet; the
+    # `handle /internal/*` blocks below are what stop a public request to the same path from
+    # reaching the app through the reverse proxy (docs/deploy.md §3).
     ask http://127.0.0.1:8787/internal/tls-ask
   }
 }
 
 letsmeet.lol {
+  # Caddy itself calls /internal/tls-ask directly (the `ask` line above); nothing on the
+  # public internet may reach it through the proxy. `handle` runs ahead of `reverse_proxy`
+  # in Caddy's default directive order, so this always wins for a matching path.
+  handle /internal/* {
+    respond 404
+  }
   reverse_proxy 127.0.0.1:8787
 }
 
 *.sez.letsmeet.lol {
   tls {
     on_demand
+  }
+  handle /internal/* {
+    respond 404
   }
   reverse_proxy 127.0.0.1:8787
 }

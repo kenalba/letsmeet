@@ -149,14 +149,19 @@ export function availabilityRoutes(
    * Caddy's on-demand TLS `ask` (deploy/Caddyfile): issue a certificate only for a host
    * that is both under the alias suffix and a handle that actually resolves — otherwise
    * anyone could mint a valid cert for `whatever.sez.letsmeet.lol`. Reuses `readLimiter`
-   * since Caddy is the only caller (bound to loopback in prod) and each ask can cost a
+   * since Caddy is the only caller (bound to loopback in prod, and fronted by a proxy path
+   * block — see deploy/Caddyfile and deploy/nginx-letsmeet.lol.conf) and each ask can cost a
    * real DID resolution; a burst of bogus SNI hostnames from the public internet still
    * reaches this endpoint via Caddy before a cert exists, so it stays cheap to reject.
    */
   app.get('/internal/tls-ask', async (c) => {
     const handle = aliasHandle(c.req.query('domain'));
-    if (!handle) return c.text('no', 404);
-    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return c.text('no', 404);
+    // The alias suffix is stripped off a hostname, never a `did:` literal — that shortcut
+    // in `didFor` exists only for fake-mode `/u/:handle` and matches by regex alone, so
+    // without this check `?domain=did:plc:anything.sez.letsmeet.lol` would mint a cert for
+    // an unverified DID.
+    if (!handle || handle.startsWith('did:')) return c.text('no', 404);
+    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return c.text('no', 429);
     return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
   });
 

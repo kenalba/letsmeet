@@ -101,4 +101,18 @@ describe('<handle>.sez.letsmeet.lol', () => {
     expect((await app.request('/internal/tls-ask?domain=nobody.example.sez.letsmeet.lol')).status).toBe(404);
     expect((await app.request('/internal/tls-ask?domain=evil.example')).status).toBe(404);
   });
+  it('rejects a did: literal on the ask endpoint even though /u/:handle accepts one in fake mode', async () => {
+    // No resolver configured: fake mode, where didFor's `did:` shortcut is meant for
+    // /u/:handle only. The ask endpoint must not let it mint a certificate.
+    const { app } = setup(undefined, 'https://letsmeet.lol');
+    const res = await app.request(`/internal/tls-ask?domain=${KEN}.sez.letsmeet.lol`);
+    expect(res.status).toBe(404);
+  });
+  it('answers 429 once the ask endpoint has spent its read budget', async () => {
+    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    const ask = () => app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol');
+    // The bucket holds 120 and the clock does not move, so the 121st finds it empty.
+    for (let i = 0; i < 120; i++) expect((await ask()).status).toBe(200);
+    expect((await ask()).status).toBe(429);
+  });
 });

@@ -284,15 +284,26 @@ exactly this.
   `http://127.0.0.1:8787/internal/tls-ask?domain=<sni-host>` before issuing a
   certificate for any hostname it sees. The app (§1's `compose.yaml` already
   binds it to `127.0.0.1:8787`) answers `200` only when `<sni-host>` ends in
-  `.sez.letsmeet.lol` **and** the handle part resolves to a DID
-  (`src/web/routes/availability.ts`); anything else — an unresolvable
-  handle, or a domain outside the suffix entirely — gets `404` and no
-  certificate is issued. Since this runs on the public internet's attack
-  surface (anyone can request a TLS handshake for a made-up
-  `whatever.sez.letsmeet.lol` and Caddy will call this endpoint), it must
-  stay loopback-only — the same trust boundary as the rest of `:8787` — and
-  it shares the app's per-IP read limiter so a burst of bogus hostnames
-  can't turn into a burst of handle-resolution calls.
+  `.sez.letsmeet.lol`, the handle part is not a `did:` literal, **and** the
+  handle resolves to a DID (`src/web/routes/availability.ts`); anything
+  else — an unresolvable handle, a bare DID, or a domain outside the suffix
+  entirely — gets `404` and no certificate is issued. The app's own loopback
+  bind is not, by itself, what keeps this off the public internet: both
+  Caddy and nginx run *on the box* and are themselves allowed to reach
+  `127.0.0.1:8787`, and both proxy `/` broadly, so a public request to
+  `https://letsmeet.lol/internal/tls-ask` would otherwise sail straight
+  through the proxy to the app. What actually stops it is the explicit path
+  block ahead of `reverse_proxy`/`proxy_pass` in both `deploy/Caddyfile`
+  (`handle /internal/* { respond 404 }`, in both site blocks) and
+  `deploy/nginx-letsmeet.lol.conf` (`location /internal/ { return 404; }`) —
+  only Caddy's own `ask` request, made server-side and never through the
+  proxy path, ever reaches the route. Since this still runs on the public
+  internet's attack surface (anyone can request a TLS handshake for a
+  made-up `whatever.sez.letsmeet.lol`, which is what triggers Caddy to call
+  `ask` in the first place), the endpoint also shares the app's per-IP read
+  limiter so a burst of bogus hostnames can't turn into a burst of
+  handle-resolution calls — once that budget is spent it answers `429`,
+  same as `/u/<handle>`.
 - **The alias never carries a session.** The session cookie is scoped to the
   `letsmeet.lol` apex, so a request to `ken.wzrdz.cool.sez.letsmeet.lol`
   never sees it — the alias only ever serves the public friend view and
