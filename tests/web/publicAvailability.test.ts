@@ -85,6 +85,9 @@ describe('/u/:handle', () => {
   });
 });
 
+/** A request whose socket peer is `address` — what @hono/node-server's getConnInfo reads. */
+const conn = (address: string) => ({ incoming: { socket: { remoteAddress: address, remoteFamily: 'IPv4' } } });
+
 describe('<handle>.sez.letsmeet.lol', () => {
   it('serves the friend view and feed on <handle>.sez.letsmeet.lol', async () => {
     const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
@@ -108,11 +111,43 @@ describe('<handle>.sez.letsmeet.lol', () => {
     const res = await app.request(`/internal/tls-ask?domain=${KEN}.sez.letsmeet.lol`);
     expect(res.status).toBe(404);
   });
-  it('answers 429 once the ask endpoint has spent its read budget', async () => {
+  it('answers 429 once a domain has spent its ask budget, without touching another domain', async () => {
     const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
-    const ask = () => app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol');
-    // The bucket holds 120 and the clock does not move, so the 121st finds it empty.
-    for (let i = 0; i < 120; i++) expect((await ask()).status).toBe(200);
-    expect((await ask()).status).toBe(429);
+    const ask = (domain: string) => app.request(`/internal/tls-ask?domain=${domain}.sez.letsmeet.lol`);
+    // The budget is per asked-about domain — the thing an attacker varies — so spending
+    // one made-up name's 20 must leave a real handle's first ask untouched.
+    for (let i = 0; i < 20; i++) expect((await ask('junk.example')).status).toBe(404);
+    expect((await ask('junk.example')).status).toBe(429);
+    expect((await ask('ken.wzrdz.cool')).status).toBe(200);
+  });
+  it('refuses the ask from anything but a caller on this box', async () => {
+    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    const ask = (init?: RequestInit, env?: unknown) =>
+      app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol', init, env);
+    // Through the public proxy: nginx and Caddy both append X-Forwarded-For, and both dial
+    // 127.0.0.1 — so the header, not the socket, is what gives a proxied request away.
+    expect((await ask({ headers: { 'x-forwarded-for': '203.0.113.9' } })).status).toBe(404);
+    // ...and a spoofed loopback claim in that header must not buy anything either.
+    expect((await ask({ headers: { 'x-forwarded-for': '127.0.0.1' } })).status).toBe(404);
+    expect((await ask({}, conn('203.0.113.9'))).status).toBe(404);
+    expect((await ask({}, conn('127.0.0.1'))).status).toBe(200);
+  });
+  it('refuses a domain that only looks like it is under the alias suffix', async () => {
+    const { app } = setup(async () => KEN, 'https://letsmeet.lol');
+    const ask = (domain: string) =>
+      app.request(`/internal/tls-ask?domain=${encodeURIComponent(domain)}`);
+    expect((await ask('evil.example/?x=.sez.letsmeet.lol')).status).toBe(404);
+    expect((await ask('.sez.letsmeet.lol')).status).toBe(404);
+    expect((await ask('sez.letsmeet.lol')).status).toBe(404);
+  });
+  it('serves nothing but the friend view and the feed on an alias host', async () => {
+    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    const headers = { host: 'ken.wzrdz.cool.sez.letsmeet.lol' };
+    for (const path of ['/availability', '/new', '/login', '/api/handles?q=ken',
+      '/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol']) {
+      expect([path, (await app.request(path, { headers })).status]).toEqual([path, 404]);
+    }
+    // The friend view is a page: the static files it loads still have to answer.
+    expect((await app.request('/favicon.svg', { headers })).status).toBe(200);
   });
 });

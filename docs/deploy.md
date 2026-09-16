@@ -292,22 +292,30 @@ exactly this.
   Caddy and nginx run *on the box* and are themselves allowed to reach
   `127.0.0.1:8787`, and both proxy `/` broadly, so a public request to
   `https://letsmeet.lol/internal/tls-ask` would otherwise sail straight
-  through the proxy to the app. What actually stops it is the explicit path
-  block ahead of `reverse_proxy`/`proxy_pass` in both `deploy/Caddyfile`
+  through the proxy to the app. Three things stop it, and the app does not
+  rely on the deploy-side two being in place: the route itself refuses any
+  request that arrives with an `X-Forwarded-For` header or from a
+  non-loopback socket (`isLoopbackPeer`, `src/web/clientIp.ts`) — both
+  proxies append that header, so it marks a proxied request whatever address
+  it claims — and, one layer out, the explicit path block ahead of
+  `reverse_proxy`/`proxy_pass` in both `deploy/Caddyfile`
   (`handle /internal/* { respond 404 }`, in both site blocks) and
-  `deploy/nginx-letsmeet.lol.conf` (`location /internal/ { return 404; }`) —
-  only Caddy's own `ask` request, made server-side and never through the
-  proxy path, ever reaches the route. Since this still runs on the public
+  `deploy/nginx-letsmeet.lol.conf` (`location /internal/ { return 404; }`).
+  Only Caddy's own `ask` request, made server-side and never through the
+  proxy path, reaches the route. Since this still runs on the public
   internet's attack surface (anyone can request a TLS handshake for a
   made-up `whatever.sez.letsmeet.lol`, which is what triggers Caddy to call
-  `ask` in the first place), the endpoint also shares the app's per-IP read
-  limiter so a burst of bogus hostnames can't turn into a burst of
-  handle-resolution calls — once that budget is spent it answers `429`,
-  same as `/u/<handle>`.
-- **The alias never carries a session.** The session cookie is scoped to the
-  `letsmeet.lol` apex, so a request to `ken.wzrdz.cool.sez.letsmeet.lol`
-  never sees it — the alias only ever serves the public friend view and
-  feed, the same as `/u/<handle>`, never a signed-in page.
+  `ask` in the first place), the endpoint also holds a rate-limit budget
+  keyed on *the domain being asked about* — 20 per ten minutes, far more than
+  the one ask a real first visit costs — so a flood of made-up hostnames
+  cannot spend the budget a real handle needs. Past that budget it answers
+  `429`.
+- **The alias serves the friend view and the feed, and nothing else.** A
+  request to `ken.wzrdz.cool.sez.letsmeet.lol` for any path but `/`,
+  `/availability.ics` and the static files that page loads gets a `404`
+  (`aliasHostOnly`, mounted ahead of every route in `src/web/server.ts`).
+  The session cookie is scoped to the `letsmeet.lol` apex as well, so the
+  alias could not show a signed-in page even if it routed one.
 
 ## 4. Publishing the lexicons
 

@@ -17,3 +17,26 @@ export function clientIp(c: Context): string {
     return 'local';
   }
 }
+
+/** Addresses a socket reports for a peer on this same box. */
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * True when the request came straight from a process on this box rather than in through the
+ * public reverse proxy — the gate on `/internal/*`, which only Caddy's on-demand-TLS `ask`
+ * may reach. A loopback socket proves nothing by itself: nginx and Caddy run on the box too
+ * and dial `127.0.0.1:8787` (docs/deploy.md §3). What separates them is the header they both
+ * append — a request carrying any `X-Forwarded-For` came through a proxy, whatever address
+ * it claims, and a request without one never did.
+ */
+export function isLoopbackPeer(c: Context): boolean {
+  if (c.req.header('x-forwarded-for') !== undefined) return false;
+  try {
+    const address = getConnInfo(c).remote.address;
+    return address === undefined || LOOPBACK.has(address);
+  } catch {
+    // No socket to inspect (the in-process test rig, a non-node adapter). The header check
+    // above is the one that decides; nothing arrives from outside the box without it.
+    return true;
+  }
+}
