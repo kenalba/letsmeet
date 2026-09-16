@@ -1,0 +1,112 @@
+import { describe, it, expect } from 'vitest';
+import { openDb } from '../../src/db/db.js';
+import { FakeRepo } from '../helpers/fakeRepo.js';
+import { createServer } from '../../src/web/server.js';
+import { AVAILABILITY_NSID, AVAILABILITY_RKEY } from '../../src/atproto/records.js';
+import type { Deps, RepoReader, RepoWriter } from '../../src/atproto/types.js';
+import type { AuthClient } from '../../src/atproto/oauthClient.js';
+
+const ME = 'did:plc:me';
+const stubAuth: AuthClient = {
+  clientMetadata: {}, jwks: { keys: [] },
+  authorize: async () => new URL('https://pds.example.com/authorize'),
+  callback: async () => ({ did: ME }),
+  restore: async () => { throw new Error('not used'); },
+};
+
+function setup(over: { reader?: RepoReader; writer?: RepoWriter } = {}) {
+  const repo = new FakeRepo();
+  const deps: Deps = {
+    db: openDb(':memory:'), reader: over.reader ?? repo, writerFor: async () => over.writer ?? repo,
+    now: () => new Date('2026-09-16T12:00:00Z'),
+  };
+  const app = createServer(deps, stubAuth, {
+    COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+  });
+  return { app, deps, repo };
+}
+
+/** Sign in through the dev route and hand back the cookie header. */
+async function signIn(app: ReturnType<typeof setup>['app'], did: string): Promise<string> {
+  const res = await app.request(`/dev/login?did=${did}&handle=me.test`);
+  return res.headers.get('set-cookie')!.split(';')[0];
+}
+
+const body = {
+  timezone: 'UTC', weekly: [{ day: 2, start: '19:00', end: '22:00' }],
+  away: [{ start: '2026-09-19', end: '2026-09-21', note: 'out of town' }], note: 'text first',
+};
+
+describe('/availability', () => {
+  it('redirects a signed-out visitor to sign in and come back', async () => {
+    const { app } = setup();
+    const res = await app.request('/availability');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/login?returnTo=%2Favailability');
+  });
+  it('renders the editor with the current record as island data', async () => {
+    const { app, repo } = setup();
+    const cookie = await signIn(app, ME);
+    await repo.putRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY, {
+      $type: AVAILABILITY_NSID, ...body, updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    const res = await app.request('/availability', { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('id="availability-data"');
+    expect(html).toContain('id="availability-root"');
+    expect(html).toContain('/assets/availability.js');
+    expect(html).toContain('out of town');
+    expect(html).toContain('usually free tuesdays 7pm to 10pm.');
+  });
+  it('saves a record for the signed-in viewer and reports the sentence', async () => {
+    const { app, repo } = setup();
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, written: true, sentence: 'usually free tuesdays 7pm to 10pm.' });
+    const stored = await repo.getRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY);
+    expect((stored?.value as { note: string }).note).toBe('text first');
+  });
+  it('rejects a save with no session, and explains a bad body', async () => {
+    const { app } = setup();
+    expect((await app.request('/availability', { method: 'POST', body: '{}' })).status).toBe(401);
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, timezone: 'Nowhere/Here' }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toMatch(/timezone/);
+  });
+  it('opens the editor empty, and says so, when the pds will not answer the read', async () => {
+    const reader: RepoReader = {
+      getRecord: async () => { throw new Error('pds unreachable'); },
+      listRecords: async () => { throw new Error('pds unreachable'); },
+    };
+    const { app } = setup({ reader });
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('saving will overwrite whatever is there');
+    expect(html).toContain('"weekly":[]');
+  });
+  it('asks the viewer to sign in again when the pds refuses the write for want of scope', async () => {
+    const writer: RepoWriter = {
+      createRecord: async () => { throw new Error('not used'); },
+      deleteRecord: async () => { throw new Error('not used'); },
+      putRecord: async () => { throw new Error('Bad token scope'); },
+    };
+    const { app } = setup({ writer });
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json() as { error: string }).error)
+      .toBe('sign in again to post your availability (this app needs a new permission).');
+  });
+});

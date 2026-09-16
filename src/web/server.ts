@@ -9,6 +9,7 @@ import type { AuthClient } from '../atproto/oauthClient.js';
 import { GENERIC_ERROR } from '../core/errors.js';
 import { authRoutes } from './routes/auth.js';
 import { pollRoutes } from './routes/polls.js';
+import { availabilityRoutes } from './routes/availability.js';
 import { apiRoutes } from './routes/api.js';
 import { bskyHandleSearch, cachedHandleSearch, type HandleSearch } from './handleSearch.js';
 import { page } from './respond.js';
@@ -154,5 +155,6 @@ export function createServer(
   app.route('/', authRoutes(auth, { ...session, publicUrl: env.PUBLIC_URL, now: deps.now }));
   app.route('/', apiRoutes(cachedHandleSearch(env.handleSearch ?? bskyHandleSearch()), deps.now));
   app.route('/', pollRoutes(deps, auth, env));
+  app.route('/', availabilityRoutes(deps, env));
   return app;
 }

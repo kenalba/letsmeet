@@ -346,8 +346,10 @@
  * `.ifNeedBe` paint drawn on top of that tint. See the `.cell` rules below.
  */
 @layer island {
-  /* The reply block renders through a portal into #reply-root, below the chips: same rules. */
-  #grid-root, #reply-root {
+  /* The reply block renders through a portal into #reply-root, below the chips: same rules.
+     The availability editor (#availability-root) marks a template week on the same grid,
+     so it takes the same rules too; what is only its own is in the block at the end. */
+  #grid-root, #reply-root, #availability-root {
     p { margin: 6px 0; }
     label { display: block; margin: 10px 0; font-size: 14px; }
     input {
@@ -508,7 +510,7 @@
 
 /* The island's "response stored." line, in the display face like every other status line. */
 @layer island {
-  :is(#grid-root, #reply-root) .status {
+  :is(#grid-root, #reply-root, #availability-root) .status {
     font-family: var(--font-pixel);
     font-size: 11px;
     line-height: 22px;
@@ -523,4 +525,22 @@
   #reply-root { padding-top: 16px; border-top: 1px solid var(--border); }
   #reply-root:empty { display: none; }
   #reply-root .whoami .modes { margin-top: 0; }
+}
+
+@layer island {
+  /* The editor's own furniture: the read-back sentence under the grid, the away list, and
+     the date/time fields that add to it. Everything else it draws is the grid's. */
+  #availability-root {
+    .sentence { margin: 12px 0 18px; font-size: 12px; color: var(--primary); }
+    .away { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+    .away li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+    .away .when { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .away .note { color: var(--muted-foreground); }
+    .away-form {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px; align-items: end; margin-bottom: 18px;
+    }
+    .away-form label, .away-form input { margin: 0; }
+    .save { margin-top: 12px; }
+  }
 }

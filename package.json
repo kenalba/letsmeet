@@ -13,8 +13,9 @@
     "build:grid": "esbuild src/web/islands/grid.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=react --outfile=public/assets/grid.js",
     "build:createform": "esbuild src/web/islands/createForm.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=react --outfile=public/assets/createForm.js",
     "build:login": "esbuild src/web/islands/login.ts --bundle --minify --format=esm --outfile=public/assets/login.js",
+    "build:availability": "esbuild src/web/islands/availability.tsx --bundle --minify --format=esm --jsx=automatic --jsx-import-source=react --outfile=public/assets/availability.js",
     "build:css": "tailwindcss -i src/web/styles/app.css -o public/assets/app.css --minify",
-    "build:client": "npm run build:grid && npm run build:createform && npm run build:login && npm run build:css"
+    "build:client": "npm run build:grid && npm run build:createform && npm run build:login && npm run build:availability && npm run build:css"
   },
   "keywords": [],
   "author": "",

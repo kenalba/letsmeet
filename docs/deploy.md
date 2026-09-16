@@ -86,10 +86,11 @@ deployment by a stray env line.
 ### Before you build
 
 `public/assets/` is gitignored and not checked in — it's the build output
-(`grid.js`, `createForm.js`, `app.css`), served as static files at `/assets/*`
-by `serveStatic` in `src/web/server.ts`. `npm run build:client` chains the
-three build steps (`build:grid`, `build:createform`, `build:css`) behind one
-name. **Run it before starting the server, and after every deploy of new
+(`grid.js`, `createForm.js`, `login.js`, `availability.js`, `app.css`), served
+as static files at `/assets/*` by `serveStatic` in `src/web/server.ts`.
+`npm run build:client` chains every build step (`build:grid`,
+`build:createform`, `build:login`, `build:availability`, `build:css`) behind
+one name. **Run it before starting the server, and after every deploy of new
 source:**
 
 ```bash
