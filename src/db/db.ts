@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS web_session (
   sid TEXT PRIMARY KEY, did TEXT NOT NULL, handle TEXT,
   created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS web_session_did ON web_session (did);
+CREATE TABLE IF NOT EXISTS availability_cache (
+  did TEXT PRIMARY KEY, uri TEXT, cid TEXT, record_json TEXT,
+  updated_at INTEGER NOT NULL);
 `;
 
 /**
