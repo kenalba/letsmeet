@@ -59,6 +59,16 @@ describe('/u/:handle', () => {
     expect(await none.text()).toContain('no availability posted');
     expect((await app.request('/u/nobody.example')).status).toBe(404);
   });
+  it('503s a page and 404s an ask when the handle lookup itself fails', async () => {
+    const { app } = setup(async () => { throw new Error('resolver down'); }, 'https://letsmeet.lol');
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // Not "no such handle" — we do not know, and Caddy is meant to ask again later.
+      expect((await app.request('/u/ken.wzrdz.cool')).status).toBe(503);
+      expect((await app.request('/u/ken.wzrdz.cool/availability.ics')).status).toBe(503);
+      expect((await app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol')).status).toBe(404);
+    } finally { warned.mockRestore(); }
+  });
   it('reads an expired record as unknown', async () => {
     const { app, repo } = setup();
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, { ...rec, validUntil: '2026-09-01T00:00:00.000Z' });

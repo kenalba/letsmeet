@@ -90,22 +90,32 @@ export async function resolveHandle(did: string, opts: NetOpts = {}): Promise<st
 const RESOLVE_HANDLE_URL = 'https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle';
 const HANDLE_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
 
-/** The DID a handle currently points at, or null when it points nowhere. Public read. */
+/**
+ * The DID a handle currently points at, or null when it points nowhere. Public read.
+ *
+ * Null means the answer is "nobody", and callers cache it for an hour — so it is reserved
+ * for the API actually saying so (400 InvalidRequest for a handle that resolves to
+ * nothing, 404, or a malformed handle we never ask about). A timeout, a 5xx or a refused
+ * connection is not an answer: it throws, and the caller decides (503 for a page, a 404
+ * that Caddy will ask again about). Returning null there would take a real handle off the
+ * air for the length of the memo TTL over one blip.
+ */
 export async function resolveDid(handle: string, opts: NetOpts = {}): Promise<string | null> {
   if (!HANDLE_RE.test(handle) || handle.length > 253) return null;
   const u = new URL(RESOLVE_HANDLE_URL);
   u.searchParams.set('handle', handle.toLowerCase());
-  try {
-    const res = await safeFetch(u, opts);
-    if (!res.ok) return null;
-    const body = (await res.json()) as { did?: unknown };
-    return typeof body.did === 'string' && body.did.startsWith('did:') ? body.did : null;
-  } catch {
-    return null;
-  }
+  const res = await safeFetch(u, opts);
+  if (res.status === 400 || res.status === 404) return null;
+  if (!res.ok) throw new Error(`handle resolution failed for ${handle}: ${res.status}`);
+  const body = (await res.json()) as { did?: unknown };
+  return typeof body.did === 'string' && body.did.startsWith('did:') ? body.did : null;
 }
 
-/** Handles are attacker-influenced keys, so the memo is capped and evicts oldest-first. */
+/**
+ * Handles are attacker-influenced keys, so the memo is capped and evicts oldest-first. Only
+ * answers are memoized: a throw from `inner` propagates before anything is written, so a
+ * transport failure is retried on the next request rather than remembered for the TTL.
+ */
 export function cachedResolveDid(
   inner: (handle: string) => Promise<string | null>, ttlMs = 60 * 60_000, max = 5_000,
 ): (handle: string) => Promise<string | null> {

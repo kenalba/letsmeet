@@ -20,6 +20,16 @@ describe('resolveDid', () => {
     expect(await resolveDid('not a handle!', { fetch: f as unknown as typeof fetch, lookup: okLookup })).toBeNull();
     expect(f).toHaveBeenCalledTimes(1);
   });
+  it('throws rather than answering null when the lookup itself fails', async () => {
+    // A 5xx, a rate-limit, a timeout: the handle is not known to be missing, and a null
+    // here would be cached as "no such handle" for an hour.
+    const down = fetchWith(503, { error: 'Upstream' });
+    await expect(resolveDid('ken.wzrdz.cool', { fetch: down as unknown as typeof fetch, lookup: okLookup }))
+      .rejects.toThrow(/503/);
+    const refused = vi.fn(async () => { throw new Error('connect ECONNREFUSED'); });
+    await expect(resolveDid('ken.wzrdz.cool', { fetch: refused as unknown as typeof fetch, lookup: okLookup }))
+      .rejects.toThrow(/ECONNREFUSED/);
+  });
   it('caches hits and misses', async () => {
     const inner = vi.fn(async (h: string) => (h === 'a.b' ? 'did:plc:a' : null));
     const r = cachedResolveDid(inner);
@@ -27,6 +37,17 @@ describe('resolveDid', () => {
     expect(await r('a.b')).toBe('did:plc:a');
     expect(await r('x.y')).toBeNull();
     expect(await r('x.y')).toBeNull();
+    expect(inner).toHaveBeenCalledTimes(2);
+  });
+  it('does not cache a failure, so a blip does not 404 a real handle for an hour', async () => {
+    let calls = 0;
+    const inner = vi.fn(async () => {
+      if (++calls === 1) throw new Error('resolver down');
+      return 'did:plc:a';
+    });
+    const r = cachedResolveDid(inner);
+    await expect(r('a.b')).rejects.toThrow(/resolver down/);
+    expect(await r('a.b')).toBe('did:plc:a');
     expect(inner).toHaveBeenCalledTimes(2);
   });
 });

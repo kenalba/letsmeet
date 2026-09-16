@@ -71,13 +71,18 @@ export async function saveAvailability(
 /**
  * Anyone else's record: cache first, revalidated in the background window `poll_cache`
  * uses. A cached row (even one that says "none") is served when the PDS will not answer;
- * only a cold miss propagates the failure.
+ * only a cold miss propagates the failure. A failed read is inside the window too — it
+ * writes no cache row, so gating on the row instead of the window would send every
+ * following landing and poll view back to a PDS we have just watched time out.
  */
 export async function getAvailabilityCached(deps: Deps, did: string): Promise<AvailabilityRecord | null> {
   const cached = getAvailabilityCache(deps.db, did);
   const fresh = freshnessFor(deps);
   const nowMs = deps.now().getTime();
-  if (cached && fresh.isFresh(`avail:${did}`, nowMs)) return cached.record;
+  if (fresh.isFresh(`avail:${did}`, nowMs)) {
+    if (cached) return cached.record;
+    throw new Error(`availability read for ${did} failed recently`);
+  }
   fresh.mark(`avail:${did}`, nowMs);
   try {
     return await readLive(deps, did);

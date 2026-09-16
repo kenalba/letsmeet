@@ -120,7 +120,17 @@ export function availabilityRoutes(
     if (!readLimiter.allow(clientIp(c), deps.now().getTime())) {
       return { deny: page(c, createElement(ErrorPage, { heading: 'slow down', message: 'easy there. try again in a minute.' }), 429) };
     }
-    const did = await didFor(handle);
+    let did: string | null;
+    try {
+      did = await didFor(handle);
+    } catch (err) {
+      // The resolver is down, not the handle wrong: 404 would tell the visitor this person
+      // does not exist, and would be wrong again in a minute.
+      console.warn(`handle resolution failed for ${handle}:`, err);
+      return { deny: page(c, createElement(ErrorPage, {
+        heading: 'could not look them up', message: "couldn't resolve that handle right now. try again in a minute.",
+      }), 503) };
+    }
     if (!did) return { deny: c.notFound() };
     try {
       return { handle, did, record: await getAvailabilityCached(deps, did) };
@@ -207,7 +217,14 @@ export function availabilityRoutes(
     // an unverified DID.
     if (!handle || handle.startsWith('did:')) return c.text('no', 404);
     if (!askLimiter.allow(handle.toLowerCase(), deps.now().getTime())) return c.text('no', 429);
-    return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
+    try {
+      return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
+    } catch (err) {
+      // No certificate this time round. Caddy asks again on the next handshake, by which
+      // point the resolver may be back — better than minting one for an unverified name.
+      console.warn(`tls-ask handle resolution failed for ${handle}:`, err);
+      return c.text('no', 404);
+    }
   });
 
   return app;

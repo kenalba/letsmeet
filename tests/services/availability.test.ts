@@ -94,6 +94,16 @@ describe('getAvailabilityCached', () => {
     expect(await getAvailabilityCached(deps, 'did:plc:nobody')).toBeNull();
     expect(get).toHaveBeenCalledTimes(1);
   });
+  it('does not re-ask a pds that just failed, inside the window', async () => {
+    const { deps, repo } = setup(30_000);
+    const get = vi.spyOn(repo, 'getRecord').mockRejectedValue(new Error('pds down'));
+    // Nothing is cached, so the failure propagates — but it is still a failure we know
+    // about, and every landing and poll view in the next thirty seconds must not pay the
+    // five-second timeout again to learn it.
+    await expect(getAvailabilityCached(deps, DID)).rejects.toThrow(/pds down/);
+    await expect(getAvailabilityCached(deps, DID)).rejects.toThrow(/failed recently/);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
   it('serves the cache when the live read fails, and throws only with no cache', async () => {
     const { deps, repo } = setup(0);
     await saveAvailability(deps, DID, input);
