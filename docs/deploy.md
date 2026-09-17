@@ -315,9 +315,9 @@ them forever. nginx stays the front for this host like every other on the box.
   (`src/services/sezNames.ts`). The table is **not** disposable: it is what makes a
   short name one person's. `deploy/backup.sh` already backs up the whole
   database.
-- **Check.** `curl -sI https://ken.sez.letsmeet.lol/ | head -1` → `HTTP/2 200`
+- **Check.** `curl -sI https://ken.sez.letsmeet.lol/ | head -1` → a 200
   once a name is claimed (or `https://ken-wzrdz-cool.sez.letsmeet.lol/` for any
-  handle), and `curl -sI https://ken.sez.letsmeet.lol/new | head -1` → `404`.
+  handle), and `curl -sI https://ken.sez.letsmeet.lol/new | head -1` → a 404.
 
 ## 4. Publishing the lexicons
 
