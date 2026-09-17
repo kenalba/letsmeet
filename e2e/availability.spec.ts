@@ -32,6 +32,12 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.getByRole('heading', { name: 'your availability' })).toBeVisible();
   await page.click('a[href="/availability"]');
 
+  // Claim a name of our own (one per project, so the four runs never contend for it).
+  const name = `e2e-${test.info().project.name.replace(/[^a-z0-9-]/gi, '')}`;
+  await page.fill('#availability-root input[name=alias]', name);
+  await expect(page.locator('#availability-root .address-line'))
+    .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
+
   // Mark Sunday 7:00–8:00 (the first two cells of the first column) and read it back.
   await markCells(page, '#availability-root', 0, 1);
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
@@ -47,6 +53,8 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
   await page.click('#availability-root button.save');
   await expect(page.locator('#availability-root .status')).toHaveText('availability posted.');
+  await expect(page.locator('#availability-root .address-line'))
+    .toHaveText(`your address: ${name}.sez.localhost:8787`);
 
   // Reload keeps it.
   await page.reload();
@@ -60,6 +68,17 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   const ics = await page.request.get(`/u/${did}/availability.ics`);
   expect(ics.headers()['content-type']).toContain('text/calendar');
   expect(await ics.text()).toContain('RRULE:FREQ=WEEKLY;BYDAY=SU');
+
+  // The same page and feed answer on <name>.sez.<site>. Playwright's request context hands
+  // its headers to Node's http client, so the Host header names the alias host while the
+  // socket still goes to localhost:8787 — which is exactly what nginx does in production.
+  const aliasHost = `${name}.sez.localhost:8787`;
+  const alias = await page.request.get('/', { headers: { host: aliasHost } });
+  expect(alias.status()).toBe(200);
+  expect(await alias.text()).toContain('usually free sundays 7am to 8am.');
+  const aliasIcs = await page.request.get('/availability.ics', { headers: { host: aliasHost } });
+  expect(aliasIcs.headers()['content-type']).toContain('text/calendar');
+  expect((await page.request.get('/new', { headers: { host: aliasHost } })).status()).toBe(404);
 
   // A poll on the next Sunday, 7–9am UTC, hosted by someone else (hosts never get the
   // canvas): sign in as a second account to create it, then back as `did` to answer.
