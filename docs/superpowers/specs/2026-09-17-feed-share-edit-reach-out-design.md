@@ -85,8 +85,8 @@ Where: `src/web/islands/availability.tsx`, `src/web/styles/app.css`, `e2e/availa
 
 > Superseded the same day: the clipboard-and-profile flow below shipped, then was replaced
 > by a link to Bluesky's compose intent (`https://bsky.app/intent/compose?text=…`) carrying
-> a public post at the person — "hey @<handle>, <site>. <hour> on <dow> <mon d> looks good
-> to me?". No script, no `.week-ping` line, no `reachOut.ts`. The rest of this section is
+> a public post at the person — "hey @<handle>, let's meet (lol). <hour> on <dow> <mon d>
+> looks good to me?" (no URL in the text: a bare domain would draw a link card). No script, no `.week-ping` line, no `reachOut.ts`. The rest of this section is
 > kept as the record of what was tried first.
 
 Where: `src/web/pages/PublicAvailability.tsx`, `src/web/pages/reachOut.ts` (new),

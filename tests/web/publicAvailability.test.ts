@@ -243,8 +243,8 @@ describe('the week grid', () => {
     // Now is Wed 16 Sep: Tuesday's three free hours are past and stay inert, Thursday's link.
     expect(html.match(/<a class="week-cell free/g)?.length).toBe(3);
     expect(html.match(/<div class="week-cell free/g)?.length).toBe(3);
-    const text = 'hey @ken.wzrdz.cool, letsmeet.lol. 7pm on thu sep 17 looks good to me?';
-    expect(html).toContain(`href="https://bsky.app/intent/compose?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"`);
+    const text = "hey @ken.wzrdz.cool, let's meet (lol). 7pm on thu sep 17 looks good to me?";
+    expect(html).toContain(`href="https://bsky.app/intent/compose?text=${encodeURIComponent(text).replace("'", '%27')}" target="_blank" rel="noopener"`);
     expect(html).toContain('title="thu 17 7pm · click to post at them"');
     expect(html).toContain('click a free hour to post at them on bluesky.');
     expect(html).not.toContain('week-ping');

@@ -48,7 +48,7 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
  * Bluesky offers without a chat scope (there is no DM intent). Everything else is an inert
  * div.
  */
-function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site: string }) {
+function WeekGrid({ view, handle }: { view: WeekView; handle: string }) {
   return (
     <div className="week" aria-label={`usual week, ${view.title}`} role="group">
       <div className="week-corner" />
@@ -74,7 +74,7 @@ function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site
                 key={`${d.date}-${h}`}
                 className={cn('week-cell', c.state)}
                 data-c={ci}
-                href={composeUrl(`hey @${handle}, ${site}. ${hourLabel(h)} on ${d.dow} ${monthDayLabel(d.date)} looks good to me?`)}
+                href={composeUrl(`hey @${handle}, let's meet (lol). ${hourLabel(h)} on ${d.dow} ${monthDayLabel(d.date)} looks good to me?`)}
                 target="_blank"
                 rel="noopener"
                 title={`${title} · click to post at them`}
@@ -94,8 +94,14 @@ function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site
   );
 }
 
-/** Bluesky's compose sheet with `text` filled in; the visitor still has to hit post. */
-const composeUrl = (text: string) => `https://bsky.app/intent/compose?text=${encodeURIComponent(text)}`;
+/**
+ * Bluesky's compose sheet with `text` filled in; the visitor still has to hit post. The
+ * text names no URL on purpose: a bare domain gets a link card under the post. The
+ * apostrophe is encoded by hand — encodeURIComponent leaves it, and React would then
+ * HTML-escape it in the attribute; harmless, but the source reads cleaner without.
+ */
+const composeUrl = (text: string) =>
+  `https://bsky.app/intent/compose?text=${encodeURIComponent(text).replace(/'/g, '%27')}`;
 
 /** A free (or half-free) hour on a day that is not over: worth a message. */
 const isReachable = (d: WeekDay, c: WeekCell) =>
@@ -116,7 +122,6 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
     ? buildWeekView(rec, data.now, week === 'next' ? 1 : 0) : null;
   const later = rec && !unreadable && !stale
     ? buildWeekView(rec, data.now, 0).later : [];
-  const site = base.replace(/^https?:\/\//, '');
   const reachable = !!view && view.days.some((d) => d.cells.some((c) => isReachable(d, c)));
   const awayLaterCaption = later.length > 0 ? (
     <p className="week-caption text-sm text-muted-foreground">
@@ -228,7 +233,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               </CardAction>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <WeekGrid view={view!} handle={data.handle} site={site} />
+              <WeekGrid view={view!} handle={data.handle} />
               {view!.hasAway && (
                 <div className="week-legend">
                   <span><i className="free" />free</span>

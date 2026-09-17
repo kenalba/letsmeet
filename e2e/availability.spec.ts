@@ -128,7 +128,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
     await popup.close();
     expect(popupUrl.origin + popupUrl.pathname).toBe('https://bsky.app/intent/compose');
     expect(popupUrl.searchParams.get('text')).toMatch(
-      /^hey @did:plc:\S+, localhost:8787\. 7am on sun [a-z]{3} \d{1,2} looks good to me\?$/,
+      /^hey @did:plc:\S+, let's meet \(lol\)\. 7am on sun [a-z]{3} \d{1,2} looks good to me\?$/,
     );
   }
 
