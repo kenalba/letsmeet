@@ -127,6 +127,24 @@ describe('server', () => {
     expect(html).toContain('href="/u/host.test"');
   });
 
+  it('links the availability block to the sez address: the hyphenated handle, then the claimed name', async () => {
+    const { deps } = await setup();
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}&handle=host.test`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+    await saveAvailability(deps, HOST, { timezone: 'UTC', weekly: [], away: [] });
+    let html = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(html).toContain('href="http://host-test.sez.localhost:8787"');
+    expect(html).toContain('>host-test.sez.localhost:8787<');
+    expect(html).toContain('href="/u/host.test"'); // the apex link stays beside the address
+    await saveAvailability(deps, HOST, { timezone: 'UTC', weekly: [], away: [], alias: 'host' });
+    html = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(html).toContain('href="http://host.sez.localhost:8787"');
+    expect(html).toContain('>host.sez.localhost:8787<');
+  });
+
   it('lists the polls you answered below your own, and names the chosen time', async () => {
     const { deps, poll } = await setup();
     const dev = createServer(deps, stubAuth, {

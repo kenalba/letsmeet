@@ -245,4 +245,14 @@ describe('<name>.sez.letsmeet.lol', () => {
     expect(html).toContain(`<link rel="canonical" href="http://localhost:8787/u/${KEN}"`);
     expect((await app.request('/', host('ken-wzrdz-cool.sez.localhost:8787'))).status).toBe(404);
   });
+  it('shows the address on the friend view: the claimed name, else the hyphenated handle', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    let html = await (await app.request('/u/ken.wzrdz.cool')).text();
+    expect(html).toContain('ken-wzrdz-cool.sez.letsmeet.lol');
+    claimSezName(deps.db, 'ken', KEN, 0);
+    html = await (await app.request('/u/ken.wzrdz.cool')).text();
+    expect(html).toContain('ken.sez.letsmeet.lol');
+    expect(html).not.toContain('ken-wzrdz-cool.sez');
+  });
 });

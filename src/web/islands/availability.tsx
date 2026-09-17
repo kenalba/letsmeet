@@ -9,6 +9,7 @@ import {
   templateIntervalsToWeekly, weeklyToTemplateIntervals,
 } from '../../core/availability.js';
 import { UserError } from '../../core/errors.js';
+import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
 // Only the class-string generator, never the <Button> component: <Button> stamps
 // data-slot="button", which would land inside #availability-root and start matching the
 // same `[data-slot]` selector the grid cells use.
@@ -21,6 +22,10 @@ interface AvailabilityData {
   away: AwayEntry[];
   note: string;
   validUntil: string; // YYYY-MM-DD or ''
+  alias: string;          // what the field opens with (the claim, or a suggestion)
+  aliasSaved: string;     // the claim the server holds, '' for none
+  sezSuffix: string;      // 'sez.letsmeet.lol'
+  addressFallback: string | null; // the hyphenated-handle address, or null
 }
 
 /** How long a finger rests on a cell before it marks instead of scrolling — as in grid.tsx. */
@@ -70,8 +75,9 @@ function fmtClock(t: string): string {
 /** Everything a save compares against, as one string: the record plus the zone it is in. */
 function snapshot(
   weekly: WeeklyBlock[], away: AwayEntry[], note: string, validUntil: string, zone: string | null,
+  alias: string,
 ): string {
-  return JSON.stringify({ weekly, away, note, validUntil, zone });
+  return JSON.stringify({ weekly, away, note, validUntil, zone, alias });
 }
 
 /**
@@ -137,12 +143,16 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [away, setAway] = useState<AwayEntry[]>(data.away);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
+  const [alias, setAlias] = useState(data.alias);
+  const [aliasSaved, setAliasSaved] = useState(data.aliasSaved);
+  const aliasOk = alias === '' || isValidSezName(alias);
+  const address = alias ? `${alias}.${data.sezSuffix}` : data.addressFallback;
   const [saving, setSaving] = useState(false);
   // What the server already has. The button lights up only when the editor differs from it —
   // an editor with no record to open stands at "nothing marked", which is not worth posting.
   const [savedAt, setSavedAt] = useState(
-    snapshot(data.weekly, data.away, data.note, data.validUntil, data.timezone ?? HERE));
-  const dirty = savedAt !== snapshot(weekly, away, note, validUntil, zone);
+    snapshot(data.weekly, data.away, data.note, data.validUntil, data.timezone ?? HERE, data.aliasSaved));
+  const dirty = savedAt !== snapshot(weekly, away, note, validUntil, zone, alias);
 
   // ---- the stroke, as in grid.tsx
   const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
@@ -235,7 +245,7 @@ function Editor({ data }: { data: AvailabilityData }) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          timezone: zone, weekly, away, note,
+          timezone: zone, weekly, away, note, alias,
           // A date the viewer picked, good until the end of that day where they are —
           // end-of-day UTC would expire an American record the evening before.
           validUntil: validUntil ? endOfLocalDay(validUntil, zone) : undefined,
@@ -244,7 +254,8 @@ function Editor({ data }: { data: AvailabilityData }) {
       const out = (await res.json().catch(() => ({}))) as
         { ok?: boolean; written?: boolean; error?: string };
       if (!res.ok) { setStatus(out.error ?? 'could not save.'); return; }
-      setSavedAt(snapshot(weekly, away, note, validUntil, zone));
+      setAliasSaved(alias);
+      setSavedAt(snapshot(weekly, away, note, validUntil, zone, alias));
       setStatus(out.written ? 'availability posted.' : 'nothing changed.');
     } catch {
       setStatus('could not reach the server.');
@@ -266,6 +277,23 @@ function Editor({ data }: { data: AvailabilityData }) {
 
   return (
     <div>
+      <label className="address">your address
+        <span className="address-field">
+          <input
+            type="text"
+            name="alias"
+            maxLength={32}
+            value={alias}
+            spellCheck={false}
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="pick a name"
+            onChange={(e) => setAlias(e.target.value.trim().toLowerCase())}
+          />
+          <span className="suffix">.{data.sezSuffix}</span>
+        </span>
+      </label>
+      {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
       <p className="hint touch-hint">tap a slot to mark it. hold, then drag, for a block. swipe to scroll.</p>
       <div ref={gridEl} className="grid canvas" onPointerMove={onMove}>
@@ -290,6 +318,10 @@ function Editor({ data }: { data: AvailabilityData }) {
         ))}
       </div>
       <p className="sentence pixel-label" aria-live="polite">{describeWeekly(weekly)}</p>
+      <p className="address-line pixel-label" aria-live="polite">
+        {address ? `your address: ${address}` : 'no address yet. pick a name above.'}
+        {alias !== aliasSaved && ' (not saved yet)'}
+      </p>
 
       <h3 className="pixel-heading">away</h3>
       <p className="hint">dates that beat the usual week. leave the times empty for all day.</p>
@@ -357,7 +389,7 @@ function Editor({ data }: { data: AvailabilityData }) {
       <button
         type="button"
         className={cn(buttonVariants({ variant: 'default' }), 'save')}
-        disabled={saving || !dirty}
+        disabled={saving || !dirty || !aliasOk}
         onClick={submit}
       >post availability</button>
       {status && <p className="status" role="status">{status}</p>}

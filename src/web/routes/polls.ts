@@ -16,6 +16,7 @@ import {
 import { submitGuestResponse, submitAccountResponse } from '../../services/responses.js';
 import { getResults } from '../../services/results.js';
 import { prefillForPoll, getAvailabilityCached } from '../../services/availability.js';
+import { sezAddressFor } from '../../services/sezNames.js';
 import { describeWeekly, isStale } from '../../core/availability.js';
 import { lookupEditSecret } from '../../db/editSecrets.js';
 import { listResponseCache } from '../../db/cache.js';
@@ -72,12 +73,18 @@ export function pollRoutes(
       dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
       chosen: p.record.finalized ? fmtRange(p.record.finalized, p.record.time.timezone) : undefined,
     });
-    let availability: { sentence: string; stale: boolean; handle?: string } | null | undefined;
+    let availability: {
+      sentence: string; stale: boolean; handle?: string; address?: { host: string; href: string };
+    } | null | undefined;
     if (did) {
       try {
         const rec = await getAvailabilityCached(deps, did);
+        const host = sezAddressFor(deps, did, who?.handle, env.PUBLIC_URL);
         availability = rec
-          ? { sentence: describeWeekly(rec.weekly), stale: isStale(rec, deps.now()), handle: who?.handle ?? undefined }
+          ? {
+            sentence: describeWeekly(rec.weekly), stale: isStale(rec, deps.now()), handle: who?.handle ?? undefined,
+            ...(host ? { address: { host, href: `${new URL(env.PUBLIC_URL).protocol}//${host}` } } : {}),
+          }
           : null;
       } catch (err) {
         console.warn(`landing availability read failed for ${did}:`, err);
