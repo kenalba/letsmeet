@@ -4,6 +4,7 @@ import type { Deps } from '../../atproto/types.js';
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { UserError } from '../../core/errors.js';
 import { describeWeekly, isKnownZone } from '../../core/availability.js';
+import { weekChoice } from '../../core/weekView.js';
 import { readSession, type SessionEnv } from '../session.js';
 import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
@@ -247,6 +248,7 @@ export function availabilityRoutes(
   const friendView = (c: Context, r: Found) => page(c, createElement(PublicAvailabilityPage, {
     handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
     sezAddress: sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined,
+    week: weekChoice(c.req.query('week')),
   }));
 
   /** The ICS feed. Shared by `/u/:handle/availability.ics` and the alias. */

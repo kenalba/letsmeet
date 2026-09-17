@@ -117,20 +117,76 @@ describe('/u/:handle', () => {
   });
 });
 
-describe('the two-week strip', () => {
-  it('marks a day away when an away entry covers it with only half a window', () => {
-    // The lexicon allows startTime without endTime, and freeIntervals treats a lone one as
-    // all day — the strip has to agree, or the bar reads empty with no away marking on it.
-    const html = renderToString(createElement(PublicAvailabilityPage, {
-      handle: 'ken.wzrdz.cool', now: new Date('2026-09-16T12:00:00Z'),
-      publicUrl: 'https://letsmeet.lol',
-      record: {
-        ...rec, away: [{ start: '2026-09-18', end: '2026-09-18', startTime: '09:00' }],
-      },
+describe('the week grid', () => {
+  const render = (extra: Partial<Parameters<typeof PublicAvailabilityPage>[0]> = {}) =>
+    renderToString(createElement(PublicAvailabilityPage, {
+      handle: 'ken.wzrdz.cool', now: new Date('2026-09-16T12:00:00Z'), publicUrl: 'https://letsmeet.lol',
+      record: rec, ...extra,
     }));
-    expect(html).toContain('Sep 18 · away');
-    // Half a window is not a window: no clock line for it either.
-    expect(html).not.toContain('9am');
+
+  it('shows the week containing today, the away note under its date, the captions, and no strip', () => {
+    const html = render();
+    expect(html).toContain('sep 14 – 20');
+    expect(html).toContain('<span class="off">← this week</span>');
+    expect(html).toContain('href="?week=next"');
+    // Tuesday and Thursday 7pm–10pm: the 7pm cell on each is free; Monday's is not.
+    expect(html.match(/class="week-cell free/g)?.length).toBe(6);
+    // The away entry (sat 19 – mon 21) sits under saturday's and sunday's dates.
+    expect(html.match(/<small>out of town<\/small>/g)?.length).toBe(2);
+    expect(html).toContain('class="week-legend"');
+    // The sentence is a caption now, with the freshness on the same line.
+    expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm. · updated 6 days ago · good through Dec 31');
+    expect(html).toContain('text first');
+    expect(html).not.toContain('next two weeks');
+    expect(html).not.toContain('grid-cols-14');
+  });
+  it('next week shows the following seven days with links both ways', () => {
+    const html = render({ week: 'next' });
+    expect(html).toContain('sep 21 – 27');
+    expect(html).toContain('href="?week=this"');
+    expect(html).toContain('href="?week=later"');
+    // The same away entry ends on monday the 21st.
+    expect(html.match(/<small>out of town<\/small>/g)?.length).toBe(1);
+  });
+  it('further out is a prompt to make a poll, not a grid', () => {
+    const html = render({ week: 'later' });
+    expect(html).toContain('further out');
+    expect(html).toContain('a usual week only says so much that far ahead.');
+    expect(html).toContain('make a poll with ken.wzrdz.cool');
+    expect(html).toContain('href="https://letsmeet.lol/new"');
+    expect(html).toContain('href="?week=next"');
+    expect(html).toContain('pick some dates, they mark what works.');
+    expect(html).not.toContain('week-cell');
+    expect(html).not.toContain('no sign-in');
+  });
+  it('lists away entries beyond next week on one later line', () => {
+    const html = render({ record: { ...rec, away: [
+      { start: '2026-10-03', end: '2026-10-05', note: 'wedding' },
+      { start: '2026-10-20', end: '2026-10-20' },
+    ] } });
+    expect(html).toContain('away later: oct 3 – 5 · wedding, oct 20');
+    expect(html).not.toContain('week-legend');
+  });
+  it('strikes the whole day for an away entry with only half a window', () => {
+    // The lexicon allows startTime without endTime, and freeIntervals treats a lone one as
+    // all day — the grid has to agree, or the day reads free with no mark on it.
+    const html = render({ record: { ...rec, away: [{ start: '2026-09-18', end: '2026-09-18', startTime: '09:00' }] } });
+    expect(html).toContain('<small>away</small>');
+    expect(html.match(/class="week-cell away/g)?.length).toBe(17);
+  });
+  it('keeps the stale card as it was, without a grid', () => {
+    const html = render({ record: { ...rec, validUntil: '2026-09-01T00:00:00.000Z' } });
+    expect(html).toContain('treat as unknown and ask');
+    expect(html).toContain('last they said: usually free tuesdays and thursdays 7pm to 10pm.');
+    expect(html).toContain('out of town');
+    expect(html).not.toContain('week-cell');
+  });
+  it('is chosen by the week query on the route', async () => {
+    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    expect(await (await app.request('/u/ken.wzrdz.cool?week=next')).text()).toContain('sep 21 – 27');
+    expect(await (await app.request('/u/ken.wzrdz.cool?week=later')).text()).toContain('further out');
+    expect(await (await app.request('/u/ken.wzrdz.cool?week=whatever')).text()).toContain('sep 14 – 20');
   });
 });
 
@@ -285,5 +341,15 @@ describe('<name>.sez.letsmeet.lol', () => {
     html = await (await app.request('/u/ken.wzrdz.cool')).text();
     expect(html).toContain('ken.sez.letsmeet.lol');
     expect(html).not.toContain('ken-wzrdz-cool.sez');
+  });
+  it('turns the week on the alias host too, with the poll button pointing at the apex', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    const next = await (await app.request('/?week=next', host('ken.sez.letsmeet.lol'))).text();
+    expect(next).toContain('sep 21 – 27');
+    const later = await (await app.request('/?week=later', host('ken.sez.letsmeet.lol'))).text();
+    expect(later).toContain('make a poll with ken.wzrdz.cool');
+    expect(later).toContain('href="https://letsmeet.lol/new"');
   });
 });
