@@ -33,6 +33,11 @@ describe('hosts', () => {
     expect(fallbackAddressFor(KEN, URL_)).toBeNull();
     expect(fallbackAddressFor(undefined, URL_)).toBeNull();
   });
+  it('has no address for a handle too long to be one dns label', () => {
+    // 70 characters hyphenates to a 70-character label; the host would not exist, and
+    // `aliasLabelOf` would not accept it back.
+    expect(fallbackAddressFor('a'.repeat(62) + '.example', URL_)).toBeNull();
+  });
   it('prefers the claimed name', () => {
     const { deps } = setup();
     expect(sezAddressFor(deps, KEN, 'ken.wzrdz.cool', URL_)).toBe('ken-wzrdz-cool.sez.letsmeet.lol');
@@ -105,6 +110,13 @@ describe('resolveSezName', () => {
     expect(await resolveSezName(deps, 'ken-wzrdz-cool')).toBe(KEN);
     expect(resolve).toHaveBeenCalledTimes(1);
   });
+  it('trusts a miss for one freshness window too, rather than decoding it every visit', async () => {
+    const resolve = vi.fn(async () => null);
+    const { deps } = setup(resolve, 60_000);
+    expect(await resolveSezName(deps, 'nobody-example')).toBeNull();
+    expect(await resolveSezName(deps, 'nobody-example')).toBeNull();
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
   it('forgets an implicit row whose handle moved or died', async () => {
     const { deps } = setup(kenOnly);
     rememberFallback(deps.db, 'ken-wzrdz-cool', ROSS, 0); // stale: it was Ross's once
@@ -147,6 +159,17 @@ describe('applySezClaim', () => {
     await expect(applySezClaim(deps, KEN, 'ken-wzrdz-cool')).resolves.toBeUndefined();
     expect(claimedSezNameFor(deps.db, KEN)).toBe('ken-wzrdz-cool');
     expect(claimedSezNameFor(deps.db, ROSS)).toBe('ken');
+  });
+  it('says taken when the name goes to someone else mid-check', async () => {
+    // The holder check and the write are not one transaction — nothing can hold a sqlite
+    // transaction open across the resolver await. A claim that lands in that window must
+    // still come back in words, not as the generic failure a plain Error explains to.
+    const { deps } = setup(async () => {
+      claimSezName(deps.db, 'ken-wzrdz-cool', ROSS, 0);
+      return null;
+    });
+    await expect(applySezClaim(deps, KEN, 'ken-wzrdz-cool')).rejects.toThrow('that name is taken.');
+    expect(claimedSezNameFor(deps.db, ROSS)).toBe('ken-wzrdz-cool');
   });
   it('will not grant a hyphenated name it cannot check', async () => {
     const { deps } = setup(async () => { throw new Error('resolver down'); });

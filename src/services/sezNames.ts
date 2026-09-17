@@ -16,7 +16,11 @@ export const sezHost = (name: string, publicUrl: string): string => `${name}.${s
 
 /** The address anyone with a handle has without claiming anything. */
 export function fallbackAddressFor(handle: string | null | undefined, publicUrl: string): string | null {
-  return handle && HANDLE_RE.test(handle) ? sezHost(hyphenateHandle(handle), publicUrl) : null;
+  if (!handle || !HANDLE_RE.test(handle)) return null;
+  const label = hyphenateHandle(handle);
+  // Everything before `.sez.<site>` is one DNS label: past 63 characters the host cannot
+  // exist, and `aliasLabelOf` would not accept it back. Better no address than a dead one.
+  return label.length > 63 ? null : sezHost(label, publicUrl);
 }
 
 /** Where this person's page is shared: their claimed name, else their hyphenated handle. */
@@ -63,10 +67,10 @@ async function decodeFallback(deps: Deps, label: string): Promise<string | null>
 
 /**
  * Who `<label>.sez.<site>` belongs to. A claimed row answers outright. Otherwise the label
- * is read as a hyphenated handle: an implicit row is trusted for one freshness window and
- * re-checked after it (a handle can move, or stop resolving), and a fresh decode is
- * remembered. A resolver that is down serves the row it has; with none it throws, and the
- * route says "try again" rather than "nobody here".
+ * is read as a hyphenated handle: a decode is trusted for one freshness window — the row
+ * it found, or the fact that it found nothing — and re-checked after it (a handle can
+ * move, or stop resolving). A resolver that is down serves the row it has; with none it
+ * throws, and the route says "try again" rather than "nobody here".
  */
 export async function resolveSezName(deps: Deps, label: string): Promise<string | null> {
   const row = getSezName(deps.db, label);
@@ -74,7 +78,9 @@ export async function resolveSezName(deps: Deps, label: string): Promise<string 
   const fresh = freshnessFor(deps);
   const nowMs = deps.now().getTime();
   const key = `sez:${label}`;
-  if (row && fresh.isFresh(key, nowMs)) return row.did;
+  // A miss costs as many resolver calls as the label has readings, and an unclaimed label
+  // is exactly what a crawler walks: the window gates both answers, not just the row's.
+  if (fresh.isFresh(key, nowMs)) return row?.did ?? null;
   let did: string | null;
   try {
     did = await decodeFallback(deps, label);
@@ -119,7 +125,16 @@ export async function applySezClaim(deps: Deps, did: string, name: string | null
     throw new UserError("couldn't check that name right now. try again in a minute.");
   }
   if (reserved) throw new UserError('that name is reserved.');
-  claimSezName(deps.db, name, did, deps.now().getTime());
+  try {
+    claimSezName(deps.db, name, did, deps.now().getTime());
+  } catch (err) {
+    // The check above and this write are not one transaction — nothing can hold a sqlite
+    // transaction open across the resolver await. A claim that landed in that window is
+    // refused by the transaction's own guard; say it the same way the check would have.
+    const holder = getSezName(deps.db, name);
+    if (holder?.claimed && holder.did !== did) throw new UserError('that name is taken.');
+    throw err;
+  }
 }
 
 /** Put the table back the way it was before `applySezClaim`. Loses gracefully to a race. */
