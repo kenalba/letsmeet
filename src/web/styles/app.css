@@ -548,3 +548,47 @@
     .save { margin-top: 12px; }
   }
 }
+
+@layer island {
+  /* The friend view's week grid (pages/PublicAvailability.tsx): server-rendered, no island,
+     kept beside the editor's rules so the two grids share one vocabulary. Days across,
+     hours down; a cell is an hour, half-filled when only one half hour is free. Every
+     colour is a token, so dark mode follows. */
+  .week {
+    display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); gap: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .week-head {
+    text-align: center; font-size: 11px; line-height: 1.2; color: var(--muted-foreground);
+    padding-bottom: 4px; min-width: 0;
+  }
+  .week-head b { display: block; font-size: 14px; font-weight: 500; color: var(--foreground); }
+  .week-head small {
+    display: block; font-size: 10px; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .week-head.today b { text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 4px; }
+  .week-axis {
+    font-size: 10px; line-height: 1; color: var(--muted-foreground); text-align: right;
+    padding-right: 6px; align-self: center; white-space: nowrap;
+  }
+  .week-cell { height: 13px; border-radius: 2px; background: var(--muted); }
+  .week-cell.free { background: var(--primary); }
+  .week-cell.early { background: linear-gradient(to bottom, var(--primary) 50%, var(--muted) 50%); }
+  .week-cell.late { background: linear-gradient(to bottom, var(--muted) 50%, var(--primary) 50%); }
+  .week-cell.away, .week-legend i.away {
+    background: repeating-linear-gradient(135deg, var(--muted) 0 3px, var(--border) 3px 5px);
+  }
+  .week-head.past, .week-cell.past { opacity: 0.42; }
+  .week-nav { display: flex; gap: 14px; font-size: 14px; white-space: nowrap; }
+  .week-nav a { color: var(--primary); text-decoration: underline; text-underline-offset: 4px; }
+  .week-nav .off { color: var(--muted-foreground); }
+  .week-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted-foreground); }
+  .week-legend i {
+    display: inline-block; width: 14px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 4px;
+  }
+  .week-legend i.free { background: var(--primary); }
+  .week-prompt { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 28px 12px; }
+  .week-prompt p { margin: 0; }
+}

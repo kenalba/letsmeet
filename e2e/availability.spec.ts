@@ -65,6 +65,18 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await page.goto(`/u/${did}`);
   await expect(page.getByText('usually free sundays 7am to 8am.')).toBeVisible();
   await expect(page.getByText('out of town')).toBeVisible();
+
+  // The week grid: sunday 7am is the one free cell in the week containing today; the away
+  // date is at least two weeks out, so it reads on the "away later" line. Next week is a
+  // link, and one past that is the poll prompt.
+  await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
+  await expect(page.locator('.week-cell.free')).toHaveCount(1);
+  await expect(page.getByText('away later:')).toBeVisible();
+  await page.click('.week-nav a[href="?week=next"]');
+  await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
+  await page.click('.week-nav a[href="?week=later"]');
+  await expect(page.getByRole('link', { name: `make a poll with ${did}` })).toBeVisible();
+  await page.goto(`/u/${did}`);
   const ics = await page.request.get(`/u/${did}/availability.ics`);
   expect(ics.headers()['content-type']).toContain('text/calendar');
   expect(await ics.text()).toContain('RRULE:FREQ=WEEKLY;BYDAY=SU');
