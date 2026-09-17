@@ -15,6 +15,7 @@
           "away": { "type": "array", "maxLength": 100, "items": { "type": "ref", "ref": "#away" } },
           "note": { "type": "string", "maxGraphemes": 300, "maxLength": 1200, "description": "Shown to anyone reading the record." },
           "validUntil": { "type": "string", "format": "datetime", "description": "After this the record is stale and should be read as unknown, not empty." },
+          "alias": { "type": "string", "maxLength": 32, "description": "The short name this account claimed under sez.letsmeet.lol, if any. The app's own table is what makes it unique; this records what the owner chose." },
           "updatedAt": { "type": "string", "format": "datetime" }
         }
       }

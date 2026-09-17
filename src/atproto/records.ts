@@ -103,6 +103,8 @@ export interface AvailabilityRecord {
   away: AwayEntry[];
   note?: string;
   validUntil?: string;
+  /** The sez name the owner claimed (`ken` in `ken.sez.letsmeet.lol`). */
+  alias?: string;
   updatedAt: string;
 }
 
@@ -122,6 +124,7 @@ export function buildAvailabilityRecord(
     away: input.away,
     ...(input.note ? { note: input.note } : {}),
     ...(input.validUntil ? { validUntil: normalizeIso(input.validUntil) } : {}),
+    ...(input.alias ? { alias: input.alias } : {}),
     updatedAt: now.toISOString(),
   };
   return validateAvailabilityRecord(rec);

@@ -225,3 +225,18 @@ describe('"good through" dates', () => {
     expect(endOfLocalDay('2026-12-31', 'Mars/Olympus')).toBe('2026-12-31T23:59:59.999Z');
   });
 });
+
+describe('the alias on an availability input', () => {
+  const base = { timezone: TZ, weekly: [], away: [] };
+  it('is normalized like a sez name: trimmed, lowercased, absent when empty', () => {
+    expect(normalizeAvailability({ ...base, alias: ' Ken ' }).alias).toBe('ken');
+    expect(normalizeAvailability({ ...base, alias: '' })).not.toHaveProperty('alias');
+    expect(normalizeAvailability(base)).not.toHaveProperty('alias');
+    expect(() => normalizeAvailability({ ...base, alias: '-ken' })).toThrow(/hyphen/);
+  });
+  it('is dropped by sanitizeForeignRecord when another client wrote something that is not a name', () => {
+    const rec = { ...base, alias: 'Ken!' };
+    expect(sanitizeForeignRecord(rec)).not.toHaveProperty('alias');
+    expect(sanitizeForeignRecord({ ...base, alias: 'ken' }).alias).toBe('ken');
+  });
+});

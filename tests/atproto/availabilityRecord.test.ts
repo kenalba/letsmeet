@@ -36,4 +36,11 @@ describe('availability records', () => {
   it('rejects a malformed validUntil', () => {
     expect(() => buildAvailabilityRecord({ ...base, validUntil: 'soon' }, NOW)).toThrow();
   });
+  it('carries the claimed alias, and refuses one longer than 32', () => {
+    const rec = buildAvailabilityRecord({ ...base, alias: 'ken' }, NOW);
+    expect(rec.alias).toBe('ken');
+    expect(() => validateAvailabilityRecord(rec)).not.toThrow();
+    expect(buildAvailabilityRecord(base, NOW)).not.toHaveProperty('alias');
+    expect(() => buildAvailabilityRecord({ ...base, alias: 'x'.repeat(33) }, NOW)).toThrow(/alias/);
+  });
 });

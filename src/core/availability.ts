@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../atproto/records.js';
 import { UserError } from './errors.js';
 import { mergeIntervals, normalizeIso, snapToSlots, type Interval } from './intervals.js';
+import { isValidSezName, normalizeSezName } from './sezName.js';
 import { localWindow, materializeSlots } from './slots.js';
 
 export interface AvailabilityInput {
@@ -10,6 +11,7 @@ export interface AvailabilityInput {
   away: AwayEntry[];
   note?: string;
   validUntil?: string;
+  alias?: string;
 }
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -127,6 +129,8 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
       throw new UserError('"good through" must be a date');
     }
   }
+  const alias = normalizeSezName(raw.alias);
+  if (alias) out.alias = alias;
   return out;
 }
 
@@ -155,7 +159,10 @@ export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
     const { startTime: _s, endTime: _e, ...allDay } = a;
     away.push(allDay);
   }
-  return { ...rec, weekly, away };
+  const out = { ...rec, weekly, away };
+  // The lexicon caps its length and nothing else; a name this app cannot route is no name.
+  if (out.alias !== undefined && !isValidSezName(out.alias)) delete out.alias;
+  return out;
 }
 
 /**
