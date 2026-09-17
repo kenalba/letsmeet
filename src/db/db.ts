@@ -31,6 +31,10 @@ CREATE INDEX IF NOT EXISTS web_session_did ON web_session (did);
 CREATE TABLE IF NOT EXISTS availability_cache (
   did TEXT PRIMARY KEY, uri TEXT, cid TEXT, record_json TEXT,
   updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sez_name (
+  name TEXT PRIMARY KEY, did TEXT NOT NULL,
+  claimed INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS sez_name_did_claimed ON sez_name (did) WHERE claimed = 1;
 `;
 
 /**
