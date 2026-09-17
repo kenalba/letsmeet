@@ -31,7 +31,9 @@ import { TombstonePage } from '../pages/Tombstone.js';
 import { NewPollPage } from '../pages/NewPoll.js';
 import { EditPollPage } from '../pages/EditPoll.js';
 import { PollPage } from '../pages/Poll.js';
+import { ArchivePage } from '../pages/Archive.js';
 import { ErrorPage } from '../pages/ErrorPage.js';
+import { isOver } from '../../core/archive.js';
 
 /**
  * The poll's geometry, straight off the create/edit form. `slotMinutes` is an unchecked
@@ -64,15 +66,23 @@ export function pollRoutes(
   const accountLimiter = new TokenBucket(10, 0.1);
   const tooMany = { error: 'easy there. try again in a minute.' };
 
+  /** What the landing and the archive list for a poll — a projection of the cache row. */
+  const listItem = (counts: Map<string, number>) => (p: CachedPoll): PollListItem => ({
+    rkey: p.rkey, title: p.record.title, status: p.record.status,
+    dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
+    chosen: p.record.finalized ? fmtRange(p.record.finalized, p.record.time.timezone) : undefined,
+  });
+
   app.get('/', async (c) => {
     const who = await readSession(c, session, deps.now().getTime());
     const did = who?.did ?? null;
-    const counts = did ? countResponsesByPoll(deps.db) : new Map<string, number>();
-    const item = (p: CachedPoll): PollListItem => ({
-      rkey: p.rkey, title: p.record.title, status: p.record.status,
-      dates: p.record.time.dates, responses: counts.get(p.rkey) ?? 0,
-      chosen: p.record.finalized ? fmtRange(p.record.finalized, p.record.time.timezone) : undefined,
-    });
+    const now = deps.now();
+    const item = listItem(did ? countResponsesByPoll(deps.db) : new Map<string, number>());
+    const mine = did ? listPollsByHost(deps.db, did) : [];
+    const theirs = did ? listPollsAnswered(deps.db, did) : [];
+    // Over polls (core/archive.ts) leave the landing for /archive; the count is the link's label.
+    const live = (p: CachedPoll) => !isOver(p.record, now);
+    const archived = mine.length + theirs.length - mine.filter(live).length - theirs.filter(live).length;
     let availability: {
       sentence: string; stale: boolean; handle?: string; address?: { host: string; href: string };
     } | null | undefined;
@@ -94,9 +104,24 @@ export function pollRoutes(
     return page(c, createElement(LandingPage, {
       did,
       handle: who?.handle ?? undefined,
-      polls: did ? listPollsByHost(deps.db, did).map(item) : [],
-      answered: did ? listPollsAnswered(deps.db, did).map(item) : [],
+      polls: mine.filter(live).map(item),
+      answered: theirs.filter(live).map(item),
+      archived,
       availability,
+    }));
+  });
+
+  // Polls that are over: decided and done, or every offered day behind us (core/archive.ts).
+  app.get('/archive', async (c) => {
+    const who = await readSession(c, session, deps.now().getTime());
+    if (!who) return c.redirect('/login?returnTo=%2Farchive');
+    const now = deps.now();
+    const item = listItem(countResponsesByPoll(deps.db));
+    const over = (p: CachedPoll) => isOver(p.record, now);
+    return page(c, createElement(ArchivePage, {
+      handle: who.handle ?? who.did,
+      polls: listPollsByHost(deps.db, who.did).filter(over).map(item),
+      answered: listPollsAnswered(deps.db, who.did).filter(over).map(item),
     }));
   });
 

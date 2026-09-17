@@ -51,7 +51,7 @@ function pollMeta(p: PollListItem): string {
   ].filter(Boolean).join(' · ');
 }
 
-function PollList({ polls }: { polls: PollListItem[] }) {
+export function PollList({ polls }: { polls: PollListItem[] }) {
   return (
     <ul className="polls divide-y">
       {polls.map((p) => (
@@ -82,13 +82,15 @@ function PollList({ polls }: { polls: PollListItem[] }) {
   );
 }
 
-export function LandingPage({ did, handle, polls = [], answered = [], availability }: {
+export function LandingPage({ did, handle, polls = [], answered = [], archived = 0, availability }: {
   did: string | null;
   /** The handle stored at sign-in; a session from before that existed falls back to did. */
   handle?: string;
   polls?: PollListItem[];
   /** Polls the viewer answered from their own account and does not host. */
   answered?: PollListItem[];
+  /** Over polls, hosted or answered, waiting on /archive; 0 hides the link. */
+  archived?: number;
   /** The viewer's standing availability: a sentence, or `null` for no record. Absent when signed out. */
   availability?: {
     sentence: string; stale: boolean; handle?: string;
@@ -163,6 +165,12 @@ export function LandingPage({ did, handle, polls = [], answered = [], availabili
               </p>
             ) : (
               <PollList polls={polls} />
+            )}
+            {/* Subtle on purpose: a muted label, not a button. Absent until there is something in it. */}
+            {archived > 0 && (
+              <p className="pixel-label mt-3 text-muted-foreground">
+                <a href="/archive" className="hover:text-primary">{`archive · ${archived}`}</a>
+              </p>
             )}
           </CardContent>
         </Card>

@@ -184,6 +184,49 @@ describe('server', () => {
     expect(samDecided).toContain('17:00–17:30 Wed Sep 2');
   });
 
+  it('moves a poll whose day has passed off the landing and into the archive', async () => {
+    const { deps, poll } = await setup();
+    const old = await createPoll(deps, HOST, {
+      title: 'Old picnic', time: { ...time, dates: ['2026-08-20'] },
+    });
+    const dev = createServer(deps, stubAuth, {
+      COOKIE_SECRET: 'test-secret', PUBLIC_URL: 'http://localhost:8787', devLogin: true,
+    });
+    const login = await dev.request(`/dev/login?did=${encodeURIComponent(HOST)}&handle=host.test`);
+    const cookie = login.headers.get('set-cookie')!.split(';')[0];
+
+    // The landing keeps the live poll, drops the old one, and points at the archive.
+    const home = await (await dev.request('/', { headers: { cookie } })).text();
+    expect(home).toContain(`href="/p/${poll.rkey}"`);
+    expect(home).not.toContain(`href="/p/${old.rkey}"`);
+    expect(home).toContain('href="/archive"');
+    expect(home).toContain('archive · 1');
+
+    // The archive lists only the old one, with the same row and the way back.
+    const res = await dev.request('/archive', { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const archive = await res.text();
+    expect(archive).toContain('Old picnic');
+    expect(archive).toContain(`href="/p/${old.rkey}"`);
+    expect(archive).not.toContain(`href="/p/${poll.rkey}"`);
+    expect(archive).toContain('href="/"');
+    expect(archive).toContain('← your polls');
+    expect(archive).not.toContain('polls you answered');
+
+    // Signed out, the archive is a sign-in.
+    const anon = await dev.request('/archive');
+    expect(anon.status).toBe(302);
+    expect(anon.headers.get('location')).toBe('/login?returnTo=%2Farchive');
+
+    // Nothing archived: no link at all, and the archive says so.
+    const other = await dev.request('/dev/login?did=did:plc:stranger');
+    const otherCookie = other.headers.get('set-cookie')!.split(';')[0];
+    expect(await (await dev.request('/', { headers: { cookie: otherCookie } })).text())
+      .not.toContain('href="/archive"');
+    expect(await (await dev.request('/archive', { headers: { cookie: otherCookie } })).text())
+      .toContain('nothing here yet. polls land here once their day has passed.');
+  });
+
   it('serves the create form with the calendar island at GET /new', async () => {
     const { deps } = await setup();
     const dev = createServer(deps, stubAuth, {
