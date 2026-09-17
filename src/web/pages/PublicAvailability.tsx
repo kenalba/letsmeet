@@ -6,6 +6,8 @@ import {
 import { cn } from '../lib/cn.js';
 import { buttonVariants } from '../ui/button.js';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
+import { useNonce } from '../nonce.js';
+import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { Layout, pageTitle } from './Layout.js';
 
 export interface PublicAvailabilityData {
@@ -95,14 +97,24 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       {`away later: ${later.map((a) => `${dateRangeLabel(a.start, a.end)}${a.note ? ` · ${a.note}` : ''}`).join(', ')}`}
     </p>
   ) : null;
+  const feedUrl = `${base}${path}/availability.ics`;
   // Absolute, like the webcal link beside it: this page also serves on `<name>.sez.<site>`,
   // where only `/` and `/availability.ics` answer — a relative `/u/<handle>/availability.ics`
   // would 404 there. The week links, by contrast, are query-only so they stay on either host.
+  // The copy button hands over the plain https address: Google Calendar's "from URL" box
+  // and a pasted chat message both want that, and neither can take a click on webcal://.
   const links = (
-    <p className="hint text-sm text-muted-foreground">
-      <a href={`${base}${path}/availability.ics`} className="text-primary underline underline-offset-4">download .ics</a>
+    <p className="hint feed-links text-sm text-muted-foreground">
+      <a href={feedUrl} className="text-primary underline underline-offset-4">download .ics</a>
       {' '}·{' '}
       <a href={`webcal://${base.replace(/^https?:\/\//, '')}${path}/availability.ics`} className="text-primary underline underline-offset-4">subscribe (webcal)</a>
+      {' '}·{' '}
+      <button
+        type="button"
+        data-copy-url={feedUrl}
+        hidden
+        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+      >copy feed link</button>
     </p>
   );
   return (
@@ -200,6 +212,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
             </CardContent>
           </Card>
         )}
+        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );

@@ -52,6 +52,9 @@ describe('/u/:handle', () => {
     expect(html).toContain('text first');
     expect(html).toContain('good through');
     expect(html).toContain('/u/ken.wzrdz.cool/availability.ics');
+    expect(html).toContain('data-copy-url="http://localhost:8787/u/ken.wzrdz.cool/availability.ics"');
+    expect(html).toContain('>copy feed link</button>');
+    expect(html).toContain("button[data-copy-url]"); // the copy script shipped with the page
   });
   it('accepts a did literal when no resolver is configured (fake mode)', async () => {
     const { app, repo } = setup();
@@ -270,6 +273,8 @@ describe('<name>.sez.letsmeet.lol', () => {
     expect(html).toContain('href="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
     expect(html).toContain('webcal://letsmeet.lol/u/ken.wzrdz.cool/availability.ics');
     expect(html).toMatch(/class="brand[^"]*"\s+href="https:\/\/letsmeet\.lol\/"/);
+    // Absolute: on the alias host the page's own origin is not where the feed lives.
+    expect(html).toContain('data-copy-url="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
     const ics = await app.request('/availability.ics', host('ken.sez.letsmeet.lol'));
     expect(ics.headers.get('content-type')).toContain('text/calendar');
   });

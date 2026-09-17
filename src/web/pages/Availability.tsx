@@ -1,7 +1,10 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, localDateOf } from '../../core/availability.js';
+import { cn } from '../lib/cn.js';
+import { buttonVariants } from '../ui/button.js';
 import { useNonce } from '../nonce.js';
 import { scriptJson } from '../scriptJson.js';
+import { COPY_LINK_SCRIPT } from './copyLink.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
@@ -90,7 +93,7 @@ export function AvailabilityPage(data: AvailabilityPageData) {
           </CardContent>
         </Card>
         {publicPath && (
-          <p className="hint text-sm text-muted-foreground">
+          <p className="hint feed-links text-sm text-muted-foreground">
             friends can see this at{' '}
             <a href={publicPath} className="text-primary underline underline-offset-4">
               {base.replace(/^https?:\/\//, '')}{publicPath}
@@ -99,8 +102,16 @@ export function AvailabilityPage(data: AvailabilityPageData) {
             <a href={webcal!} className="text-primary underline underline-offset-4">
               subscribe in your calendar (webcal)
             </a>
+            {' '}·{' '}
+            <button
+              type="button"
+              data-copy-url={`${base}${publicPath}/availability.ics`}
+              hidden
+              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+            >copy feed link</button>
           </p>
         )}
+        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
   );

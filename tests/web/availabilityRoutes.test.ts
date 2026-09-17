@@ -59,6 +59,8 @@ describe('/availability', () => {
     expect(html).toContain('/assets/availability.js');
     expect(html).toContain('out of town');
     expect(html).toContain('usually free tuesdays 7pm to 10pm.');
+    expect(html).toContain('data-copy-url="http://localhost:8787/u/me.test/availability.ics"');
+    expect(html).toContain('>copy feed link</button>');
   });
   it('shows "good through" as the date the viewer picked, read in the record\'s zone', async () => {
     const { app, repo } = setup();
