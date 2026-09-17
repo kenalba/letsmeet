@@ -67,8 +67,8 @@ describe('hourRectKeys', () => {
   const rows = hourRows(geom, zone);
   it('covers both halves of every hour in the rectangle, whichever corner is the anchor', () => {
     const sun7 = rows[0].cells[0]!; const tue9 = rows[2].cells[2]!;
-    const down = hourRectKeys(geom, sun7, tue9);
-    const up = hourRectKeys(geom, tue9, sun7);
+    const down = hourRectKeys(rows, sun7, tue9);
+    const up = hourRectKeys(rows, tue9, sun7);
     expect(down).toHaveLength(3 * 3 * 2);
     expect(new Set(up)).toEqual(new Set(down));
     expect(down).toContain('2026-01-04T07:00:00.000Z');
@@ -78,11 +78,36 @@ describe('hourRectKeys', () => {
   });
   it('a single cell is its own two keys', () => {
     const c = rows[3].cells[4]!;
-    expect(hourRectKeys(geom, c, c)).toEqual(c.keys);
+    expect(hourRectKeys(rows, c, c)).toEqual(c.keys);
   });
   it('applies through applyPaint like any key list', () => {
     const c = rows[0].cells[0]!;
-    const next = applyPaint(new Map(), hourRectKeys(geom, c, c), 'add', 'available');
+    const next = applyPaint(new Map(), hourRectKeys(rows, c, c), 'add', 'available');
     expect(hourState(next, c)).toBe('available');
+  });
+  it('does not leak across a middle column\'s fully missing hour', () => {
+    // Monday's 8:00 hour (both halves) is missing entirely, so rows[1].cells[1] is null.
+    const slots = templateSlots(zone).filter((s) => !s.start.startsWith('2026-01-05T08:'));
+    const g = buildGeom(slots, zone);
+    const r = hourRows(g, zone);
+    const sun7 = r[0].cells[0]!; const tue9 = r[2].cells[2]!;
+    const keys = hourRectKeys(r, sun7, tue9);
+    expect(keys).toHaveLength(16);
+    expect(keys).toContain('2026-01-05T07:00:00.000Z');
+    expect(keys).toContain('2026-01-05T07:30:00.000Z');
+    expect(keys).toContain('2026-01-05T09:00:00.000Z');
+    expect(keys).toContain('2026-01-05T09:30:00.000Z');
+    expect(keys).not.toContain('2026-01-05T10:00:00.000Z');
+    expect(keys).not.toContain('2026-01-05T10:30:00.000Z');
+  });
+  it('a lone half hour in the box contributes one key, not two', () => {
+    // Only Monday's 8:30 is missing, so rows[1].cells[1] is a one-key cell.
+    const slots = templateSlots(zone).filter((s) => s.start !== '2026-01-05T08:30:00.000Z');
+    const g = buildGeom(slots, zone);
+    const r = hourRows(g, zone);
+    const sun7 = r[0].cells[0]!; const tue9 = r[2].cells[2]!;
+    const keys = hourRectKeys(r, sun7, tue9);
+    expect(keys).toHaveLength(17);
+    expect(keys).not.toContain('2026-01-05T10:00:00.000Z');
   });
 });
