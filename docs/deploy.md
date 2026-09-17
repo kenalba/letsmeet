@@ -301,6 +301,18 @@ them forever. nginx stays the front for this host like every other on the box.
   ```bash
   sudo certbot renew --cert-name letsmeet-sez --dry-run
   ```
+
+  **Known gap (2026-09-17).** The hook lines are on the box now, and the
+  dry-run still fails: the hooks POST to
+  `https://marque.at/api/automation/dns01/present`, which Marque's API answers
+  with its web app's HTML and a 404 (a real API route answers a JSON 401
+  without a token), i.e. the endpoint is not deployed server-side yet. Both
+  wildcard certificates were issued interactively for that reason, with the
+  TXT records placed by hand. Until a dry-run passes, re-issue by hand before
+  the December expiry: run the `certbot certonly --manual` command above
+  without the two `--manual-*-hook` lines, put the TXT record it prints into
+  the zone at Marque, wait for `dig +short TXT _acme-challenge.sez.letsmeet.lol`
+  to show it, then continue. Re-test the dry-run after any `marque` update.
 - **nginx.** `deploy/nginx-letsmeet.lol.conf` carries a second server block,
   `server_name *.sez.letsmeet.lol;`, identical to the apex block but for the
   certificate paths, plus a port-80 redirect for it. Install the file over
