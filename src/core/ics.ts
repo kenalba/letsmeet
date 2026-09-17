@@ -1,6 +1,7 @@
 import type { AvailabilityInput } from './availability.js';
 import { TEMPLATE_SUNDAY } from './availability.js';
 import { localWindow } from './slots.js';
+import type { AwayEntry } from '../atproto/records.js';
 
 const toBasic = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
@@ -73,12 +74,42 @@ function plusDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
+/** ISO date + n days as ISO (plusDays returns the basic YYYYMMDD form). */
+function plusDaysIso(date: string, n: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const weekdayOf = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+
+/** How many occurrences one all-day entry may exclude per block: a year of weeks. */
+const MAX_EXDATES_PER_ENTRY = 53;
+
+/**
+ * The dates on weekday `day` that any all-day away entry covers, sorted and deduped.
+ * A week the person is away should not also say "usually free" in a subscriber's
+ * calendar, and RRULE has no way to say "except when" other than naming each occurrence.
+ * An entry longer than a year excludes its first year only: the away event itself
+ * still covers the rest, and an open-ended `end` must not spin this loop for centuries.
+ */
+function awayDatesOn(away: AwayEntry[], day: number): string[] {
+  const dates = new Set<string>();
+  for (const a of away) {
+    if (a.startTime && a.endTime) continue; // timed windows are left to the away event
+    // First date >= start on the wanted weekday, then every seventh day to end.
+    let d = plusDaysIso(a.start, (day - weekdayOf(a.start) + 7) % 7);
+    for (let n = 0; d <= a.end && n < MAX_EXDATES_PER_ENTRY; n++, d = plusDaysIso(d, 7)) dates.add(d);
+  }
+  return [...dates].sort();
+}
+
 /**
  * The standing record as a subscribable calendar: each weekly block is a repeating
  * transparent event anchored on the editor's template week (so BYDAY and DTSTART agree),
- * each away entry a busy event, all-day or timed. TZID names the record's IANA zone
- * without a VTIMEZONE block — Apple and Google resolve IANA names; revisit if a client
- * refuses the feed.
+ * each away entry a busy event, all-day or timed; every weekly event is titled with the
+ * account so several friends' feeds tell apart, and skips (EXDATE) the dates an all-day
+ * away entry covers. TZID names the record's IANA zone without a VTIMEZONE block — Apple
+ * and Google resolve IANA names; revisit if a client refuses the feed.
  *
  * `rec` must have been through `sanitizeForeignRecord` and its timezone through
  * `isKnownZone` — a wall clock this app cannot read has no calendar to become.
@@ -100,6 +131,7 @@ export function buildAvailabilityIcs(
     const date = plusDays(TEMPLATE_SUNDAY, b.day);
     // A past-midnight block ends on the next calendar day.
     const endDate = b.end <= b.start ? plusDays(TEMPLATE_SUNDAY, b.day + 1) : date;
+    const exdates = awayDatesOn(rec.away, b.day);
     L.push(
       'BEGIN:VEVENT',
       `UID:weekly-${BYDAY[b.day]}-${b.start.replace(':', '')}@${opts.uidHost}`,
@@ -107,11 +139,15 @@ export function buildAvailabilityIcs(
       `DTSTART;TZID=${tz}:${date}T${hm(b.start)}`,
       `DTEND;TZID=${tz}:${endDate}T${hm(b.end)}`,
       `RRULE:FREQ=WEEKLY;BYDAY=${BYDAY[b.day]}${until}`,
-      'SUMMARY:usually free', 'TRANSP:TRANSPARENT', 'END:VEVENT',
+      // Each excluded occurrence is named by its own start, which is what EXDATE requires.
+      ...(exdates.length > 0
+        ? [`EXDATE;TZID=${tz}:${exdates.map((d) => `${ymd(d)}T${hm(b.start)}`).join(',')}`]
+        : []),
+      `SUMMARY:${esc(`@${opts.name} usually free`)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT',
     );
   }
   for (const a of rec.away) {
-    const summary = `SUMMARY:${esc(a.note ? `away · ${a.note}` : 'away')}`;
+    const summary = `SUMMARY:${esc(`@${opts.name} away${a.note ? ` · ${a.note}` : ''}`)}`;
     // A record can arrive from another client that only validated against the lexicon,
     // which allows startTime or endTime alone — treat a lone one as all-day, same as the
     // DTSTART/DTEND branch below, rather than asserting the pairing normalizeAvailability

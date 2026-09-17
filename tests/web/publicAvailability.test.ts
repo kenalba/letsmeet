@@ -112,7 +112,7 @@ describe('/u/:handle', () => {
     expect(res.headers.get('cache-control')).toContain('max-age=900');
     const body = await res.text();
     expect(body).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU');
-    expect(body).toContain('SUMMARY:away · out of town');
+    expect(body).toContain('SUMMARY:@did:plc:ken away · out of town');
     expect((await app.request('/u/did:plc:nobody/availability.ics')).status).toBe(404);
   });
 });

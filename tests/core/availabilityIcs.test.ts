@@ -27,13 +27,13 @@ describe('buildAvailabilityIcs', () => {
     expect(lines).toContain('DTSTART;TZID=America/New_York:20260106T190000'); // the template Tuesday
     expect(lines).toContain('DTEND;TZID=America/New_York:20260106T220000');
     expect(lines).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231T235959Z');
-    expect(lines).toContain('SUMMARY:usually free');
+    expect(lines).toContain('SUMMARY:@ken.wzrdz.cool usually free');
     expect(lines).toContain('TRANSP:TRANSPARENT');
   });
   it('emits an all-day away entry with an exclusive end', () => {
     expect(lines).toContain('DTSTART;VALUE=DATE:20260919');
     expect(lines).toContain('DTEND;VALUE=DATE:20260922');
-    expect(lines).toContain('SUMMARY:away · out of town');
+    expect(lines).toContain('SUMMARY:@ken.wzrdz.cool away · out of town');
     expect(lines).toContain('TRANSP:OPAQUE');
   });
   it('emits a timed multi-day away entry as a daily repeat and escapes the note', () => {
@@ -42,7 +42,7 @@ describe('buildAvailabilityIcs', () => {
     // series by the last occurrence's start, 09:00 New York on the 14th = 13:00Z. The old
     // local `T235959` let a strict client drop the last day of an evening window.
     expect(lines).toContain('RRULE:FREQ=DAILY;UNTIL=20261014T130000Z');
-    expect(lines).toContain('SUMMARY:away · a\\; note\\, with punctuation');
+    expect(lines).toContain('SUMMARY:@ken.wzrdz.cool away · a\\; note\\, with punctuation');
   });
   it('keeps the last day of a late window, where UNTIL lands on the next UTC day', () => {
     const late = buildAvailabilityIcs({
@@ -85,5 +85,42 @@ describe('buildAvailabilityIcs', () => {
     const uids = ics2.split('\r\n').filter((l) => l.startsWith('UID:away-'));
     expect(uids).toHaveLength(4);
     expect(new Set(uids).size).toBe(4);
+  });
+  it('names a plain away entry after the account too', () => {
+    const plain = buildAvailabilityIcs({ ...rec, away: [{ start: '2026-10-20', end: '2026-10-20' }] }, opts);
+    expect(plain.split('\r\n')).toContain('SUMMARY:@ken.wzrdz.cool away');
+  });
+  it('excludes a weekly block on every date an all-day away entry covers on that weekday', () => {
+    // Tue 22 Sep through Tue 29 Sep 2026: two Tuesdays inside one all-day entry.
+    const ics = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-09-22', end: '2026-09-29', note: 'trip' }],
+    }, opts);
+    expect(ics.split('\r\n')).toContain('EXDATE;TZID=America/New_York:20260922T190000,20260929T190000');
+  });
+  it('emits no EXDATE when no all-day entry lands on the block\'s weekday, nor for timed windows', () => {
+    // The fixture: sat 19 – mon 21 all day (no Tuesday), and a timed window mon 12 – wed 14 oct.
+    expect(lines.some((l) => l.startsWith('EXDATE'))).toBe(false);
+    const timed = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-09-22', end: '2026-09-22', startTime: '18:00', endTime: '23:00' }],
+    }, opts);
+    expect(timed.split('\r\n').some((l) => l.startsWith('EXDATE'))).toBe(false);
+  });
+  it('merges and sorts the dates of overlapping all-day entries', () => {
+    const ics = buildAvailabilityIcs({
+      ...rec, away: [
+        { start: '2026-09-29', end: '2026-09-29' },
+        { start: '2026-09-21', end: '2026-09-29' },
+      ],
+    }, opts);
+    expect(ics.split('\r\n')).toContain('EXDATE;TZID=America/New_York:20260922T190000,20260929T190000');
+  });
+  it('excludes at most a year of a very long away entry', () => {
+    const ics = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-09-22', end: '2099-12-31' }],
+    }, opts);
+    // Unfold first (RFC 5545 continuation lines), then read the one EXDATE property.
+    const unfolded = ics.replace(/\r\n /g, '').split('\r\n');
+    const ex = unfolded.find((l) => l.startsWith('EXDATE;TZID=America/New_York:'))!;
+    expect(ex.slice('EXDATE;TZID=America/New_York:'.length).split(',').length).toBe(53);
   });
 });
