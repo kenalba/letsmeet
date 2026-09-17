@@ -283,12 +283,15 @@ them forever. nginx stays the front for this host like every other on the box.
   sudo certbot certificates   # Certificate Name: letsmeet-sez, Domains: *.sez.letsmeet.lol
   ```
 
-  **Renewal needs the hooks on file.** `certbot renew` re-runs whatever
-  `/etc/letsencrypt/renewal/letsmeet-sez.conf` records under
-  `[renewalparams]`; an issuance whose hooks were given only on the command
-  line leaves `authenticator = manual` with no `manual_auth_hook` /
+  **Renewal needs the hooks on file, and as of 2026-09-16 they are not.**
+  `certbot renew` re-runs whatever `/etc/letsencrypt/renewal/letsmeet-sez.conf`
+  records under `[renewalparams]`; an issuance whose hooks were given only on
+  the command line — which is how this certificate was issued — leaves
+  `authenticator = manual` there with no `manual_auth_hook` /
   `manual_cleanup_hook` lines, and the renewal fails silently in ~60 days.
-  Make sure those two lines are present (add them if not), then prove it:
+  The box's copy is in exactly that state: the two lines below are absent and
+  must be added by hand, under `[renewalparams]`, before the first renewal.
+  Then prove it:
 
   ```
   manual_auth_hook = /etc/letsencrypt/marque/letsmeet.lol-auth
@@ -470,8 +473,10 @@ Once that's confirmed:
     import it into an actual calendar app (Google Calendar's "Import" screen,
     Apple Calendar's File → Import, or similar). Confirm the event appears
     with the right title, start/end time, and timezone.
-
-- claim a name in `/availability`, then open `https://<name>.sez.letsmeet.lol/`.
+14. Claim a name in `/availability` and save, then open
+    `https://<name>.sez.letsmeet.lol/` in a private window. Confirm the friend
+    view answers there with the sentence from step 8, and that `/new` on that
+    host is a 404.
 
 If any step fails, do not consider the deploy announcement-ready — fix
 forward and re-run the whole checklist from step 2, since OAuth, the outbox,
