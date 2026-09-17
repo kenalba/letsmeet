@@ -253,69 +253,71 @@ call), the limiter keys on the socket's peer address. If you ever put
 another proxy in front of nginx, confirm it preserves the "append, don't
 replace" behavior.
 
-### Optional: `<handle>.sez.letsmeet.lol` (Caddy for the alias host)
+### `<name>.sez.letsmeet.lol` (the wildcard host)
 
-**Do this only after Tasks 1–14 are deployed and the `/u/<handle>` pages
-above are confirmed working against nginx in production.** It is a later,
-optional step, not part of the base deploy — skip this subsection entirely
-until that's true. nginx + certbot (above) stays the primary path for
-`letsmeet.lol` and every other vhost on the box.
+A share can read `ken.sez.letsmeet.lol` — a short name the owner claimed in the
+`/availability` editor — or `ken-wzrdz-cool.sez.letsmeet.lol`, the handle with its
+dots turned to hyphens, which anyone has without claiming anything. Both are one
+label under `sez.letsmeet.lol`, so one wildcard certificate covers every one of
+them forever. nginx stays the front for this host like every other on the box.
 
-The alias lets a share read `ken.wzrdz.cool.sez.letsmeet.lol` instead of
-`letsmeet.lol/u/ken.wzrdz.cool`. It needs a certificate for *any* handle
-someone chooses, minted on first use rather than issued in advance, which is
-what pushes this one host onto Caddy: nginx + certbot has no on-demand-TLS
-equivalent, and Caddy's `on_demand_tls` with an `ask` endpoint is built for
-exactly this.
+- **DNS.** One wildcard `A` record, `*.sez.letsmeet.lol`, pointed at the box
+  (added 2026-09-16). Add the matching `AAAA` if the apex has one. Check it
+  answers from the authoritative servers before asking for a certificate:
+  `dig +short anything.sez.letsmeet.lol @$(dig +short NS letsmeet.lol | head -1)`.
+- **Certificate: `*.sez.letsmeet.lol` by DNS-01.** Wildcards cannot use HTTP-01;
+  certbot has to put a `_acme-challenge.sez.letsmeet.lol` TXT record in the
+  zone, which lives at Marque (mqdns). Marque provides certbot auth/cleanup
+  hook scripts and a dedicated `MARQUE_DNS01_TOKEN` for exactly this. On the
+  box they live at `/etc/letsencrypt/marque/letsmeet.lol-auth`,
+  `/etc/letsencrypt/marque/letsmeet.lol-cleanup` (root, 700) with the token
+  in `/etc/letsencrypt/marque/letsmeet.lol.env` (root, 600). The
+  certificate was issued 2026-09-16 under the certbot name `letsmeet-sez`:
 
-- **DNS.** One wildcard `A` record, `*.sez.letsmeet.lol`, pointed at the box.
-  DNS wildcards match every label under the suffix, so
-  `ken.wzrdz.cool.sez.letsmeet.lol` (a handle that is itself a subdomain) is
-  covered by the same record — no per-user DNS entry.
-- **Caddy replaces nginx for `letsmeet.lol` and `*.sez.letsmeet.lol` only.**
-  `deploy/Caddyfile` in this repo has both hosts: the apex reverse-proxies to
-  the app exactly like the nginx vhost did, and the wildcard host adds
-  `tls { on_demand }`. Caddy and nginx can't both hold `:80`/`:443` for the
-  same hostname, so disable or remove the nginx server block for
-  `letsmeet.lol` (`deploy/nginx-letsmeet.lol.conf`) before pointing Caddy at
-  these two hosts — the box's other vhosts are untouched and stay on nginx.
-- **The `ask` endpoint must never be reachable from outside.** Caddy's
-  `on_demand_tls` block in the Caddyfile calls
-  `http://127.0.0.1:8787/internal/tls-ask?domain=<sni-host>` before issuing a
-  certificate for any hostname it sees. The app (§1's `compose.yaml` already
-  binds it to `127.0.0.1:8787`) answers `200` only when `<sni-host>` ends in
-  `.sez.letsmeet.lol`, the handle part is not a `did:` literal, **and** the
-  handle resolves to a DID (`src/web/routes/availability.ts`); anything
-  else — an unresolvable handle, a bare DID, or a domain outside the suffix
-  entirely — gets `404` and no certificate is issued. The app's own loopback
-  bind is not, by itself, what keeps this off the public internet: both
-  Caddy and nginx run *on the box* and are themselves allowed to reach
-  `127.0.0.1:8787`, and both proxy `/` broadly, so a public request to
-  `https://letsmeet.lol/internal/tls-ask` would otherwise sail straight
-  through the proxy to the app. Three things stop it, and the app does not
-  rely on the deploy-side two being in place: the route itself refuses any
-  request that arrives with an `X-Forwarded-For` header or from a
-  non-loopback socket (`isLoopbackPeer`, `src/web/clientIp.ts`) — both
-  proxies append that header, so it marks a proxied request whatever address
-  it claims — and, one layer out, the explicit path block ahead of
-  `reverse_proxy`/`proxy_pass` in both `deploy/Caddyfile`
-  (`handle /internal/* { respond 404 }`, in both site blocks) and
-  `deploy/nginx-letsmeet.lol.conf` (`location /internal/ { return 404; }`).
-  Only Caddy's own `ask` request, made server-side and never through the
-  proxy path, reaches the route. Since this still runs on the public
-  internet's attack surface (anyone can request a TLS handshake for a
-  made-up `whatever.sez.letsmeet.lol`, which is what triggers Caddy to call
-  `ask` in the first place), the endpoint also holds a rate-limit budget
-  keyed on *the domain being asked about* — 20 per ten minutes, far more than
-  the one ask a real first visit costs — so a flood of made-up hostnames
-  cannot spend the budget a real handle needs. Past that budget it answers
-  `429`.
-- **The alias serves the friend view and the feed, and nothing else.** A
-  request to `ken.wzrdz.cool.sez.letsmeet.lol` for any path but `/`,
-  `/availability.ics` and the static files that page loads gets a `404`
-  (`aliasHostOnly`, mounted ahead of every route in `src/web/server.ts`).
-  The session cookie is scoped to the `letsmeet.lol` apex as well, so the
-  alias could not show a signed-in page even if it routed one.
+  ```bash
+  sudo certbot certonly --manual --preferred-challenges dns \
+    --manual-auth-hook /etc/letsencrypt/marque/letsmeet.lol-auth \
+    --manual-cleanup-hook /etc/letsencrypt/marque/letsmeet.lol-cleanup \
+    --cert-name letsmeet-sez -d '*.sez.letsmeet.lol' \
+    --deploy-hook 'systemctl reload nginx'
+  sudo certbot certificates   # Certificate Name: letsmeet-sez, Domains: *.sez.letsmeet.lol
+  ```
+
+  **Renewal needs the hooks on file.** `certbot renew` re-runs whatever
+  `/etc/letsencrypt/renewal/letsmeet-sez.conf` records under
+  `[renewalparams]`; an issuance whose hooks were given only on the command
+  line leaves `authenticator = manual` with no `manual_auth_hook` /
+  `manual_cleanup_hook` lines, and the renewal fails silently in ~60 days.
+  Make sure those two lines are present (add them if not), then prove it:
+
+  ```
+  manual_auth_hook = /etc/letsencrypt/marque/letsmeet.lol-auth
+  manual_cleanup_hook = /etc/letsencrypt/marque/letsmeet.lol-cleanup
+  ```
+
+  ```bash
+  sudo certbot renew --cert-name letsmeet-sez --dry-run
+  ```
+- **nginx.** `deploy/nginx-letsmeet.lol.conf` carries a second server block,
+  `server_name *.sez.letsmeet.lol;`, identical to the apex block but for the
+  certificate paths, plus a port-80 redirect for it. Install the file over
+  `/etc/nginx/sites-available/letsmeet.lol`, then `sudo nginx -t && sudo
+  systemctl reload nginx`.
+- **What the host serves.** The app answers `/` (the friend view) and
+  `/availability.ics` (the feed) on `<name>.sez.letsmeet.lol`, plus the static
+  files that page loads, and 404s everything else — including any host with
+  more than one label before `.sez.`, which no certificate covers anyway
+  (`aliasHostOnly`, `src/web/server.ts`). The session cookie is scoped to the
+  apex, so the alias could not show a signed-in page even if it routed one. A
+  name is resolved from the `sez_name` table first (claimed names, then
+  hyphenated handles this server has decoded before), then by reading the
+  label as a hyphenated handle and resolving each way of putting the dots back
+  (`src/services/sezNames.ts`). The table is **not** disposable: it is what makes a
+  short name one person's. `deploy/backup.sh` already backs up the whole
+  database.
+- **Check.** `curl -sI https://ken.sez.letsmeet.lol/ | head -1` → `HTTP/2 200`
+  once a name is claimed (or `https://ken-wzrdz-cool.sez.letsmeet.lol/` for any
+  handle), and `curl -sI https://ken.sez.letsmeet.lol/new | head -1` → `404`.
 
 ## 4. Publishing the lexicons
 
@@ -389,7 +391,9 @@ something the running server does.
    with `$type: "com.atproto.lexicon.schema"` added.
 
 Re-run the script (same rkeys, since `rkey = lex.id`) whenever a lexicon JSON
-changes — `putRecord` overwrites in place.
+changes — `putRecord` overwrites in place. The availability lexicon gained an
+optional `alias` field with sez names (2026-09-16); republish it after
+deploying that release.
 
 ## 5. Real-PDS smoke test
 
@@ -466,6 +470,8 @@ Once that's confirmed:
     import it into an actual calendar app (Google Calendar's "Import" screen,
     Apple Calendar's File → Import, or similar). Confirm the event appears
     with the right title, start/end time, and timezone.
+
+- claim a name in `/availability`, then open `https://<name>.sez.letsmeet.lol/`.
 
 If any step fails, do not consider the deploy announcement-ready — fix
 forward and re-run the whole checklist from step 2, since OAuth, the outbox,
