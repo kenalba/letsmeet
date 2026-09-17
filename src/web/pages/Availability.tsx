@@ -18,6 +18,15 @@ export interface AvailabilityPageData {
   /** The live read failed: the editor opens empty and says a save will overwrite. */
   readFailed: boolean;
   publicUrl: string;
+  /** The address field's state: what to prefill, what is saved, and where names live. */
+  sez: {
+    alias: string;
+    aliasSaved: string;
+    suffix: string;
+    addressFallback: string | null;
+    /** The record's alias is someone else's claim now; the banner names it. */
+    lost: string | null;
+  };
 }
 
 /** What the island mounts with. The record (or an empty one) plus who the viewer is. */
@@ -31,6 +40,10 @@ export function AvailabilityPage(data: AvailabilityPageData) {
     // The island's <input type="date"> speaks calendar dates; the record stamps an instant,
     // which is the end of that date where the record's own zone is.
     validUntil: rec?.validUntil ? localDateOf(rec.validUntil, rec.timezone) : '',
+    alias: data.sez.alias,
+    aliasSaved: data.sez.aliasSaved,
+    sezSuffix: data.sez.suffix,
+    addressFallback: data.sez.addressFallback,
   };
   const base = data.publicUrl.replace(/\/$/, '');
   const publicPath = data.handle ? `/u/${data.handle}` : null;
@@ -49,6 +62,14 @@ export function AvailabilityPage(data: AvailabilityPageData) {
         {data.readFailed && (
           <p className="banner rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
             couldn't read your current availability from your pds. saving will overwrite whatever is there.
+          </p>
+        )}
+        {data.sez.lost && (
+          <p className="banner rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            {/* A single template literal, not adjacent {} expressions: React's renderToString
+                inserts <!-- --> markers between adjacent text children, which would split
+                this sentence and break a plain-text match on the rendered HTML. */}
+            {`your address ${data.sez.lost}.${data.sez.suffix} is someone else's now. pick another below and save.`}
           </p>
         )}
         <Card>

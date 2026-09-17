@@ -8,6 +8,7 @@ import { createServer } from '../../src/web/server.js';
 import { AVAILABILITY_NSID, AVAILABILITY_RKEY, type AvailabilityRecord } from '../../src/atproto/records.js';
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
+import { claimSezName, getSezName } from '../../src/db/sezNames.js';
 
 const KEN = 'did:plc:ken';
 const stubAuth: AuthClient = {
@@ -28,6 +29,7 @@ function setup(resolveDid?: Deps['resolveDid'], publicUrl = 'http://localhost:87
   const deps: Deps = {
     db: openDb(':memory:'), reader: repo, writerFor: async () => repo,
     now: () => new Date('2026-09-16T12:00:00Z'), revalidateTtlMs: 0, resolveDid,
+    resolveHandle: resolveDid ? async (d) => (d === KEN ? 'ken.wzrdz.cool' : null) : undefined,
   };
   const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: publicUrl });
   return { app, deps, repo };
@@ -66,14 +68,12 @@ describe('/u/:handle', () => {
     expect(await none.text()).toContain('no availability posted');
     expect((await app.request('/u/nobody.example')).status).toBe(404);
   });
-  it('503s a page and 404s an ask when the handle lookup itself fails', async () => {
+  it('503s the page and the feed when the handle lookup itself fails', async () => {
     const { app } = setup(async () => { throw new Error('resolver down'); }, 'https://letsmeet.lol');
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      // Not "no such handle" — we do not know, and Caddy is meant to ask again later.
       expect((await app.request('/u/ken.wzrdz.cool')).status).toBe(503);
       expect((await app.request('/u/ken.wzrdz.cool/availability.ics')).status).toBe(503);
-      expect((await app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol')).status).toBe(404);
     } finally { warned.mockRestore(); }
   });
   it('names the good-through day in the record\'s zone, not in UTC', async () => {
@@ -173,86 +173,76 @@ describe('a record only the lexicon has ever seen', () => {
   });
 });
 
-/** A request whose socket peer is `address` — what @hono/node-server's getConnInfo reads. */
-const conn = (address: string) => ({ incoming: { socket: { remoteAddress: address, remoteFamily: 'IPv4' } } });
+describe('<name>.sez.letsmeet.lol', () => {
+  const kenOnly = async (h: string) => (h === 'ken.wzrdz.cool' ? KEN : null);
+  const host = (h: string) => ({ headers: { host: h } });
 
-describe('<handle>.sez.letsmeet.lol', () => {
-  it('serves the friend view and feed on <handle>.sez.letsmeet.lol', async () => {
-    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+  it('serves the friend view and feed for a claimed name, canonicalised to /u/<handle>', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
-    const html = await (await app.request('/', { headers: { host: 'ken.wzrdz.cool.sez.letsmeet.lol' } })).text();
+    claimSezName(deps.db, 'ken', KEN, 0);
+    const html = await (await app.request('/', host('ken.sez.letsmeet.lol'))).text();
     expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
     expect(html).toContain('<link rel="canonical" href="https://letsmeet.lol/u/ken.wzrdz.cool"');
-    const ics = await app.request('/availability.ics', { headers: { host: 'ken.wzrdz.cool.sez.letsmeet.lol' } });
-    expect(ics.headers.get('content-type')).toContain('text/calendar');
-    // Both feed links point at the apex: /u/<handle>/availability.ics does not answer on
-    // an alias host, so a relative href here would hand the visitor a 404.
     expect(html).toContain('href="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
     expect(html).toContain('webcal://letsmeet.lol/u/ken.wzrdz.cool/availability.ics');
-    // The wordmark goes home to the apex: on an alias host `/` is this very page.
     expect(html).toMatch(/class="brand[^"]*"\s+href="https:\/\/letsmeet\.lol\/"/);
+    const ics = await app.request('/availability.ics', host('ken.sez.letsmeet.lol'));
+    expect(ics.headers.get('content-type')).toContain('text/calendar');
+  });
+  it('serves the hyphenated handle for anyone who has not claimed a name', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    const res = await app.request('/', host('ken-wzrdz-cool.sez.letsmeet.lol'));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
+    expect(getSezName(deps.db, 'ken-wzrdz-cool')).toMatchObject({ did: KEN, claimed: false });
+  });
+  it('404s an unknown label and any host with more than one label under the suffix', async () => {
+    const { app } = setup(kenOnly, 'https://letsmeet.lol');
+    expect((await app.request('/', host('nobody-example.sez.letsmeet.lol'))).status).toBe(404);
+    expect((await app.request('/', host('nobody.sez.letsmeet.lol'))).status).toBe(404);
+    // The old shape. No certificate covers it, and the app must not serve the apex there.
+    for (const path of ['/', '/availability.ics', '/new', '/favicon.svg']) {
+      expect([path, (await app.request(path, host('ken.wzrdz.cool.sez.letsmeet.lol'))).status]).toEqual([path, 404]);
+    }
   });
   it('scopes the alias host whatever case or trailing dot the Host header arrives in', async () => {
-    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
-    for (const host of ['ken.wzrdz.cool.sez.LETSMEET.lol', 'ken.wzrdz.cool.sez.letsmeet.lol.',
-      'KEN.WZRDZ.COOL.sez.letsmeet.lol']) {
-      expect([host, (await app.request('/new', { headers: { host } })).status]).toEqual([host, 404]);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    for (const h of ['ken.sez.LETSMEET.lol', 'ken.sez.letsmeet.lol.', 'KEN.sez.letsmeet.lol']) {
+      expect([h, (await app.request('/new', host(h))).status]).toEqual([h, 404]);
     }
-    // ...and the friend view still answers on them, under the same (lowercased) handle.
-    const html = await (await app.request('/', { headers: { host: 'KEN.WZRDZ.COOL.sez.LETSMEET.lol.' } })).text();
+    const html = await (await app.request('/', host('KEN.sez.LETSMEET.lol.'))).text();
     expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
   });
-  it("answers caddy's ask endpoint only for handles that resolve", async () => {
-    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
-    expect((await app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol')).status).toBe(200);
-    expect((await app.request('/internal/tls-ask?domain=nobody.example.sez.letsmeet.lol')).status).toBe(404);
-    expect((await app.request('/internal/tls-ask?domain=evil.example')).status).toBe(404);
-  });
-  it('rejects a did: literal on the ask endpoint even though /u/:handle accepts one in fake mode', async () => {
-    // No resolver configured: fake mode, where didFor's `did:` shortcut is meant for
-    // /u/:handle only. The ask endpoint must not let it mint a certificate.
-    const { app } = setup(undefined, 'https://letsmeet.lol');
-    const res = await app.request(`/internal/tls-ask?domain=${KEN}.sez.letsmeet.lol`);
-    expect(res.status).toBe(404);
-  });
-  it('answers 429 once a domain has spent its ask budget, without touching another domain', async () => {
-    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
-    const ask = (domain: string) => app.request(`/internal/tls-ask?domain=${domain}.sez.letsmeet.lol`);
-    // The budget is per asked-about domain — the thing an attacker varies — so spending
-    // one made-up name's 20 must leave a real handle's first ask untouched.
-    for (let i = 0; i < 20; i++) expect((await ask('junk.example')).status).toBe(404);
-    expect((await ask('junk.example')).status).toBe(429);
-    expect((await ask('ken.wzrdz.cool')).status).toBe(200);
-  });
-  it('refuses the ask from anything but a caller on this box', async () => {
-    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
-    const ask = (init?: RequestInit, env?: unknown) =>
-      app.request('/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol', init, env);
-    // Through the public proxy: nginx and Caddy both append X-Forwarded-For, and both dial
-    // 127.0.0.1 — so the header, not the socket, is what gives a proxied request away.
-    expect((await ask({ headers: { 'x-forwarded-for': '203.0.113.9' } })).status).toBe(404);
-    // ...and a spoofed loopback claim in that header must not buy anything either.
-    expect((await ask({ headers: { 'x-forwarded-for': '127.0.0.1' } })).status).toBe(404);
-    expect((await ask({}, conn('203.0.113.9'))).status).toBe(404);
-    expect((await ask({}, conn('127.0.0.1'))).status).toBe(200);
-  });
-  it('refuses a domain that only looks like it is under the alias suffix', async () => {
-    const { app } = setup(async () => KEN, 'https://letsmeet.lol');
-    const ask = (domain: string) =>
-      app.request(`/internal/tls-ask?domain=${encodeURIComponent(domain)}`);
-    expect((await ask('evil.example/?x=.sez.letsmeet.lol')).status).toBe(404);
-    expect((await ask('.sez.letsmeet.lol')).status).toBe(404);
-    expect((await ask('sez.letsmeet.lol')).status).toBe(404);
-  });
   it('serves nothing but the friend view and the feed on an alias host', async () => {
-    const { app } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
-    const headers = { host: 'ken.wzrdz.cool.sez.letsmeet.lol' };
-    for (const path of ['/availability', '/new', '/login', '/api/handles?q=ken',
-      '/internal/tls-ask?domain=ken.wzrdz.cool.sez.letsmeet.lol']) {
-      expect([path, (await app.request(path, { headers })).status]).toEqual([path, 404]);
+    const { app, deps } = setup(kenOnly, 'https://letsmeet.lol');
+    claimSezName(deps.db, 'ken', KEN, 0);
+    for (const path of ['/availability', '/new', '/login', '/api/handles?q=ken', '/internal/tls-ask?domain=x']) {
+      expect([path, (await app.request(path, host('ken.sez.letsmeet.lol'))).status]).toEqual([path, 404]);
     }
-    // The friend view is a page: the static files it loads still have to answer.
-    expect((await app.request('/favicon.svg', { headers })).status).toBe(200);
+    expect((await app.request('/favicon.svg', host('ken.sez.letsmeet.lol'))).status).toBe(200);
+  });
+  it('503s when the resolver is down and the label is not in the table', async () => {
+    const { app } = setup(async () => { throw new Error('resolver down'); }, 'https://letsmeet.lol');
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await app.request('/', host('ken-wzrdz-cool.sez.letsmeet.lol'))).status).toBe(503);
+    } finally { warned.mockRestore(); }
+  });
+  it('has no ask endpoint any more', async () => {
+    const { app } = setup(kenOnly, 'https://letsmeet.lol');
+    expect((await app.request('/internal/tls-ask?domain=ken.sez.letsmeet.lol')).status).toBe(404);
+  });
+  it('in fake mode (no resolver) a claimed name resolves and a hyphenated label does not', async () => {
+    const { app, deps, repo } = setup(undefined, 'http://localhost:8787');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    const html = await (await app.request('/', host('ken.sez.localhost:8787'))).text();
+    expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
+    expect(html).toContain(`<link rel="canonical" href="http://localhost:8787/u/${KEN}"`);
+    expect((await app.request('/', host('ken-wzrdz-cool.sez.localhost:8787'))).status).toBe(404);
   });
 });

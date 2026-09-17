@@ -101,7 +101,7 @@ export function createServer(
     onError: (c) => c.json({ error: 'request body too large.' }, 413),
   }));
 
-  // A `<handle>.sez.<site>` host is a share link for one person's availability, not a second
+  // A `<name>.sez.<site>` host is a share link for one person's availability, not a second
   // front door to the app: ahead of every route, so a route added later is scoped by
   // default rather than by remembering to.
   app.use('*', aliasHostOnly(env.PUBLIC_URL));
@@ -159,7 +159,7 @@ export function createServer(
   }
   app.route('/', authRoutes(auth, { ...session, publicUrl: env.PUBLIC_URL, now: deps.now }));
   app.route('/', apiRoutes(cachedHandleSearch(env.handleSearch ?? bskyHandleSearch()), deps.now));
-  // Mounted before pollRoutes: its `<handle>.sez.<site>` alias handler for `/` needs first
+  // Mounted before pollRoutes: its `<name>.sez.<site>` alias handler for `/` needs first
   // crack at the request so it can fall through via `next()` on a non-alias host. Hono
   // composes same-path handlers from merged sub-apps in mount order and stops at the first
   // one that doesn't call `next()` — pollRoutes' landing `/` handler never does, so it would

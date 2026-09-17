@@ -8,6 +8,8 @@ export interface PublicAvailabilityData {
   record: AvailabilityRecord | null;
   now: Date;
   publicUrl: string;
+  /** Where this person's page is shared; rendered from Task 6. */
+  sezAddress?: string;
 }
 
 const fmtDate = (d: string) => new Date(d + 'T12:00:00Z')

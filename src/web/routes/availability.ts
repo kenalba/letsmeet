@@ -1,14 +1,19 @@
 import { createElement } from 'react';
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import type { Deps } from '../../atproto/types.js';
+import type { AvailabilityRecord } from '../../atproto/records.js';
 import { UserError } from '../../core/errors.js';
 import { describeWeekly, isKnownZone } from '../../core/availability.js';
 import { readSession, type SessionEnv } from '../session.js';
 import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
-import { clientIp, isLoopbackPeer } from '../clientIp.js';
+import { clientIp } from '../clientIp.js';
 import { buildAvailabilityIcs } from '../../core/ics.js';
 import { getOwnAvailability, saveAvailability, getAvailabilityCached } from '../../services/availability.js';
+import {
+  fallbackAddressFor, resolveSezName, sezAddressFor, sezSuffixFor, suggestedSezName,
+} from '../../services/sezNames.js';
+import { claimedSezNameFor, getSezName } from '../../db/sezNames.js';
 import { AvailabilityPage } from '../pages/Availability.js';
 import { PublicAvailabilityPage } from '../pages/PublicAvailability.js';
 import { ErrorPage } from '../pages/ErrorPage.js';
@@ -19,46 +24,60 @@ function needsReauth(err: unknown): boolean {
   return /scope|insufficient|forbidden|403/i.test(msg);
 }
 
-/** `.sez.<site>`: everything before it in an alias host is the handle. */
+/** `.sez.<site>`: the one label before it in an alias host is a sez name. */
 export const aliasSuffixFor = (publicUrl: string): string => '.sez.' + new URL(publicUrl).host;
 
-/** A handle is dot-separated LDH labels — the only shape a certificate can be issued for. */
-const HANDLE_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+/** One LDH label, which is all a wildcard certificate covers: `ken`, `ken-wzrdz-cool`. */
+const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /**
- * The handle `host` is an alias for: every label before `suffix`, lowercased. Null when the
- * host is not under the suffix at all, or when what precedes it is not handle-shaped —
- * `evil.example/?x=.sez.letsmeet.lol` ends in the suffix and is nobody's handle.
- *
  * A Host header is case-insensitive and may carry the root's trailing dot, and both forms
- * reach us verbatim: `ken.wzrdz.cool.sez.LETSMEET.lol` and `…letsmeet.lol.` are the same
- * host as the plain one, and matching them literally would let the alias origin slip past
- * the guard below and serve the whole app. Handles are lowercase, so the answer is too.
+ * reach us verbatim: `KEN.sez.letsmeet.lol` and `ken.sez.letsmeet.lol.` are the same host
+ * as the plain one, and matching them literally would let the alias origin slip past the
+ * guard below and serve the whole app.
  */
-export function aliasHandleOf(host: string | undefined, suffix: string): string | null {
-  const name = host?.toLowerCase().replace(/\.$/, '');
-  if (!name || !name.endsWith(suffix) || name.length === suffix.length) return null;
-  const handle = name.slice(0, -suffix.length);
-  return HANDLE_RE.test(handle) && handle.length <= 253 ? handle : null;
+const normalizeHost = (host: string | undefined): string => (host ?? '').toLowerCase().replace(/\.$/, '');
+
+/** Anything at all under `.sez.<site>` — well-formed or not. */
+export function isAliasHost(host: string | undefined, suffix: string): boolean {
+  const name = normalizeHost(host);
+  return name.endsWith(suffix) && name.length > suffix.length;
+}
+
+/**
+ * The sez label an alias host names: exactly one label before the suffix. Null outside the
+ * suffix, and null for more labels than one (`ken.wzrdz.cool.sez.letsmeet.lol`, the old
+ * shape) — no certificate covers that, so nothing is ever served there.
+ */
+export function aliasLabelOf(host: string | undefined, suffix: string): string | null {
+  if (!isAliasHost(host, suffix)) return null;
+  const label = normalizeHost(host).slice(0, -suffix.length);
+  return LABEL_RE.test(label) ? label : null;
 }
 
 /**
  * An alias host answers the friend view and the feed, and nothing else — the app proper
  * lives on the apex. Mounted ahead of every route (web/server.ts) so nothing new escapes
- * it; the static files the friend view itself loads are the only other paths allowed.
+ * it; the static files the friend view itself loads are the only other paths allowed. A
+ * malformed alias host (more than one label) answers nothing at all.
  */
 export function aliasHostOnly(publicUrl: string): MiddlewareHandler {
   const suffix = aliasSuffixFor(publicUrl);
   const PUBLIC_VIEW = new Set(['/', '/availability.ics']);
   const STATIC = /^\/(assets|fonts)\/|^\/(favicon\.(ico|svg)|favicon-32\.png|apple-touch-icon\.png)$/;
   return async (c, next) => {
-    const path = c.req.path;
-    if (aliasHandleOf(c.req.header('host'), suffix) && !PUBLIC_VIEW.has(path) && !STATIC.test(path)) {
-      return c.notFound();
+    const host = c.req.header('host');
+    if (isAliasHost(host, suffix)) {
+      const path = c.req.path;
+      if (!aliasLabelOf(host, suffix) || (!PUBLIC_VIEW.has(path) && !STATIC.test(path))) return c.notFound();
     }
     await next();
   };
 }
+
+/** What a public read found: who, and what they posted. */
+type Found = { handle: string; did: string; record: AvailabilityRecord | null };
+type Deny = { deny: Response };
 
 export function availabilityRoutes(
   deps: Deps, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
@@ -67,7 +86,7 @@ export function availabilityRoutes(
   const session: SessionEnv = {
     db: deps.db, cookieSecret: env.COOKIE_SECRET, secure: env.PUBLIC_URL.startsWith('https'),
   };
-  // 20 saves per ten minutes per account: a save is two PDS round trips.
+  // 20 saves per ten minutes per account: a save is two PDS round trips (a claim rides on one).
   const saveLimiter = new TokenBucket(20, 20 / 600);
 
   app.get('/availability', async (c) => {
@@ -83,8 +102,21 @@ export function availabilityRoutes(
       console.warn(`own availability read failed for ${who.did}:`, err);
       readFailed = true;
     }
+    const claimed = claimedSezNameFor(deps.db, who.did);
+    const recordAlias = record?.alias ?? null;
+    // The record names a claim the table does not hold for them. Free again (the table was
+    // rebuilt): offered back silently through the suggestion. Someone else's now: said so.
+    const lost = recordAlias !== null && claimed !== recordAlias
+      && getSezName(deps.db, recordAlias)?.claimed === true ? recordAlias : null;
     return page(c, createElement(AvailabilityPage, {
       handle: who.handle ?? undefined, record, readFailed, publicUrl: env.PUBLIC_URL,
+      sez: {
+        alias: suggestedSezName(deps, who.did, who.handle, recordAlias),
+        aliasSaved: claimed ?? '',
+        suffix: sezSuffixFor(env.PUBLIC_URL),
+        addressFallback: fallbackAddressFor(who.handle, env.PUBLIC_URL),
+        lost,
+      },
     }));
   });
 
@@ -98,7 +130,10 @@ export function availabilityRoutes(
     if (!body || typeof body !== 'object') return c.json({ error: 'malformed request body.' }, 400);
     try {
       const { record, written } = await saveAvailability(deps, who.did, body);
-      return c.json({ ok: true, written, sentence: describeWeekly(record.weekly) });
+      return c.json({
+        ok: true, written, sentence: describeWeekly(record.weekly),
+        address: sezAddressFor(deps, who.did, who.handle, env.PUBLIC_URL),
+      });
     } catch (err) {
       // A UserError is our own complaint about the posted body — never the PDS's about the
       // token — even when its wording happens to trip the scope pattern.
@@ -126,23 +161,19 @@ export function availabilityRoutes(
     return /^did:(plc|web):[a-zA-Z0-9._:%-]+$/.test(handle) ? handle : null;
   };
 
-  /** Resolve + read, or the response that says why not. Shared by the page and the feed. */
-  const lookup = async (c: import('hono').Context, handle: string) => {
-    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) {
-      return { deny: page(c, createElement(ErrorPage, { heading: 'slow down', message: 'easy there. try again in a minute.' }), 429) };
-    }
-    let did: string | null;
-    try {
-      did = await didFor(handle);
-    } catch (err) {
-      // The resolver is down, not the handle wrong: 404 would tell the visitor this person
-      // does not exist, and would be wrong again in a minute.
-      console.warn(`handle resolution failed for ${handle}:`, err);
-      return { deny: page(c, createElement(ErrorPage, {
-        heading: 'could not look them up', message: "couldn't resolve that handle right now. try again in a minute.",
-      }), 503) };
-    }
-    if (!did) return { deny: c.notFound() };
+  const tooMany = (c: Context): Deny => ({
+    deny: page(c, createElement(ErrorPage, { heading: 'slow down', message: 'easy there. try again in a minute.' }), 429),
+  });
+  // The resolver is down, not the name wrong: 404 would tell the visitor this person does
+  // not exist, and would be wrong again in a minute.
+  const cannotResolve = (c: Context): Deny => ({
+    deny: page(c, createElement(ErrorPage, {
+      heading: 'could not look them up', message: "couldn't resolve that handle right now. try again in a minute.",
+    }), 503),
+  });
+
+  /** Their record, or the response that says why not. */
+  const read = async (c: Context, handle: string, did: string): Promise<Found | Deny> => {
     try {
       return { handle, did, record: await getAvailabilityCached(deps, did) };
     } catch (err) {
@@ -153,19 +184,54 @@ export function availabilityRoutes(
     }
   };
 
-  /** The friend view for `handle`. Shared by `/u/:handle` and the `<handle>.sez.<site>` alias. */
-  const friendView = async (c: import('hono').Context, handle: string) => {
-    const r = await lookup(c, handle);
-    if ('deny' in r) return r.deny;
-    return page(c, createElement(PublicAvailabilityPage, {
-      handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
-    }));
+  /** `/u/<handle>`: resolve + read. */
+  const lookupHandle = async (c: Context, handle: string): Promise<Found | Deny> => {
+    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return tooMany(c);
+    let did: string | null;
+    try {
+      did = await didFor(handle);
+    } catch (err) {
+      console.warn(`handle resolution failed for ${handle}:`, err);
+      return cannotResolve(c);
+    }
+    if (!did) return { deny: await c.notFound() };
+    return read(c, handle, did);
   };
 
-  /** The ICS feed for `handle`. Shared by `/u/:handle/availability.ics` and the alias. */
-  const feed = async (c: import('hono').Context, handle: string) => {
-    const r = await lookup(c, handle);
-    if ('deny' in r) return r.deny;
+  /**
+   * `<label>.sez.<site>`: a claimed name or a hyphenated handle, then the handle the DID's
+   * document declares — the page is headed by it and canonicalised to `/u/<handle>`. Fake
+   * mode has no resolver; there the DID literal is the handle, as `/u/<did>` accepts.
+   */
+  const lookupLabel = async (c: Context, label: string): Promise<Found | Deny> => {
+    if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return tooMany(c);
+    let did: string | null;
+    try {
+      did = await resolveSezName(deps, label);
+    } catch (err) {
+      console.warn(`sez name resolution failed for ${label}:`, err);
+      return cannotResolve(c);
+    }
+    if (!did) return { deny: await c.notFound() };
+    let handle: string | null;
+    try {
+      handle = deps.resolveHandle ? await deps.resolveHandle(did) : did;
+    } catch (err) {
+      console.warn(`handle lookup failed for ${did}:`, err);
+      handle = null;
+    }
+    if (!handle) return cannotResolve(c);
+    return read(c, handle, did);
+  };
+
+  /** The friend view. Shared by `/u/:handle` and the `<name>.sez.<site>` alias. */
+  const friendView = (c: Context, r: Found) => page(c, createElement(PublicAvailabilityPage, {
+    handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
+    sezAddress: sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined,
+  }));
+
+  /** The ICS feed. Shared by `/u/:handle/availability.ics` and the alias. */
+  const feed = (c: Context, r: Found) => {
     // Every DTSTART in the feed is anchored to the record's timezone. One this app cannot
     // read has no feed to serve — the page says as much in words.
     if (!r.record || !isKnownZone(r.record.timezone)) return c.notFound();
@@ -178,64 +244,32 @@ export function availabilityRoutes(
     });
   };
 
-  app.get('/u/:handle', (c) => friendView(c, c.req.param('handle')));
-  app.get('/u/:handle/availability.ics', (c) => feed(c, c.req.param('handle')));
+  app.get('/u/:handle', async (c) => {
+    const r = await lookupHandle(c, c.req.param('handle'));
+    return 'deny' in r ? r.deny : friendView(c, r);
+  });
+  app.get('/u/:handle/availability.ics', async (c) => {
+    const r = await lookupHandle(c, c.req.param('handle'));
+    return 'deny' in r ? r.deny : feed(c, r);
+  });
 
-  // `<handle>.sez.<site>`: an alternate host that serves the same friend view and feed as
-  // `/u/<handle>`, so a share can read `ken.wzrdz.cool.sez.letsmeet.lol` instead of a path.
-  // A wildcard DNS record and Caddy's on-demand TLS (deploy/Caddyfile, docs/deploy.md §3)
-  // are what make the certificate exist; this dispatch is what makes the host answer.
+  // `<name>.sez.<site>`: an alternate host that serves the same friend view and feed as
+  // `/u/<handle>`, so a share can read `ken.sez.letsmeet.lol` instead of a path. One
+  // wildcard DNS record and one wildcard certificate (docs/deploy.md §3) make the host
+  // exist; this dispatch is what makes it answer.
   const aliasSuffix = aliasSuffixFor(env.PUBLIC_URL);
-  const aliasHandle = (host: string | undefined): string | null => aliasHandleOf(host, aliasSuffix);
 
   app.get('/', async (c, next) => {
-    const handle = aliasHandle(c.req.header('host'));
-    if (!handle) return next();
-    return friendView(c, handle);
+    const label = aliasLabelOf(c.req.header('host'), aliasSuffix);
+    if (!label) return next();
+    const r = await lookupLabel(c, label);
+    return 'deny' in r ? r.deny : friendView(c, r);
   });
   app.get('/availability.ics', async (c, next) => {
-    const handle = aliasHandle(c.req.header('host'));
-    if (!handle) return next();
-    return feed(c, handle);
-  });
-
-  /**
-   * Twenty asks per handle, one back every thirty seconds — far more than Caddy needs, since
-   * it asks once, on the first handshake for a name it has no certificate for. The key is
-   * the domain being asked about, which is the thing an attacker varies, so a flood of
-   * made-up names cannot spend the budget a real first visit needs. Keying on the caller
-   * instead pools every legitimate ask into one bucket: the caller is always Caddy.
-   */
-  const askLimiter = new TokenBucket(20, 20 / 600);
-
-  /**
-   * Caddy's on-demand TLS `ask` (deploy/Caddyfile): issue a certificate only for a host
-   * that is both under the alias suffix and a handle that actually resolves — otherwise
-   * anyone could mint a valid cert for `whatever.sez.letsmeet.lol`.
-   *
-   * Caddy makes this call itself, server-side, over loopback; nothing arriving through the
-   * public proxy may reach it (the `handle /internal/*` and `location /internal/` blocks in
-   * deploy/ say the same thing one layer out, but this app must not depend on them being
-   * deployed). A burst of bogus SNI hostnames from the internet still makes Caddy ask, so
-   * the answer stays cheap to produce.
-   */
-  app.get('/internal/tls-ask', async (c) => {
-    if (!isLoopbackPeer(c)) return c.text('no', 404);
-    // The handle-shape check in `aliasHandleOf` is also what keeps a `did:` literal out:
-    // `didFor`'s fake-mode shortcut matches by regex alone, so without it
-    // `?domain=did:plc:anything.sez.letsmeet.lol` would mint a cert for an unverified DID.
-    const handle = aliasHandle(c.req.query('domain'));
-    if (!handle) return c.text('no', 404);
-    // One key per name: `aliasHandleOf` has already lowercased it.
-    if (!askLimiter.allow(handle, deps.now().getTime())) return c.text('no', 429);
-    try {
-      return (await didFor(handle)) ? c.text('ok') : c.text('no', 404);
-    } catch (err) {
-      // No certificate this time round. Caddy asks again on the next handshake, by which
-      // point the resolver may be back — better than minting one for an unverified name.
-      console.warn(`tls-ask handle resolution failed for ${handle}:`, err);
-      return c.text('no', 404);
-    }
+    const label = aliasLabelOf(c.req.header('host'), aliasSuffix);
+    if (!label) return next();
+    const r = await lookupLabel(c, label);
+    return 'deny' in r ? r.deny : feed(c, r);
   });
 
   return app;

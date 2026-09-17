@@ -5,6 +5,7 @@ import { createServer } from '../../src/web/server.js';
 import { AVAILABILITY_NSID, AVAILABILITY_RKEY } from '../../src/atproto/records.js';
 import type { Deps, RepoReader, RepoWriter } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
+import { claimSezName, claimedSezNameFor } from '../../src/db/sezNames.js';
 
 const ME = 'did:plc:me';
 const stubAuth: AuthClient = {
@@ -78,7 +79,10 @@ describe('/availability', () => {
       method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, written: true, sentence: 'usually free tuesdays 7pm to 10pm.' });
+    // signIn's handle (me.test) has claimed nothing, so the address is its hyphenated fallback.
+    expect(await res.json()).toEqual({
+      ok: true, written: true, sentence: 'usually free tuesdays 7pm to 10pm.', address: 'me-test.sez.localhost:8787',
+    });
     const stored = await repo.getRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY);
     expect((stored?.value as { note: string }).note).toBe('text first');
   });
@@ -142,5 +146,78 @@ describe('/availability', () => {
     expect(res.status).toBe(403);
     expect((await res.json() as { error: string }).error)
       .toBe('sign in again to post your availability (this app needs a new permission).');
+  });
+  it('claims the posted alias, reports the address, and shows it in the editor', async () => {
+    const { app, deps, repo } = setup();
+    const cookie = await signIn(app, ME);
+    const res = await app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, alias: ' Me ' }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: true, written: true, sentence: 'usually free tuesdays 7pm to 10pm.', address: 'me.sez.localhost:8787',
+    });
+    expect(claimedSezNameFor(deps.db, ME)).toBe('me');
+    expect((await repo.getRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY))?.value).toMatchObject({ alias: 'me' });
+    const html = await (await app.request('/availability', { headers: { cookie } })).text();
+    expect(html).toContain('"alias":"me"');
+    expect(html).toContain('"aliasSaved":"me"');
+    expect(html).toContain('"sezSuffix":"sez.localhost:8787"');
+  });
+  it('suggests the first label of the handle, or the hyphenated handle when that is taken', async () => {
+    const { app, deps } = setup();
+    const cookie = await signIn(app, ME);
+    let html = await (await app.request('/availability', { headers: { cookie } })).text();
+    expect(html).toContain('"alias":"me"');
+    expect(html).toContain('"aliasSaved":""');
+    expect(html).toContain('"addressFallback":"me-test.sez.localhost:8787"');
+    claimSezName(deps.db, 'me', 'did:plc:other', 0);
+    html = await (await app.request('/availability', { headers: { cookie } })).text();
+    expect(html).toContain('"alias":"me-test"');
+  });
+  it('says taken, reserved, or what a name looks like', async () => {
+    const { app, deps } = setup();
+    const cookie = await signIn(app, ME);
+    claimSezName(deps.db, 'ross', 'did:plc:ross', 0);
+    const save = (alias: string) => app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, alias }),
+    });
+    for (const [alias, error] of [['ross', 'that name is taken.'], ['www', 'that name is reserved.']]) {
+      const res = await save(alias);
+      expect(res.status).toBe(400);
+      expect((await res.json() as { error: string }).error).toBe(error);
+    }
+    const bad = await save('-me');
+    expect(bad.status).toBe(400);
+    expect((await bad.json() as { error: string }).error).toMatch(/no hyphen at either end/);
+  });
+  it('releases the name on an empty alias, and reports the fallback address', async () => {
+    const { app, deps } = setup();
+    const cookie = await signIn(app, ME);
+    const save = (alias: string) => app.request('/availability', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, alias }),
+    });
+    await save('me');
+    const res = await save('');
+    expect((await res.json() as { address: string | null }).address).toBe('me-test.sez.localhost:8787');
+    expect(claimedSezNameFor(deps.db, ME)).toBeNull();
+  });
+  it('tells the owner when the name in their record is someone else\'s now', async () => {
+    const { app, deps, repo } = setup();
+    const cookie = await signIn(app, ME);
+    await repo.putRecord(ME, AVAILABILITY_NSID, AVAILABILITY_RKEY, {
+      $type: AVAILABILITY_NSID, ...body, alias: 'me', updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    // Table rebuilt, name still free: offered back silently.
+    let html = await (await app.request('/availability', { headers: { cookie } })).text();
+    expect(html).toContain('"alias":"me"');
+    expect(html).not.toContain('is someone else');
+    claimSezName(deps.db, 'me', 'did:plc:other', 0);
+    html = (await (await app.request('/availability', { headers: { cookie } })).text()).replaceAll('&#x27;', "'");
+    expect(html).toContain("your address me.sez.localhost:8787 is someone else's now");
+    expect(html).toContain('"alias":"me-test"');
   });
 });

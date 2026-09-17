@@ -96,9 +96,9 @@ const HANDLE_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9
  * Null means the answer is "nobody", and callers cache it for an hour — so it is reserved
  * for the API actually saying so (400 InvalidRequest for a handle that resolves to
  * nothing, 404, or a malformed handle we never ask about). A timeout, a 5xx or a refused
- * connection is not an answer: it throws, and the caller decides (503 for a page, a 404
- * that Caddy will ask again about). Returning null there would take a real handle off the
- * air for the length of the memo TTL over one blip.
+ * connection is not an answer: it throws, and the caller decides (a 503 for a page).
+ * Returning null there would take a real handle off the air for the length of the memo
+ * TTL over one blip.
  */
 export async function resolveDid(handle: string, opts: NetOpts = {}): Promise<string | null> {
   if (!HANDLE_RE.test(handle) || handle.length > 253) return null;
