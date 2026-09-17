@@ -567,6 +567,9 @@
       background: var(--card); border-top: 1px solid var(--border);
     }
     .save-bar .status { margin: 0; }
+    /* The shared `button.save { margin-top: 12px }` rule above still matches inside the
+       bar; the bar carries the margin now, so the button sits flush within it. */
+    .save-bar .save { margin-top: 0; }
   }
 }
 

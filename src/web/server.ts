@@ -71,6 +71,13 @@ export function createServer(
    * `Origin: null` — a sandboxed frame, a data: page — is cross-site for our purposes). A
    * request with neither header (curl, the test rig) has no browser ambient authority
    * to abuse and passes.
+   *
+   * The session cookie now carries `Domain=<site>` (session.ts), so a request from any
+   * host under it — not just this one — is labelled `same-site`, not `same-origin`, and
+   * would still carry the session. Only `same-origin` (our own pages) and `none` (a
+   * user-initiated navigation, e.g. typing the URL or a bookmark) may write; `same-site`
+   * is treated the same as `cross-site`. Nothing legitimate posts from a subdomain:
+   * `aliasHostOnly` 404s every non-GET on a sez host.
    */
   app.use('*', async (c, next) => {
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.method !== 'OPTIONS') {
@@ -78,7 +85,7 @@ export function createServer(
       const origin = c.req.header('origin');
       let crossSite: boolean;
       if (site !== undefined) {
-        crossSite = site === 'cross-site';
+        crossSite = site !== 'same-origin' && site !== 'none';
       } else if (origin !== undefined) {
         let originHost: string | null = null;
         try { originHost = new URL(origin).host; } catch { originHost = null; }

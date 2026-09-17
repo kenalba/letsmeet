@@ -127,12 +127,18 @@ describe('/u/:handle', () => {
   it('offers the owner an edit link, and nobody else', async () => {
     const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
-    const guest = await (await app.request('/u/ken.wzrdz.cool')).text();
+    const guestRes = await app.request('/u/ken.wzrdz.cool');
+    // The header must not depend on who is asking: the page carries the owner's edit link
+    // only for the owner, so no shared cache may hold one viewer's copy for the next.
+    expect(guestRes.headers.get('cache-control')).toBe('private');
+    const guest = await guestRes.text();
     expect(guest).not.toContain('this is you');
     const other = await signIn(app, 'did:plc:other');
     expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('this is you');
     const mine = await signIn(app, KEN);
-    const html = await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: mine } })).text();
+    const mineRes = await app.request('/u/ken.wzrdz.cool', { headers: { cookie: mine } });
+    expect(mineRes.headers.get('cache-control')).toBe('private');
+    const html = await mineRes.text();
     expect(html).toContain('this is you');
     expect(html).toContain('href="https://letsmeet.lol/availability"');
   });

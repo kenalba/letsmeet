@@ -250,6 +250,9 @@ export function availabilityRoutes(
    */
   const friendView = async (c: Context, r: Found, opts: { address: boolean }) => {
     const who = await readSession(c, session, deps.now().getTime());
+    // The page carries the owner's edit link when the viewer is the owner, so no shared
+    // cache (a CDN, a proxy) may hold one viewer's copy and serve it to the next.
+    c.header('cache-control', 'private');
     return page(c, createElement(PublicAvailabilityPage, {
       handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
       sezAddress: opts.address ? sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined : undefined,

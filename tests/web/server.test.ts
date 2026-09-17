@@ -885,7 +885,7 @@ describe('request hardening', () => {
     expect(deps.db.prepare('SELECT COUNT(*) AS n FROM poll_cache').get()).toEqual({ n: 1 });
   });
 
-  it('blocks a cross-site POST while letting same-site and header-less ones through', async () => {
+  it('blocks cross-site and same-site POSTs while letting same-origin and header-less ones through', async () => {
     const { app, poll } = await setup();
     const post = (headers: Record<string, string>) => app.request(`/p/${poll.rkey}/respond`, {
       method: 'POST',
@@ -893,6 +893,9 @@ describe('request hardening', () => {
       body: JSON.stringify({ name: 'Sam', available: PAINT }),
     });
     expect((await post({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' })).status).toBe(403);
+    // A sibling host under the apex now carries the session cookie (Domain=<site>), so a
+    // write from one is not ours to trust either.
+    expect((await post({ 'sec-fetch-site': 'same-site', origin: 'http://evil.localhost:8787' })).status).toBe(403);
     // No Sec-Fetch-Site (an older browser): Origin decides, and `null` is foreign.
     expect((await post({ origin: 'https://evil.example' })).status).toBe(403);
     expect((await post({ origin: 'null' })).status).toBe(403);

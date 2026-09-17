@@ -323,9 +323,14 @@ them forever. nginx stays the front for this host like every other on the box.
   files that page loads, and 404s everything else — including any host with
   more than one label before `.sez.`, which no certificate covers anyway
   (`aliasHostOnly`, `src/web/server.ts`). The session cookie carries
-  `Domain=letsmeet.lol`, so every sez host receives it; the friend view uses
-  it for one thing, the owner's `this is you · edit` link, and the alias host
-  still routes nothing a session could act on. A name is resolved from the
+  `Domain=letsmeet.lol`, so **every** host under the apex receives it, not
+  only the sez hosts. Two things follow. The friend view uses it for one
+  thing, the owner's `this is you · edit` link, and the alias host still
+  routes nothing a session could act on. And nothing untrusted may ever
+  be hosted on any `letsmeet.lol` subdomain: a page there would receive
+  the cookie, could set cookies for the apex, and its requests read as
+  `same-site` to the app's cross-site guard (which for that reason
+  accepts writes from `same-origin` only). A name is resolved from the
   `sez_name` table first (claimed names, then
   hyphenated handles this server has decoded before), then by reading the
   label as a hyphenated handle and resolving each way of putting the dots back
@@ -491,6 +496,12 @@ Once that's confirmed:
     `https://<name>.sez.letsmeet.lol/` in a private window. Confirm the friend
     view answers there with the sentence from step 8, and that `/new` on that
     host is a 404.
+15. Still signed in on the apex (not a private window this time), open your
+    own `https://<name>.sez.letsmeet.lol/` and confirm the "this is you ·
+    edit" line shows, with its link landing on
+    `https://letsmeet.lol/availability`. That is the one thing no local test
+    can reach, because the e2e rig runs on `localhost`, where the cookie is
+    host-only.
 
 If any step fails, do not consider the deploy announcement-ready — fix
 forward and re-run the whole checklist from step 2, since OAuth, the outbox,

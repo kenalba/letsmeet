@@ -93,10 +93,47 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   const aliasHost = `${name}.sez.localhost:8787`;
   const alias = await page.request.get('/', { headers: { host: aliasHost } });
   expect(alias.status()).toBe(200);
-  expect(await alias.text()).toContain('usually free sundays 7am to 9am.');
+  const aliasText = await alias.text();
+  expect(aliasText).toContain('usually free sundays 7am to 9am.');
+  // The signed-in viewer is the owner, so the alias response offers the edit link too:
+  // `page.request` shares the browser context's cookie jar, so the session rides along.
+  expect(aliasText).toContain('this is you');
+  expect(aliasText).toContain('href="http://localhost:8787/availability"');
   const aliasIcs = await page.request.get('/availability.ics', { headers: { host: aliasHost } });
   expect(aliasIcs.headers()['content-type']).toContain('text/calendar');
   expect((await page.request.get('/new', { headers: { host: aliasHost } })).status()).toBe(404);
+
+  // Two scripted bits only chromium is asked to cover (the other projects already exercise
+  // the pages themselves above): copying the feed link, and the reach-out ping. Guarded on
+  // the project, not `test.skip`, which would skip the whole test on every project.
+  if (test.info().project.name === 'chromium') {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    // copy feed link: the button is hidden until the script reveals it.
+    const copyButton = page.locator('button[data-copy-url]');
+    await expect(copyButton).toBeVisible();
+    await copyButton.click();
+    await expect(copyButton).toHaveText('copied.');
+    const copiedFeedUrl = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copiedFeedUrl).toBe(`http://localhost:8787/u/${did}/availability.ics`);
+
+    // reach out: clicking a free hour opens the person's bluesky profile and copies a
+    // prefilled message in the same click, for one paste into their dms.
+    const firstFreeCell = page.locator('a.week-cell.free').first();
+    const pingMessage = await firstFreeCell.getAttribute('data-ping');
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.click('a.week-cell.free >> nth=0'),
+    ]);
+    expect(popup.url()).toMatch(/^https:\/\/bsky\.app\/profile\//);
+    // The rig may be offline for a real bsky.app fetch: close without waiting for it to load.
+    await popup.close();
+    await expect(page.locator('.week-ping')).toHaveText(
+      /^copied "hey, free sun [a-z]{3} \d{1,2} around 7am\? localhost:8787\/u\/did:plc:.*"\. paste it into their dms\.$/,
+    );
+    const pingClipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(pingClipboard).toBe(pingMessage);
+  }
 
   // A poll on the next Sunday, 7–9am UTC in 30-minute slots, hosted by someone else (hosts
   // never get the canvas): sign in as a second account to create it, then back as `did` to

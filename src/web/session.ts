@@ -18,7 +18,7 @@ export interface SessionEnv {
   domain: string | null;
 }
 
-/** The registrable host behind PUBLIC_URL, or null when a browser would not take it as Domain. */
+/** The public host behind PUBLIC_URL, or null when a browser would not take it as Domain. */
 export function cookieDomainFor(publicUrl: string): string | null {
   const host = new URL(publicUrl).hostname; // no port; an IPv6 literal keeps its brackets
   if (!host.includes('.') || host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return null;
