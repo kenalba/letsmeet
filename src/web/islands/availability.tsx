@@ -124,6 +124,13 @@ function Editor({ data }: { data: AvailabilityData }) {
   };
 
   const [away, setAway] = useState<AwayEntry[]>(data.away);
+  // What the server has been told about away, entry by entry, so a new one can say it is
+  // not up yet: "i'm away" only adds to this list, and the post button — a long page below
+  // — is what publishes. Compared as JSON: the editor builds entries in the same key order
+  // the record comes back in (start, end, startTime, endTime, note).
+  const [postedAway, setPostedAway] = useState<Set<string>>(
+    () => new Set(data.away.map((a) => JSON.stringify(a))));
+  const unposted = (a: AwayEntry) => !postedAway.has(JSON.stringify(a));
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
   const [alias, setAlias] = useState(data.alias);
@@ -243,6 +250,7 @@ function Editor({ data }: { data: AvailabilityData }) {
         { ok?: boolean; written?: boolean; error?: string };
       if (!res.ok) { setStatus(out.error ?? 'could not save.'); return; }
       setAliasSaved(alias);
+      setPostedAway(new Set(away.map((a) => JSON.stringify(a))));
       setSavedAt(snapshot(weekly, away, note, validUntil, zone, alias));
       setStatus(out.written ? 'availability posted.' : 'nothing changed.');
     } catch {
@@ -326,6 +334,7 @@ function Editor({ data }: { data: AvailabilityData }) {
               {a.startTime && a.endTime && ` · ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
             </span>
             {a.note && <span className="note"> {a.note}</span>}
+            {unposted(a) && <span className="unposted">not posted yet</span>}
             <button
               type="button"
               className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
@@ -335,6 +344,7 @@ function Editor({ data }: { data: AvailabilityData }) {
         ))}
         {away.length === 0 && <li className="hint">nothing yet. your usual week stands as-is.</li>}
       </ul>
+      {away.some(unposted) && <p className="hint away-hint">post availability below to publish these.</p>}
       <div className="away-form">
         <label>from <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></label>
         <label>to <input type="date" value={form.end} min={form.start} onChange={(e) => setForm({ ...form, end: e.target.value })} /></label>
@@ -377,13 +387,17 @@ function Editor({ data }: { data: AvailabilityData }) {
         />
       </label>
       <p className="note">this record is public, like your polls. anyone with your handle can read it.</p>
-      <button
-        type="button"
-        className={cn(buttonVariants({ variant: 'default' }), 'save')}
-        disabled={saving || !dirty || !aliasOk}
-        onClick={submit}
-      >post availability</button>
-      {status && <p className="status" role="status">{status}</p>}
+      {/* Sticky at the bottom of the viewport while the editor is on screen: the page is
+          long, and a change made at the top must not hide the one button that saves it. */}
+      <div className="save-bar">
+        <button
+          type="button"
+          className={cn(buttonVariants({ variant: 'default' }), 'save')}
+          disabled={saving || !dirty || !aliasOk}
+          onClick={submit}
+        >post availability</button>
+        {status && <p className="status" role="status">{status}</p>}
+      </div>
     </div>
   );
 }

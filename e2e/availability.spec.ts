@@ -49,11 +49,16 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await page.fill('#availability-root .away-form input[type=text]', 'out of town');
   await page.click('#availability-root button.add-away');
   await expect(page.locator('#availability-root .away li')).toContainText('out of town');
+  // Added, not posted: the entry says so until the post button below publishes it.
+  await expect(page.locator('#availability-root .away li .unposted')).toHaveText('not posted yet');
+  await expect(page.locator('#availability-root .away-hint')).toHaveText('post availability below to publish these.');
 
   // Timezone is what the grid was drawn in; the browser is pinned to UTC in the config.
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
   await page.click('#availability-root button.save');
   await expect(page.locator('#availability-root .status')).toHaveText('availability posted.');
+  await expect(page.locator('#availability-root .away li .unposted')).toHaveCount(0);
+  await expect(page.locator('#availability-root .away-hint')).toHaveCount(0);
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787`);
 

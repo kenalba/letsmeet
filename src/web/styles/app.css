@@ -557,7 +557,16 @@
     @media (hover: hover) {
       .cell[data-slot]:hover { outline: 2px solid var(--foreground); outline-offset: -2px; }
     }
-    .save { margin-top: 12px; }
+    .away .unposted { font-size: 12px; color: var(--muted-foreground); }
+    .away-hint { margin: 0 0 10px; }
+    /* The post button rides the bottom of the viewport while the editor is on screen. */
+    .save-bar {
+      position: sticky; bottom: 0; z-index: 1;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+      margin-top: 12px; padding: 10px 0;
+      background: var(--card); border-top: 1px solid var(--border);
+    }
+    .save-bar .status { margin: 0; }
   }
 }
 
