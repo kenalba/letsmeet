@@ -84,7 +84,7 @@ export function pollRoutes(
     const liveTheirs = theirs.filter(live);
     const archived = (mine.length - liveMine.length) + (theirs.length - liveTheirs.length);
     let availability: {
-      sentence: string; stale: boolean; handle?: string; address?: { host: string; href: string };
+      sentence: string; stale: boolean; address?: { host: string; href: string };
     } | null | undefined;
     if (did) {
       try {
@@ -92,7 +92,7 @@ export function pollRoutes(
         const host = sezAddressFor(deps, did, who?.handle, env.PUBLIC_URL);
         availability = rec
           ? {
-            sentence: describeWeekly(rec.weekly), stale: isStale(rec, deps.now()), handle: who?.handle ?? undefined,
+            sentence: describeWeekly(rec.weekly), stale: isStale(rec, deps.now()),
             ...(host ? { address: { host, href: `${new URL(env.PUBLIC_URL).protocol}//${host}` } } : {}),
           }
           : null;

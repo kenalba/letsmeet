@@ -93,8 +93,11 @@ export function LandingPage({ did, handle, polls = [], answered = [], archived =
   archived?: number;
   /** The viewer's standing availability: a sentence, or `null` for no record. Absent when signed out. */
   availability?: {
-    sentence: string; stale: boolean; handle?: string;
-    /** `ken.sez.letsmeet.lol` and the link to it: the share address, beside "your public page". */
+    sentence: string; stale: boolean;
+    /**
+     * `ken.sez.letsmeet.lol` and the link to it: the one public link. The apex `/u/<handle>`
+     * form is the same page, so it is not repeated here; the editor still names both.
+     */
     address?: { host: string; href: string };
   } | null;
 }) {
@@ -186,9 +189,6 @@ export function LandingPage({ did, handle, polls = [], answered = [], archived =
                 <a href="/availability" className="text-primary underline underline-offset-4">
                   {availability ? 'update' : 'mark your week'}
                 </a>
-                {availability?.handle && (
-                  <>{' '}· <a href={`/u/${availability.handle}`} className="text-primary underline underline-offset-4">your public page</a></>
-                )}
                 {availability?.address && (
                   <>{' '}· <a href={availability.address.href} className="text-primary underline underline-offset-4">{availability.address.host}</a></>
                 )}

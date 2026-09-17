@@ -124,7 +124,10 @@ describe('server', () => {
     });
     html = await (await dev.request('/', { headers: { cookie } })).text();
     expect(html).toContain('usually free mondays 9am to 12pm.');
-    expect(html).toContain('href="/u/host.test"');
+    // One public link, the sez address; the apex form of the same page is not repeated.
+    expect(html).toContain('href="http://host-test.sez.localhost:8787"');
+    expect(html).not.toContain('your public page');
+    expect(html).not.toContain('href="/u/host.test"');
   });
 
   it('links the availability block to the sez address: the hyphenated handle, then the claimed name', async () => {
@@ -138,7 +141,7 @@ describe('server', () => {
     let html = await (await dev.request('/', { headers: { cookie } })).text();
     expect(html).toContain('href="http://host-test.sez.localhost:8787"');
     expect(html).toContain('>host-test.sez.localhost:8787<');
-    expect(html).toContain('href="/u/host.test"'); // the apex link stays beside the address
+    expect(html).not.toContain('href="/u/host.test"'); // the same page twice was noise
     await saveAvailability(deps, HOST, { timezone: 'UTC', weekly: [], away: [], alias: 'host' });
     html = await (await dev.request('/', { headers: { cookie } })).text();
     expect(html).toContain('href="http://host.sez.localhost:8787"');
