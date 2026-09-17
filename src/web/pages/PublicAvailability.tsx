@@ -19,6 +19,8 @@ export interface PublicAvailabilityData {
   sezAddress?: string;
   /** Which week the grid shows; `later` is the poll prompt. From `?week=`. */
   week?: WeekChoice;
+  /** The viewer is this person: offer the way back to the editor. */
+  own?: boolean;
 }
 
 const fmtDate = (d: string) => new Date(d + 'T12:00:00Z')
@@ -129,6 +131,12 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
           <h1 className="pixel-heading">{data.handle}</h1>
           {/* `select-all`: one click selects the whole address, the thing worth copying. */}
           {data.sezAddress && <p className="pixel-label text-muted-foreground select-all">{data.sezAddress}</p>}
+          {data.own && (
+            <p className="pixel-label text-muted-foreground">
+              {/* Absolute: on the alias host `/availability` answers nothing. */}
+              this is you · <a href={`${base}/availability`} className="text-primary underline underline-offset-4">edit</a>
+            </p>
+          )}
           {rec && !unreadable && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
         </div>
         {!rec ? (

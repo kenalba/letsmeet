@@ -35,8 +35,14 @@ function setup(
     resolveHandle: resolveHandle
       ?? (resolveDid ? async (d) => (d === KEN ? 'ken.wzrdz.cool' : null) : undefined),
   };
-  const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: publicUrl });
+  const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: publicUrl, devLogin: true });
   return { app, deps, repo };
+}
+
+/** Sign in through the dev route; the live cookie, not the host-only clear a domain sign-in also emits. */
+async function signIn(app: ReturnType<typeof setup>['app'], did: string): Promise<string> {
+  const res = await app.request(`/dev/login?did=${encodeURIComponent(did)}&handle=ken.wzrdz.cool`);
+  return res.headers.getSetCookie().find((s) => s.startsWith('sid=') && !s.startsWith('sid=;'))!.split(';')[0];
 }
 
 describe('/u/:handle', () => {
@@ -117,6 +123,18 @@ describe('/u/:handle', () => {
     expect(body).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU');
     expect(body).toContain('SUMMARY:@did:plc:ken away · out of town');
     expect((await app.request('/u/did:plc:nobody/availability.ics')).status).toBe(404);
+  });
+  it('offers the owner an edit link, and nobody else', async () => {
+    const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    const guest = await (await app.request('/u/ken.wzrdz.cool')).text();
+    expect(guest).not.toContain('this is you');
+    const other = await signIn(app, 'did:plc:other');
+    expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('this is you');
+    const mine = await signIn(app, KEN);
+    const html = await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: mine } })).text();
+    expect(html).toContain('this is you');
+    expect(html).toContain('href="https://letsmeet.lol/availability"');
   });
 });
 
@@ -390,5 +408,16 @@ describe('<name>.sez.letsmeet.lol', () => {
     const later = await (await app.request('/?week=later', host('ken.sez.letsmeet.lol'))).text();
     expect(later).toContain('make a poll with ken.wzrdz.cool');
     expect(later).toContain('href="https://letsmeet.lol/new"');
+  });
+  it('offers the owner the edit link on their own sez page, pointing at the apex', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    // The browser sends the Domain=letsmeet.lol cookie to ken.sez.letsmeet.lol; here it is
+    // the header that arrives with it.
+    const cookie = await signIn(app, KEN);
+    const html = await (await app.request('/', { headers: { host: 'ken.sez.letsmeet.lol', cookie } })).text();
+    expect(html).toContain('this is you');
+    expect(html).toContain('href="https://letsmeet.lol/availability"');
   });
 });

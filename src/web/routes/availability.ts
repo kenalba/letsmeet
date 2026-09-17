@@ -245,13 +245,18 @@ export function availabilityRoutes(
   /**
    * The friend view. Shared by `/u/:handle` and the `<name>.sez.<site>` alias; the address
    * line is for the apex page only — on the alias host the address bar already shows it.
+   * The session is read for one thing: whether the viewer is the person on the page, who
+   * gets a link back to the editor.
    */
-  const friendView = (c: Context, r: Found, opts: { address: boolean }) =>
-    page(c, createElement(PublicAvailabilityPage, {
+  const friendView = async (c: Context, r: Found, opts: { address: boolean }) => {
+    const who = await readSession(c, session, deps.now().getTime());
+    return page(c, createElement(PublicAvailabilityPage, {
       handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
       sezAddress: opts.address ? sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined : undefined,
       week: weekChoice(c.req.query('week')),
+      own: who?.did === r.did,
     }));
+  };
 
   /** The ICS feed. Shared by `/u/:handle/availability.ics` and the alias. */
   const feed = (c: Context, r: Found) => {
