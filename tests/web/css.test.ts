@@ -96,6 +96,10 @@ describe('built app.css', () => {
     expect(Object.keys(tokens(media![1])).length).toBeGreaterThan(10);
   });
 
+  it('emits the select-all utility the address line uses', () => {
+    expect(css).toMatch(/\.select-all\{[^}]*user-select:all/);
+  });
+
   it('compiles the dark: variant to honour data-theme in both directions', () => {
     // `dark:bg-input/30` is what the outline buttons (including the theme toggle itself)
     // use, so it is the canonical check that the @custom-variant override took.

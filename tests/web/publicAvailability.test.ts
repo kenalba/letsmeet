@@ -356,6 +356,17 @@ describe('<name>.sez.letsmeet.lol', () => {
     html = await (await app.request('/u/ken.wzrdz.cool')).text();
     expect(html).toContain('ken.sez.letsmeet.lol');
     expect(html).not.toContain('ken-wzrdz-cool.sez');
+    // One click selects the whole address.
+    expect(html).toContain('<p class="pixel-label text-muted-foreground select-all">ken.sez.letsmeet.lol</p>');
+  });
+  it('leaves the address off the alias host, where the address bar already shows it', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    const html = await (await app.request('/', host('ken.sez.letsmeet.lol'))).text();
+    expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
+    expect(html).not.toContain('>ken.sez.letsmeet.lol<');
+    expect(html).not.toContain('select-all');
   });
   it('turns the week on the alias host too, with the poll button pointing at the apex', async () => {
     const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');

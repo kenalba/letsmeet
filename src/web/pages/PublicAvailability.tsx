@@ -109,7 +109,8 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       <div className="grid gap-6">
         <div className="grid gap-1">
           <h1 className="pixel-heading">{data.handle}</h1>
-          {data.sezAddress && <p className="pixel-label text-muted-foreground">{data.sezAddress}</p>}
+          {/* `select-all`: one click selects the whole address, the thing worth copying. */}
+          {data.sezAddress && <p className="pixel-label text-muted-foreground select-all">{data.sezAddress}</p>}
           {rec && !unreadable && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
         </div>
         {!rec ? (

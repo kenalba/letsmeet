@@ -244,12 +244,16 @@ export function availabilityRoutes(
     return read(c, handle, did);
   };
 
-  /** The friend view. Shared by `/u/:handle` and the `<name>.sez.<site>` alias. */
-  const friendView = (c: Context, r: Found) => page(c, createElement(PublicAvailabilityPage, {
-    handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
-    sezAddress: sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined,
-    week: weekChoice(c.req.query('week')),
-  }));
+  /**
+   * The friend view. Shared by `/u/:handle` and the `<name>.sez.<site>` alias; the address
+   * line is for the apex page only — on the alias host the address bar already shows it.
+   */
+  const friendView = (c: Context, r: Found, opts: { address: boolean }) =>
+    page(c, createElement(PublicAvailabilityPage, {
+      handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
+      sezAddress: opts.address ? sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined : undefined,
+      week: weekChoice(c.req.query('week')),
+    }));
 
   /** The ICS feed. Shared by `/u/:handle/availability.ics` and the alias. */
   const feed = (c: Context, r: Found) => {
@@ -267,7 +271,7 @@ export function availabilityRoutes(
 
   app.get('/u/:handle', async (c) => {
     const r = await lookupHandle(c, c.req.param('handle'));
-    return 'deny' in r ? r.deny : friendView(c, r);
+    return 'deny' in r ? r.deny : friendView(c, r, { address: true });
   });
   app.get('/u/:handle/availability.ics', async (c) => {
     const r = await lookupHandle(c, c.req.param('handle'));
@@ -284,7 +288,7 @@ export function availabilityRoutes(
     const label = aliasLabelOf(c.req.header('host'), aliasSuffix);
     if (!label) return next();
     const r = await lookupLabel(c, label);
-    return 'deny' in r ? r.deny : friendView(c, r);
+    return 'deny' in r ? r.deny : friendView(c, r, { address: false });
   });
   app.get('/availability.ics', async (c, next) => {
     const label = aliasLabelOf(c.req.header('host'), aliasSuffix);
