@@ -100,7 +100,13 @@ export function buildWeekView(rec: AvailabilityInput, now: Date, offset: 0 | 1):
     const allDay = covering.find((a) => !(a.startTime && a.endTime));
     const timed = covering
       .filter((a) => a.startTime && a.endTime)
-      .map((a) => ({ s: minutes(a.startTime!), e: minutes(a.endTime!), note: a.note }));
+      .map((a) => {
+        const s = minutes(a.startTime!);
+        const e = minutes(a.endTime!);
+        // As localWindow reads it: an end at or before the start rolls past midnight, so the
+        // window covers the rest of the day here. Equal times cut the whole rest of the day.
+        return { s, e: e <= s ? 1440 : e, note: a.note };
+      });
     const covers = (from: number, to: number) => blocks.some(([s, e]) => s <= from && e >= to);
     const away = (note: string | undefined): WeekCell => (note ? { state: 'away', note } : { state: 'away' });
     const cells: WeekCell[] = HOURS.map((h) => {

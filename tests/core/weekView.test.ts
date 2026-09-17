@@ -93,6 +93,23 @@ describe('buildWeekView', () => {
     expect(v.days[4].awayAllDay).toBe('');
     expect(cell(v, 4, 9).state).toBe('away');
   });
+  it('a foreign timed window that ends at or before it starts cuts the rest of the day, as freeIntervals does', () => {
+    const v = buildWeekView({
+      ...base,
+      weekly: [{ day: 4, start: '17:00', end: '23:00' }],
+      away: [
+        { start: '2026-09-17', end: '2026-09-17', startTime: '18:00', endTime: '09:00', note: 'overnight' },
+        { start: '2026-09-18', end: '2026-09-18', startTime: '09:00', endTime: '09:00' },
+      ],
+    }, NOW, 0);
+    expect(cell(v, 3, 17).state).toBe('free');
+    expect(cell(v, 3, 18)).toEqual({ state: 'away', note: 'overnight' });
+    expect(cell(v, 3, 23).state).toBe('away');
+    expect(cell(v, 4, 9).state).toBe('away');
+    expect(cell(v, 4, 23).state).toBe('away');
+    expect(cell(v, 4, 8).state).toBe('none');
+    expect(v.hasAway).toBe(true);
+  });
   it('lists away entries that start after next week as later, sorted, dropping ones already over', () => {
     const away = [
       { start: '2026-09-01', end: '2026-09-02' },
