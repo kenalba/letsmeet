@@ -6,7 +6,9 @@ import {
 import { normalizeAvailability, prefillFromAvailability, sanitizeForeignRecord } from '../core/availability.js';
 import type { Interval } from '../core/intervals.js';
 import { getAvailabilityCache, upsertAvailabilityCache } from '../db/availabilityCache.js';
+import { claimedSezNameFor } from '../db/sezNames.js';
 import { freshnessFor } from './freshness.js';
+import { applySezClaim, undoSezClaim } from './sezNames.js';
 
 /**
  * Live read of a DID's own record; the cache is refreshed as a side effect. This is the one
@@ -53,6 +55,11 @@ const sameButForStamp = (a: AvailabilityRecord, b: AvailabilityRecord): boolean 
 /**
  * Normalize what the editor posted, then put it at rkey `self` — unless the live record
  * already says exactly this, in which case nothing is written (no churn, no new CID).
+ *
+ * The name goes first, into the table, where "taken" and "reserved" are decided; then the
+ * record. A PDS write that fails afterwards puts the table back. (No transaction can span
+ * the two: a better-sqlite3 transaction is synchronous and cannot stay open across an
+ * await.) `written` says whether either of them changed.
  */
 export async function saveAvailability(
   deps: Deps, did: string, input: unknown,
@@ -60,10 +67,19 @@ export async function saveAvailability(
   const normalized = normalizeAvailability(input);
   const record = buildAvailabilityRecord(normalized, deps.now());
   const live = await readLive(deps, did);
-  if (live && sameButForStamp(live, record)) return { record: live, written: false };
-  const writer = await deps.writerFor(did);
-  const ref = await writer.putRecord(did, AVAILABILITY_NSID, AVAILABILITY_RKEY, record);
-  upsertAvailabilityCache(deps.db, did, { uri: ref.uri, cid: ref.cid, record });
+  const previous = claimedSezNameFor(deps.db, did);
+  const wanted = record.alias ?? null;
+  const renamed = wanted !== previous;
+  if (renamed) await applySezClaim(deps, did, wanted);
+  if (live && sameButForStamp(live, record)) return { record: live, written: renamed };
+  try {
+    const writer = await deps.writerFor(did);
+    const ref = await writer.putRecord(did, AVAILABILITY_NSID, AVAILABILITY_RKEY, record);
+    upsertAvailabilityCache(deps.db, did, { uri: ref.uri, cid: ref.cid, record });
+  } catch (err) {
+    if (renamed) undoSezClaim(deps, did, previous);
+    throw err;
+  }
   freshnessFor(deps).mark(`avail:${did}`, deps.now().getTime());
   return { record, written: true };
 }

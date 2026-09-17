@@ -6,7 +6,8 @@ import {
 } from '../../src/services/availability.js';
 import { AVAILABILITY_NSID, AVAILABILITY_RKEY } from '../../src/atproto/records.js';
 import { materializeSlots } from '../../src/core/slots.js';
-import type { Deps } from '../../src/atproto/types.js';
+import { claimSezName, claimedSezNameFor, getSezName } from '../../src/db/sezNames.js';
+import type { Deps, RepoWriter } from '../../src/atproto/types.js';
 
 const DID = 'did:plc:ken';
 const input = {
@@ -170,5 +171,68 @@ describe('prefillForPoll', () => {
       // cache exists, so the read degrades to the cached (stale) record → still null
       expect(await prefillForPoll(deps, DID, slots)).toBeNull();
     } finally { warned.mockRestore(); }
+  });
+});
+
+describe('saveAvailability claims a sez name', () => {
+  it('writes the alias into the record and the name into the table', async () => {
+    const { deps, repo } = setup();
+    const { record, written } = await saveAvailability(deps, DID, { ...input, alias: ' Ken ' });
+    expect(written).toBe(true);
+    expect(record.alias).toBe('ken');
+    expect(claimedSezNameFor(deps.db, DID)).toBe('ken');
+    const stored = await repo.getRecord(DID, AVAILABILITY_NSID, AVAILABILITY_RKEY);
+    expect((stored?.value as { alias?: string }).alias).toBe('ken');
+  });
+  it('refuses a taken or reserved name before touching the record', async () => {
+    const { deps, repo } = setup();
+    claimSezName(deps.db, 'ken', 'did:plc:ross', 0);
+    const put = vi.spyOn(repo, 'putRecord');
+    await expect(saveAvailability(deps, DID, { ...input, alias: 'ken' })).rejects.toThrow('that name is taken.');
+    await expect(saveAvailability(deps, DID, { ...input, alias: 'www' })).rejects.toThrow('that name is reserved.');
+    expect(put).not.toHaveBeenCalled();
+    expect(claimedSezNameFor(deps.db, DID)).toBeNull();
+  });
+  it('releases the name when the alias comes back empty', async () => {
+    const { deps } = setup();
+    await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    const { record } = await saveAvailability(deps, DID, { ...input, alias: '' });
+    expect(record).not.toHaveProperty('alias');
+    expect(claimedSezNameFor(deps.db, DID)).toBeNull();
+    expect(getSezName(deps.db, 'ken')).toBeNull();
+  });
+  it('does not rewrite an unchanged record with an unchanged name', async () => {
+    const { deps, repo } = setup();
+    await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    const put = vi.spyOn(repo, 'putRecord');
+    const { written } = await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    expect(written).toBe(false);
+    expect(put).not.toHaveBeenCalled();
+  });
+  it('re-claims from the record when the table has lost the name, and says something was written', async () => {
+    const { deps, repo } = setup();
+    await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    deps.db.prepare('DELETE FROM sez_name').run();
+    const put = vi.spyOn(repo, 'putRecord');
+    const { written } = await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    expect(written).toBe(true);
+    expect(put).not.toHaveBeenCalled();
+    expect(claimedSezNameFor(deps.db, DID)).toBe('ken');
+  });
+  it('puts the table back when the pds refuses the write', async () => {
+    const { deps, repo } = setup();
+    await saveAvailability(deps, DID, { ...input, alias: 'ken' });
+    const writer: RepoWriter = {
+      createRecord: async () => { throw new Error('not used'); },
+      deleteRecord: async () => { throw new Error('not used'); },
+      putRecord: async () => { throw new Error('pds says no'); },
+    };
+    deps.writerFor = async () => writer;
+    await expect(saveAvailability(deps, DID, { ...input, alias: 'kenny' })).rejects.toThrow(/pds says no/);
+    expect(claimedSezNameFor(deps.db, DID)).toBe('ken');
+    expect(getSezName(deps.db, 'kenny')).toBeNull();
+    // ...and a first claim that fails leaves no claim at all.
+    await expect(saveAvailability(deps, 'did:plc:new', { ...input, alias: 'newbie' })).rejects.toThrow(/pds says no/);
+    expect(claimedSezNameFor(deps.db, 'did:plc:new')).toBeNull();
   });
 });
