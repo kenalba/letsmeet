@@ -1,13 +1,15 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import {
-  buildWeekView, dateRangeLabel, hourLabel, localToday, HOURS, type WeekChoice, type WeekView,
+  buildWeekView, dateRangeLabel, hourLabel, localToday, monthDayLabel, HOURS,
+  type WeekCell, type WeekChoice, type WeekDay, type WeekView,
 } from '../../core/weekView.js';
 import { cn } from '../lib/cn.js';
 import { buttonVariants } from '../ui/button.js';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { useNonce } from '../nonce.js';
 import { COPY_LINK_SCRIPT } from './copyLink.js';
+import { REACH_OUT_SCRIPT } from './reachOut.js';
 import { Layout, pageTitle } from './Layout.js';
 
 export interface PublicAvailabilityData {
@@ -39,14 +41,17 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
 }
 
 /**
- * Days across, hours down. Server-rendered; no script. Each hour is a `.week-row`
- * (`display: contents`, so the cells still sit in the grid) and every head and cell
- * carries its column index in `data-c`: that is all the hover rules in app.css need to
- * light the hovered cell's hour label and day header without a line of JavaScript.
+ * Days across, hours down. Server-rendered; the only script is the reach-out one. Each hour
+ * is a `.week-row` (`display: contents`, so the cells still sit in the grid) and every head
+ * and cell carries its column index in `data-c`: that is all the hover rules in app.css
+ * need to light the hovered cell's hour label and day header. A free hour still ahead is a
+ * link to the person's Bluesky profile carrying the message to copy; everything else is
+ * an inert div.
  */
-function WeekGrid({ view }: { view: WeekView }) {
+function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site: string }) {
+  const profile = `https://bsky.app/profile/${handle}`;
   return (
-    <div className="week" aria-label={`usual week, ${view.title}`} role="img">
+    <div className="week" aria-label={`usual week, ${view.title}`} role="group">
       <div className="week-corner" />
       {view.days.map((d, ci) => (
         <div
@@ -64,12 +69,24 @@ function WeekGrid({ view }: { view: WeekView }) {
           <div className="week-axis">{hourLabel(h)}</div>
           {view.days.map((d, ci) => {
             const c = d.cells[hi];
-            return (
+            const title = `${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`;
+            return isReachable(d, c) ? (
+              <a
+                key={`${d.date}-${h}`}
+                className={cn('week-cell', c.state)}
+                data-c={ci}
+                href={profile}
+                target="_blank"
+                rel="noopener"
+                data-ping={`hey, free ${d.dow} ${monthDayLabel(d.date)} around ${hourLabel(h)}? ${site}/u/${handle}`}
+                title={`${title} · click to message them`}
+              />
+            ) : (
               <div
                 key={`${d.date}-${h}`}
                 className={cn('week-cell', c.state, d.past && 'past')}
                 data-c={ci}
-                title={`${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`}
+                title={title}
               />
             );
           })}
@@ -78,6 +95,10 @@ function WeekGrid({ view }: { view: WeekView }) {
     </div>
   );
 }
+
+/** A free (or half-free) hour on a day that is not over: worth a message. */
+const isReachable = (d: WeekDay, c: WeekCell) =>
+  !d.past && (c.state === 'free' || c.state === 'early' || c.state === 'late');
 
 export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   const path = `/u/${data.handle}`;
@@ -94,6 +115,8 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
     ? buildWeekView(rec, data.now, week === 'next' ? 1 : 0) : null;
   const later = rec && !unreadable && !stale
     ? buildWeekView(rec, data.now, 0).later : [];
+  const site = base.replace(/^https?:\/\//, '');
+  const reachable = !!view && view.days.some((d) => d.cells.some((c) => isReachable(d, c)));
   const awayLaterCaption = later.length > 0 ? (
     <p className="week-caption text-sm text-muted-foreground">
       {`away later: ${later.map((a) => `${dateRangeLabel(a.start, a.end)}${a.note ? ` · ${a.note}` : ''}`).join(', ')}`}
@@ -204,13 +227,17 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               </CardAction>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <WeekGrid view={view!} />
+              <WeekGrid view={view!} handle={data.handle} site={site} />
               {view!.hasAway && (
                 <div className="week-legend">
                   <span><i className="free" />free</span>
                   <span><i className="away" />away</span>
                 </div>
               )}
+              {reachable && (
+                <p className="week-caption text-sm text-muted-foreground">click a free hour to message them on bluesky.</p>
+              )}
+              <p className="week-ping week-caption text-sm text-primary" aria-live="polite" />
               {/* One template literal per caption: React's renderToString puts <!-- -->
                   between adjacent text children, which would split a plain-text match. */}
               <p className="week-caption text-sm text-muted-foreground">{`${describeWeekly(rec.weekly)}${freshness(rec, data.now)}`}</p>
@@ -221,6 +248,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
           </Card>
         )}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
+        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: REACH_OUT_SCRIPT }} />
       </div>
     </Layout>
   );

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildWeekView, mondayOf, localToday, weekTitle, dateRangeLabel, hourLabel, weekChoice, awayLater,
-  HOURS, type WeekView,
+  monthDayLabel, HOURS, type WeekView,
 } from '../../src/core/weekView.js';
 
 const TZ = 'America/New_York';
@@ -147,5 +147,12 @@ describe('labels', () => {
     expect(weekChoice('next')).toBe('next');
     expect(weekChoice('later')).toBe('later');
     expect(weekChoice('2026-09-21')).toBe('this');
+  });
+});
+
+describe('monthDayLabel', () => {
+  it('is the lowercase month and day', () => {
+    expect(monthDayLabel('2026-09-17')).toBe('sep 17');
+    expect(monthDayLabel('2026-10-03')).toBe('oct 3');
   });
 });

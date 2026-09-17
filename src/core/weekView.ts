@@ -44,7 +44,10 @@ export interface WeekView {
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const iso = (date: string) => DateTime.fromISO(date, { locale: 'en-US' });
 const plusDays = (date: string, n: number) => iso(date).plus({ days: n }).toISODate()!;
-const monthDay = (date: string) => iso(date).toFormat('LLL d').toLowerCase();
+/** 'sep 17'. Lowercase, like the rest of the grid chrome. */
+export function monthDayLabel(date: string): string {
+  return iso(date).toFormat('LLL d').toLowerCase();
+}
 const minutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 /** Today's date where the record's clocks are. */
@@ -60,12 +63,12 @@ export function mondayOf(date: string): string {
 
 /** 'oct 3 – 5', 'oct 30 – nov 2', 'oct 20'. Lowercase, like the rest of the grid chrome. */
 export function dateRangeLabel(start: string, end: string): string {
-  if (start === end) return monthDay(start);
+  if (start === end) return monthDayLabel(start);
   const a = iso(start);
   const b = iso(end);
   return a.year === b.year && a.month === b.month
-    ? `${monthDay(start)} – ${b.day}`
-    : `${monthDay(start)} – ${monthDay(end)}`;
+    ? `${monthDayLabel(start)} – ${b.day}`
+    : `${monthDayLabel(start)} – ${monthDayLabel(end)}`;
 }
 export function weekTitle(monday: string, sunday: string): string {
   return dateRangeLabel(monday, sunday);

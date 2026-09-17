@@ -232,6 +232,25 @@ describe('the week grid', () => {
     expect(html.match(/class="week-cell[^"]*" data-c="0"/g)?.length).toBe(17);
     expect(html.match(/class="week-cell/g)?.length).toBe(7 * 17);
   });
+  it('links each free hour that is still ahead to their bluesky profile with a message to copy', () => {
+    const html = render();
+    // Now is Wed 16 Sep: Tuesday's three free hours are past and stay inert, Thursday's link.
+    expect(html.match(/<a class="week-cell free/g)?.length).toBe(3);
+    expect(html.match(/<div class="week-cell free/g)?.length).toBe(3);
+    expect(html).toContain('href="https://bsky.app/profile/ken.wzrdz.cool" target="_blank" rel="noopener"');
+    expect(html).toContain('data-ping="hey, free thu sep 17 around 7pm? letsmeet.lol/u/ken.wzrdz.cool"');
+    expect(html).toContain('title="thu 17 7pm · click to message them"');
+    expect(html).toContain('click a free hour to message them on bluesky.');
+    expect(html).toContain('class="week-ping');
+    expect(html).toContain("a[data-ping]"); // the reach-out script shipped with the page
+    expect(html).toContain('role="group"');
+    expect(html).not.toContain('role="img"');
+  });
+  it('links nothing, and says nothing about it, when the week has no free hour ahead', () => {
+    const html = render({ record: { ...rec, weekly: [{ day: 1, start: '19:00', end: '22:00' }] } }); // Mondays only: past
+    expect(html).not.toContain('<a class="week-cell');
+    expect(html).not.toContain('click a free hour');
+  });
 });
 
 describe('a record only the lexicon has ever seen', () => {
