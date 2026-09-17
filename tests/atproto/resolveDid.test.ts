@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveDid, cachedResolveDid } from '../../src/atproto/pds.js';
+import { resolveDid, cachedResolveDid, cachedResolveHandle } from '../../src/atproto/pds.js';
 import type { LookupFn } from '../../src/atproto/safeUrl.js';
 
 // Matches the LookupFn contract in safeUrl.ts (address + family), not a bare address list —
@@ -48,6 +48,35 @@ describe('resolveDid', () => {
     const r = cachedResolveDid(inner);
     await expect(r('a.b')).rejects.toThrow(/resolver down/);
     expect(await r('a.b')).toBe('did:plc:a');
+    expect(inner).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cachedResolveHandle', () => {
+  it('serves a handle from the memo, keyed by the did exactly as given', async () => {
+    const inner = vi.fn(async () => 'ken.wzrdz.cool');
+    const r = cachedResolveHandle(inner);
+    expect(await r('did:web:Ken.Example')).toBe('ken.wzrdz.cool');
+    expect(await r('did:web:Ken.Example')).toBe('ken.wzrdz.cool');
+    expect(inner).toHaveBeenCalledWith('did:web:Ken.Example');
+    expect(inner).toHaveBeenCalledTimes(1);
+  });
+  it('does not memoize a null, which may be a read that failed rather than a handleless did', async () => {
+    const inner = vi.fn(async () => null);
+    const r = cachedResolveHandle(inner);
+    expect(await r('did:plc:ken')).toBeNull();
+    expect(await r('did:plc:ken')).toBeNull();
+    expect(inner).toHaveBeenCalledTimes(2);
+  });
+  it('does not memoize a throw', async () => {
+    let calls = 0;
+    const inner = vi.fn(async () => {
+      if (++calls === 1) throw new Error('plc down');
+      return 'ken.wzrdz.cool';
+    });
+    const r = cachedResolveHandle(inner);
+    await expect(r('did:plc:ken')).rejects.toThrow(/plc down/);
+    expect(await r('did:plc:ken')).toBe('ken.wzrdz.cool');
     expect(inner).toHaveBeenCalledTimes(2);
   });
 });

@@ -111,28 +111,58 @@ export async function resolveDid(handle: string, opts: NetOpts = {}): Promise<st
   return typeof body.did === 'string' && body.did.startsWith('did:') ? body.did : null;
 }
 
+type Resolver = (input: string) => Promise<string | null>;
+
 /**
- * Handles are attacker-influenced keys, so the memo is capped and evicts oldest-first. Only
- * answers are memoized: a throw from `inner` propagates before anything is written, so a
- * transport failure is retried on the next request rather than remembered for the TTL.
+ * A memo in front of a resolver. Its keys are attacker-influenced, so it is capped and
+ * evicts oldest-first. A throw from `inner` propagates before anything is written, so a
+ * transport failure is retried on the next request rather than remembered for the TTL;
+ * `remember` decides which answers are worth keeping at all.
  */
-export function cachedResolveDid(
-  inner: (handle: string) => Promise<string | null>, ttlMs = 60 * 60_000, max = 5_000,
-): (handle: string) => Promise<string | null> {
-  const memo = new Map<string, { did: string | null; at: number }>();
-  return async (handle) => {
-    const key = handle.toLowerCase();
+function memoized(
+  inner: Resolver,
+  { ttlMs, max, keyOf, remember }: {
+    ttlMs: number;
+    max: number;
+    keyOf: (s: string) => string;
+    remember: (v: string | null) => boolean;
+  },
+): Resolver {
+  const memo = new Map<string, { value: string | null; at: number }>();
+  return async (input) => {
+    const key = keyOf(input);
     const hit = memo.get(key);
     const now = Date.now();
-    if (hit && now - hit.at < ttlMs) return hit.did;
-    const did = await inner(key);
+    if (hit && now - hit.at < ttlMs) return hit.value;
+    const value = await inner(key);
+    if (!remember(value)) return value;
     if (memo.size >= max && !memo.has(key)) {
       const oldest = memo.keys().next().value;
       if (oldest !== undefined) memo.delete(oldest);
     }
-    memo.set(key, { did, at: now });
-    return did;
+    memo.set(key, { value, at: now });
+    return value;
   };
+}
+
+/** Handles are case-insensitive, and "nobody" is a real answer worth remembering. */
+export function cachedResolveDid(
+  inner: Resolver, ttlMs = 60 * 60_000, max = 5_000,
+): Resolver {
+  return memoized(inner, { ttlMs, max, keyOf: (handle) => handle.toLowerCase(), remember: () => true });
+}
+
+/**
+ * The declared handle for a DID, memoized — the alias host asks for one on every read.
+ * Unlike `resolveDid`, null here is not an answer: `resolveHandle` returns it for a DID
+ * with no handle *and* for a document it could not read, and a memoized null would pin the
+ * alias host's 503 for the whole TTL. Only a handle is kept. DIDs are case-sensitive, so
+ * the key is the DID verbatim.
+ */
+export function cachedResolveHandle(
+  inner: Resolver, ttlMs = 60 * 60_000, max = 5_000,
+): Resolver {
+  return memoized(inner, { ttlMs, max, keyOf: (did) => did, remember: (v) => v !== null });
 }
 
 /** Unauthenticated reads straight from each participant's PDS. No firehose, no appview. */
