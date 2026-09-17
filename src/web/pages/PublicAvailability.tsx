@@ -9,7 +9,6 @@ import { buttonVariants } from '../ui/button.js';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
 import { useNonce } from '../nonce.js';
 import { COPY_LINK_SCRIPT } from './copyLink.js';
-import { REACH_OUT_SCRIPT } from './reachOut.js';
 import { Layout, pageTitle } from './Layout.js';
 
 export interface PublicAvailabilityData {
@@ -41,15 +40,15 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
 }
 
 /**
- * Days across, hours down. Server-rendered; the only script is the reach-out one. Each hour
- * is a `.week-row` (`display: contents`, so the cells still sit in the grid) and every head
- * and cell carries its column index in `data-c`: that is all the hover rules in app.css
- * need to light the hovered cell's hour label and day header. A free hour still ahead is a
- * link to the person's Bluesky profile carrying the message to copy; everything else is
- * an inert div.
+ * Days across, hours down. Server-rendered, no script. Each hour is a `.week-row`
+ * (`display: contents`, so the cells still sit in the grid) and every head and cell carries
+ * its column index in `data-c`: that is all the hover rules in app.css need to light the
+ * hovered cell's hour label and day header. A free hour still ahead is a link to Bluesky's
+ * compose intent with a public post at the person already written — the one hand-off
+ * Bluesky offers without a chat scope (there is no DM intent). Everything else is an inert
+ * div.
  */
 function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site: string }) {
-  const profile = `https://bsky.app/profile/${handle}`;
   return (
     <div className="week" aria-label={`usual week, ${view.title}`} role="group">
       <div className="week-corner" />
@@ -75,11 +74,10 @@ function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site
                 key={`${d.date}-${h}`}
                 className={cn('week-cell', c.state)}
                 data-c={ci}
-                href={profile}
+                href={composeUrl(`hey @${handle}, ${site}. ${hourLabel(h)} on ${d.dow} ${monthDayLabel(d.date)} looks good to me?`)}
                 target="_blank"
                 rel="noopener"
-                data-ping={`hey, free ${d.dow} ${monthDayLabel(d.date)} around ${hourLabel(h)}? ${site}/u/${handle}`}
-                title={`${title} · click to message them`}
+                title={`${title} · click to post at them`}
               />
             ) : (
               <div
@@ -95,6 +93,9 @@ function WeekGrid({ view, handle, site }: { view: WeekView; handle: string; site
     </div>
   );
 }
+
+/** Bluesky's compose sheet with `text` filled in; the visitor still has to hit post. */
+const composeUrl = (text: string) => `https://bsky.app/intent/compose?text=${encodeURIComponent(text)}`;
 
 /** A free (or half-free) hour on a day that is not over: worth a message. */
 const isReachable = (d: WeekDay, c: WeekCell) =>
@@ -235,9 +236,8 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
                 </div>
               )}
               {reachable && (
-                <p className="week-caption text-sm text-muted-foreground">click a free hour to message them on bluesky.</p>
+                <p className="week-caption text-sm text-muted-foreground">click a free hour to post at them on bluesky.</p>
               )}
-              <p className="week-ping week-caption text-sm text-primary" aria-live="polite" />
               {/* One template literal per caption: React's renderToString puts <!-- -->
                   between adjacent text children, which would split a plain-text match. */}
               <p className="week-caption text-sm text-muted-foreground">{`${describeWeekly(rec.weekly)}${freshness(rec, data.now)}`}</p>
@@ -248,7 +248,6 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
           </Card>
         )}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
-        <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: REACH_OUT_SCRIPT }} />
       </div>
     </Layout>
   );

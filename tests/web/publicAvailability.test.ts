@@ -238,17 +238,16 @@ describe('the week grid', () => {
     expect(html.match(/class="week-cell[^"]*" data-c="0"/g)?.length).toBe(17);
     expect(html.match(/class="week-cell/g)?.length).toBe(7 * 17);
   });
-  it('links each free hour that is still ahead to their bluesky profile with a message to copy', () => {
+  it('links each free hour that is still ahead to a bluesky post at them, written already', () => {
     const html = render();
     // Now is Wed 16 Sep: Tuesday's three free hours are past and stay inert, Thursday's link.
     expect(html.match(/<a class="week-cell free/g)?.length).toBe(3);
     expect(html.match(/<div class="week-cell free/g)?.length).toBe(3);
-    expect(html).toContain('href="https://bsky.app/profile/ken.wzrdz.cool" target="_blank" rel="noopener"');
-    expect(html).toContain('data-ping="hey, free thu sep 17 around 7pm? letsmeet.lol/u/ken.wzrdz.cool"');
-    expect(html).toContain('title="thu 17 7pm · click to message them"');
-    expect(html).toContain('click a free hour to message them on bluesky.');
-    expect(html).toContain('class="week-ping');
-    expect(html).toContain("a[data-ping]"); // the reach-out script shipped with the page
+    const text = 'hey @ken.wzrdz.cool, letsmeet.lol. 7pm on thu sep 17 looks good to me?';
+    expect(html).toContain(`href="https://bsky.app/intent/compose?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"`);
+    expect(html).toContain('title="thu 17 7pm · click to post at them"');
+    expect(html).toContain('click a free hour to post at them on bluesky.');
+    expect(html).not.toContain('week-ping');
     expect(html).toContain('role="group"');
     expect(html).not.toContain('role="img"');
   });

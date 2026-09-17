@@ -103,9 +103,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   expect(aliasIcs.headers()['content-type']).toContain('text/calendar');
   expect((await page.request.get('/new', { headers: { host: aliasHost } })).status()).toBe(404);
 
-  // Two scripted bits only chromium is asked to cover (the other projects already exercise
-  // the pages themselves above): copying the feed link, and the reach-out ping. Guarded on
-  // the project, not `test.skip`, which would skip the whole test on every project.
+  // Two bits only chromium is asked to cover (the other projects already exercise the pages
+  // themselves above): the scripted feed-link copy, and the reach-out popup. Guarded on the
+  // project, not `test.skip`, which would skip the whole test on every project.
   if (test.info().project.name === 'chromium') {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 
@@ -117,22 +117,19 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
     const copiedFeedUrl = await page.evaluate(() => navigator.clipboard.readText());
     expect(copiedFeedUrl).toBe(`http://localhost:8787/u/${did}/availability.ics`);
 
-    // reach out: clicking a free hour opens the person's bluesky profile and copies a
-    // prefilled message in the same click, for one paste into their dms.
-    const firstFreeCell = page.locator('a.week-cell.free').first();
-    const pingMessage = await firstFreeCell.getAttribute('data-ping');
+    // reach out: clicking a free hour opens bluesky's compose sheet with a post at the
+    // person already written.
     const [popup] = await Promise.all([
       page.waitForEvent('popup'),
       page.click('a.week-cell.free >> nth=0'),
     ]);
-    expect(popup.url()).toMatch(/^https:\/\/bsky\.app\/profile\//);
+    const popupUrl = new URL(popup.url());
     // The rig may be offline for a real bsky.app fetch: close without waiting for it to load.
     await popup.close();
-    await expect(page.locator('.week-ping')).toHaveText(
-      /^copied "hey, free sun [a-z]{3} \d{1,2} around 7am\? localhost:8787\/u\/did:plc:.*"\. paste it into their dms\.$/,
+    expect(popupUrl.origin + popupUrl.pathname).toBe('https://bsky.app/intent/compose');
+    expect(popupUrl.searchParams.get('text')).toMatch(
+      /^hey @did:plc:\S+, localhost:8787\. 7am on sun [a-z]{3} \d{1,2} looks good to me\?$/,
     );
-    const pingClipboard = await page.evaluate(() => navigator.clipboard.readText());
-    expect(pingClipboard).toBe(pingMessage);
   }
 
   // A poll on the next Sunday, 7–9am UTC in 30-minute slots, hosted by someone else (hosts

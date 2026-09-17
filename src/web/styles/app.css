@@ -605,7 +605,6 @@
   }
   .week-head.past, .week-cell.past { opacity: 0.42; }
   a.week-cell { cursor: pointer; }
-  .week-ping:empty { display: none; }
   /* Each hour is a wrapper that takes no box of its own, so the cells still lay out in the
      grid — and so hovering any cell in the row is hovering the row. */
   .week-row { display: contents; }
