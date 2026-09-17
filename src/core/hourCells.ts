@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import type { GridGeom, PaintMap } from './gridModel.js';
+import { hourLabel } from './weekView.js';
 
 /**
  * The availability editor marks by the hour while the record stays half-hour aligned: each
@@ -10,11 +11,6 @@ import type { GridGeom, PaintMap } from './gridModel.js';
 export interface HourCell { keys: string[] }
 export interface HourRow { hour: number; label: string; cells: (HourCell | null)[] }
 export type HourState = 'none' | 'early' | 'late' | 'available';
-
-/** `7am`, `12pm`, `11pm`. */
-function label(hour: number): string {
-  return hour === 0 ? '12am' : hour === 12 ? '12pm' : hour < 12 ? `${hour}am` : `${hour - 12}pm`;
-}
 
 /** The grid's rows: every wall-clock hour any column has a slot in, in order, with one cell per column. */
 export function hourRows(geom: GridGeom, zone: string): HourRow[] {
@@ -30,7 +26,7 @@ export function hourRows(geom: GridGeom, zone: string): HourRow[] {
   });
   const hours = [...new Set(byCol.flatMap((m) => [...m.keys()]))].sort((a, b) => a - b);
   return hours.map((hour) => ({
-    hour, label: label(hour),
+    hour, label: hourLabel(hour),
     cells: byCol.map((m) => (m.has(hour) ? { keys: m.get(hour)! } : null)),
   }));
 }

@@ -29,18 +29,23 @@ export function ArchivePage({ handle, polls, answered }: {
             <a href="/" className="text-primary underline underline-offset-4">← your polls</a>
           </p>
         </div>
-        <div className="grid gap-3">
-          <h2 className="pixel-heading">your polls</h2>
-          <Card>
-            <CardContent>
-              {polls.length === 0 ? (
-                <p className="hint text-sm text-muted-foreground">nothing here yet. polls land here once their day has passed.</p>
-              ) : (
-                <PollList polls={polls} />
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        {/* An empty "your polls" card under a full "polls you answered" one reads as a fault:
+            the archive plainly has something in it. So the empty state is only shown when the
+            whole archive is empty, where it is the page's one and only answer. */}
+        {polls.length > 0 || answered.length === 0 ? (
+          <div className="grid gap-3">
+            <h2 className="pixel-heading">your polls</h2>
+            <Card>
+              <CardContent>
+                {polls.length === 0 ? (
+                  <p className="hint text-sm text-muted-foreground">nothing here yet. polls land here once their day has passed.</p>
+                ) : (
+                  <PollList polls={polls} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
         {answered.length > 0 ? (
           <div className="answered grid gap-3">
             <h2 className="pixel-heading">polls you answered</h2>

@@ -137,7 +137,10 @@ describe('labels', () => {
     expect(dateRangeLabel('2026-10-03', '2026-10-05')).toBe('oct 3 – 5');
     expect(dateRangeLabel('2026-10-20', '2026-10-20')).toBe('oct 20');
     expect(dateRangeLabel('2026-10-30', '2026-11-02')).toBe('oct 30 – nov 2');
-    expect([hourLabel(7), hourLabel(12), hourLabel(13), hourLabel(23)]).toEqual(['7am', '12pm', '1pm', '11pm']);
+    // Midnight reads 12am, not 0am: this week grid starts at 7am, but the availability
+    // editor's rows share this label and do reach hour 0.
+    expect([hourLabel(0), hourLabel(7), hourLabel(12), hourLabel(13), hourLabel(23)])
+      .toEqual(['12am', '7am', '12pm', '1pm', '11pm']);
   });
   it('reads the week query', () => {
     expect(weekChoice(undefined)).toBe('this');

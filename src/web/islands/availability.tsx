@@ -143,7 +143,8 @@ function Editor({ data }: { data: AvailabilityData }) {
   // ---- the stroke, as in grid.tsx
   const drag = useRef<{ anchor: HourCell; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
   // A finger resting on a cell that is not yet a stroke: a stroke if it holds for HOLD_MS, a
-  // tap if it lifts first, nothing if the browser turns its movement into a scroll.
+  // tap if it lifts first, nothing if the browser turns its movement into a scroll. `key` is
+  // the hour cell's first slot key, which is what identifies the cell under the finger.
   const press = useRef<{ key: string; timer: number } | null>(null);
   const gridEl = useRef<HTMLDivElement>(null);
   const cancelPress = () => {
@@ -209,8 +210,8 @@ function Editor({ data }: { data: AvailabilityData }) {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     // `.cell[data-slot]` skips the unmarkable `.cell.gap` row-fillers.
     const hit = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
-    const cell = hit?.dataset.slot ? cellByKey.get(hit.dataset.slot) : undefined;
-    if (cell) paintTo(cell);
+    const hourCell = hit?.dataset.slot ? cellByKey.get(hit.dataset.slot) : undefined;
+    if (hourCell) paintTo(hourCell);
   };
 
   // ---- away entries

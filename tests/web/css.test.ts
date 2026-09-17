@@ -118,4 +118,24 @@ describe('built app.css', () => {
     expect(blocks).toMatch(/\.week:has\(\.week-cell\[data-c=["']?6["']?\]:hover\) \.week-head\[data-c=["']?6["']?\]/);
     expect(css).toMatch(/\.week-row\{display:contents\}/);
   });
+
+  it("ships the editor's half-hour gradients, hover outline and axis collapse", () => {
+    // The editor marks by the hour over a half-hour record, so an hour with only one half
+    // marked has to draw half full — without these two rules a saved 5:30pm reads as blank.
+    // (lightningcss keeps the space after each gradient comma; the selectors carry an
+    // `#availability-root` prefix, which the leading `[^{]*` absorbs.)
+    const gradient = (cls: string, top: string, bottom: string) => new RegExp(
+      String.raw`\.grid\.canvas \.cell\.${cls}\{background:`
+      + String.raw`linear-gradient\(to bottom, ?var\(--${top}\) 50%, ?var\(--${bottom}\) 50%\)`,
+    );
+    expect(css).toMatch(gradient('early', 'primary', 'card'));
+    expect(css).toMatch(gradient('late', 'card', 'primary'));
+    // The hovered-cell outline is pointer-only, the same ink the week grid uses.
+    const hover = /@media \(hover:hover\)\{([\s\S]*?)\}\}/g;
+    const blocks = [...css.matchAll(hover)].map((m) => m[1]).join('\n');
+    expect(blocks).toMatch(/\.cell\[data-slot\]:hover\{outline:2px solid var\(--foreground\)/);
+    // The cells collapse a pixel of border per row; without the matching rule the axis stays
+    // 24px a row and its labels drift off the rows they name.
+    expect(css).toMatch(/[^{}]*\.axis-label\+\.axis-label\{margin-top:-1px\}/);
+  });
 });

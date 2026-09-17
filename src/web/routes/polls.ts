@@ -82,7 +82,9 @@ export function pollRoutes(
     const theirs = did ? listPollsAnswered(deps.db, did) : [];
     // Over polls (core/archive.ts) leave the landing for /archive; the count is the link's label.
     const live = (p: CachedPoll) => !isOver(p.record, now);
-    const archived = mine.length + theirs.length - mine.filter(live).length - theirs.filter(live).length;
+    const liveMine = mine.filter(live);
+    const liveTheirs = theirs.filter(live);
+    const archived = (mine.length - liveMine.length) + (theirs.length - liveTheirs.length);
     let availability: {
       sentence: string; stale: boolean; handle?: string; address?: { host: string; href: string };
     } | null | undefined;
@@ -104,8 +106,8 @@ export function pollRoutes(
     return page(c, createElement(LandingPage, {
       did,
       handle: who?.handle ?? undefined,
-      polls: mine.filter(live).map(item),
-      answered: theirs.filter(live).map(item),
+      polls: liveMine.map(item),
+      answered: liveTheirs.map(item),
       archived,
       availability,
     }));

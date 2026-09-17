@@ -70,8 +70,9 @@ export function dateRangeLabel(start: string, end: string): string {
 export function weekTitle(monday: string, sunday: string): string {
   return dateRangeLabel(monday, sunday);
 }
+/** `12am`, `7am`, `12pm`, `11pm`. The one hour label in the app: the editor's rows use it too. */
 export function hourLabel(h: number): string {
-  return h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
+  return h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
 }
 
 /** Entries starting after `afterSunday`, soonest first. Ones already over never qualify. */

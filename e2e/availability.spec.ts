@@ -38,11 +38,11 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
 
-  // Mark Sunday 7am–8am (the first hour cell of the first column) and read it back: one
-  // hour cell, which is two half-hour blocks in the record.
-  await markCells(page, '#availability-root', 0, 0);
-  await expect(page.locator('#availability-root .cell.available')).toHaveCount(1);
-  await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 8am.');
+  // Mark Sunday 7am–9am, the first two hour cells of the first column: one stroke across two
+  // hours, four half-hour blocks in the record.
+  await markCells(page, '#availability-root', 0, 1);
+  await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
+  await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 9am.');
 
   // Away on the fixture date, all day, with a note.
   await page.fill('#availability-root .away-form input[type=date] >> nth=0', FIXTURE_DATE_1);
@@ -59,19 +59,19 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
 
   // Reload keeps it.
   await page.reload();
-  await expect(page.locator('#availability-root .cell.available')).toHaveCount(1);
+  await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .away li')).toContainText('out of town');
 
   // The public page reads the same record.
   await page.goto(`/u/${did}`);
-  await expect(page.getByText('usually free sundays 7am to 8am.')).toBeVisible();
+  await expect(page.getByText('usually free sundays 7am to 9am.')).toBeVisible();
   await expect(page.getByText('out of town')).toBeVisible();
 
-  // The week grid: sunday 7am is the one free cell in the week containing today; the away
-  // date is at least two weeks out, so it reads on the "away later" line. Next week is a
-  // link, and one past that is the poll prompt.
+  // The week grid: sunday 7am and 8am are the free cells in the week containing today; the
+  // away date is at least two weeks out, so it reads on the "away later" line. Next week is
+  // a link, and one past that is the poll prompt.
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
-  await expect(page.locator('.week-cell.free')).toHaveCount(1);
+  await expect(page.locator('.week-cell.free')).toHaveCount(2);
   await expect(page.getByText('away later:')).toBeVisible();
   await page.click('.week-nav a[href="?week=next"]');
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
@@ -88,13 +88,14 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   const aliasHost = `${name}.sez.localhost:8787`;
   const alias = await page.request.get('/', { headers: { host: aliasHost } });
   expect(alias.status()).toBe(200);
-  expect(await alias.text()).toContain('usually free sundays 7am to 8am.');
+  expect(await alias.text()).toContain('usually free sundays 7am to 9am.');
   const aliasIcs = await page.request.get('/availability.ics', { headers: { host: aliasHost } });
   expect(aliasIcs.headers()['content-type']).toContain('text/calendar');
   expect((await page.request.get('/new', { headers: { host: aliasHost } })).status()).toBe(404);
 
-  // A poll on the next Sunday, 7–9am UTC, hosted by someone else (hosts never get the
-  // canvas): sign in as a second account to create it, then back as `did` to answer.
+  // A poll on the next Sunday, 7–9am UTC in 30-minute slots, hosted by someone else (hosts
+  // never get the canvas): sign in as a second account to create it, then back as `did` to
+  // answer. The marked week covers that whole window, so all four slots come pre-marked.
   const sunday = (() => {
     const d = new Date(`${FIXTURE_DATE_1}T12:00:00Z`);
     while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() + 1);
@@ -108,6 +109,6 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await page.goto(pollUrl);
   await expect(page.locator('#grid-root .from-availability'))
     .toHaveText("marked from your availability. fix what's off, then save.");
-  await expect(page.locator('#grid-root .cell.available')).toHaveCount(2);
+  await expect(page.locator('#grid-root .cell.available')).toHaveCount(4);
   await expect(page.locator('button.save')).toBeEnabled();
 });

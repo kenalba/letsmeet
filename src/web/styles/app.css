@@ -400,6 +400,9 @@
       padding-right: 8px; font-size: 11px; color: var(--muted-foreground);
       white-space: nowrap; font-variant-numeric: tabular-nums;
     }
+    /* The cells above collapse their borders by a pixel per row; the axis must shrink with
+       them or its labels drift off the rows. */
+    .axis-label + .axis-label { margin-top: -1px; }
     /* Cells carry no text of their own any more — only the tint, the viewer's paint, and
        (once anyone has answered) the tally; the slot's full range lives in the hover
        title and the axis. The plain --card background is the zero-responses state;
