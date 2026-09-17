@@ -31,16 +31,21 @@ export const aliasSuffixFor = (publicUrl: string): string => '.sez.' + new URL(p
 const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /**
- * A Host header is case-insensitive and may carry the root's trailing dot, and both forms
- * reach us verbatim: `KEN.sez.letsmeet.lol` and `ken.sez.letsmeet.lol.` are the same host
- * as the plain one, and matching them literally would let the alias origin slip past the
- * guard below and serve the whole app.
+ * A Host header is case-insensitive, may carry the root's trailing dot, and may spell out
+ * the port, and every form reaches us verbatim: `KEN.sez.letsmeet.lol`,
+ * `ken.sez.letsmeet.lol.` and `ken.sez.letsmeet.lol:443` are the same host as the plain
+ * one, and matching them literally would let the alias origin slip past the guard below
+ * and serve the whole app. The port only comes off when the site has none of its own —
+ * local dev runs on `sez.localhost:8787`, where the port is part of the suffix to match.
  */
-const normalizeHost = (host: string | undefined): string => (host ?? '').toLowerCase().replace(/\.$/, '');
+const normalizeHost = (host: string | undefined, suffix: string): string => {
+  const name = (host ?? '').toLowerCase();
+  return (suffix.includes(':') ? name : name.replace(/:\d+$/, '')).replace(/\.$/, '');
+};
 
 /** Anything at all under `.sez.<site>` — well-formed or not. */
 export function isAliasHost(host: string | undefined, suffix: string): boolean {
-  const name = normalizeHost(host);
+  const name = normalizeHost(host, suffix);
   return name.endsWith(suffix) && name.length > suffix.length;
 }
 
@@ -51,7 +56,7 @@ export function isAliasHost(host: string | undefined, suffix: string): boolean {
  */
 export function aliasLabelOf(host: string | undefined, suffix: string): string | null {
   if (!isAliasHost(host, suffix)) return null;
-  const label = normalizeHost(host).slice(0, -suffix.length);
+  const label = normalizeHost(host, suffix).slice(0, -suffix.length);
   return LABEL_RE.test(label) ? label : null;
 }
 

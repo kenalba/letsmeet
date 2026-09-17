@@ -221,6 +221,16 @@ describe('<name>.sez.letsmeet.lol', () => {
     const html = await (await app.request('/', host('KEN.sez.LETSMEET.lol.'))).text();
     expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
   });
+  it('reads a Host header that carries the site\'s default port as the same alias host', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    const res = await app.request('/', host('ken.sez.letsmeet.lol:443'));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
+    // And the guard still holds there: the app proper must not leak onto the alias host.
+    expect((await app.request('/new', host('ken.sez.letsmeet.lol:443'))).status).toBe(404);
+  });
   it('serves nothing but the friend view and the feed on an alias host', async () => {
     const { app, deps } = setup(kenOnly, 'https://letsmeet.lol');
     claimSezName(deps.db, 'ken', KEN, 0);
