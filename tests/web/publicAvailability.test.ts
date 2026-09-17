@@ -203,6 +203,14 @@ describe('the week grid', () => {
     expect(await (await app.request('/u/ken.wzrdz.cool?week=later')).text()).toContain('further out');
     expect(await (await app.request('/u/ken.wzrdz.cool?week=whatever')).text()).toContain('sep 14 – 20');
   });
+  it('wraps each hour in a row and tags columns, so hover can light the axis and the day', () => {
+    const html = render();
+    expect(html.match(/class="week-row"/g)?.length).toBe(17);
+    // Seven heads and 7×17 cells carry their column index.
+    expect(html.match(/class="week-head[^"]*" data-c="6"/g)?.length).toBe(1);
+    expect(html.match(/class="week-cell[^"]*" data-c="0"/g)?.length).toBe(17);
+    expect(html.match(/class="week-cell/g)?.length).toBe(7 * 17);
+  });
 });
 
 describe('a record only the lexicon has ever seen', () => {

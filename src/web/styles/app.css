@@ -580,6 +580,25 @@
     background: repeating-linear-gradient(135deg, var(--muted) 0 3px, var(--border) 3px 5px);
   }
   .week-head.past, .week-cell.past { opacity: 0.42; }
+  /* Each hour is a wrapper that takes no box of its own, so the cells still lay out in the
+     grid — and so hovering any cell in the row is hovering the row. */
+  .week-row { display: contents; }
+  /* Hover: the cell under the pointer gets an ink outline (ink reads on both a free green
+     cell and an empty muted one), and its hour label and day header step up from muted to
+     ink so the time can be read without hunting. Pointer devices only: a touch would leave
+     the last tapped cell lit. The seven column rules are the whole of what CSS needs to
+     match a cell to its header — there is no variable attribute selector. */
+  @media (hover: hover) {
+    .week-cell:hover { outline: 2px solid var(--foreground); outline-offset: 1px; }
+    .week-row:hover .week-axis { color: var(--foreground); }
+    .week:has(.week-cell[data-c="0"]:hover) .week-head[data-c="0"],
+    .week:has(.week-cell[data-c="1"]:hover) .week-head[data-c="1"],
+    .week:has(.week-cell[data-c="2"]:hover) .week-head[data-c="2"],
+    .week:has(.week-cell[data-c="3"]:hover) .week-head[data-c="3"],
+    .week:has(.week-cell[data-c="4"]:hover) .week-head[data-c="4"],
+    .week:has(.week-cell[data-c="5"]:hover) .week-head[data-c="5"],
+    .week:has(.week-cell[data-c="6"]:hover) .week-head[data-c="6"] { color: var(--foreground); }
+  }
   .week-nav { display: flex; gap: 14px; font-size: 14px; white-space: nowrap; }
   .week-nav a { color: var(--primary); text-decoration: underline; text-underline-offset: 4px; }
   .week-nav .off { color: var(--muted-foreground); }

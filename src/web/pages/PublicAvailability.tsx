@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import {
@@ -35,15 +34,21 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
     + (rec.validUntil ? ` · good through ${fmtDate(localDateOf(rec.validUntil, rec.timezone))}` : '');
 }
 
-/** Days across, hours down. Server-rendered; no script. */
+/**
+ * Days across, hours down. Server-rendered; no script. Each hour is a `.week-row`
+ * (`display: contents`, so the cells still sit in the grid) and every head and cell
+ * carries its column index in `data-c`: that is all the hover rules in app.css need to
+ * light the hovered cell's hour label and day header without a line of JavaScript.
+ */
 function WeekGrid({ view }: { view: WeekView }) {
   return (
     <div className="week" aria-label={`usual week, ${view.title}`} role="img">
       <div className="week-corner" />
-      {view.days.map((d) => (
+      {view.days.map((d, ci) => (
         <div
           key={d.date}
           className={cn('week-head', d.past && 'past', d.today && 'today')}
+          data-c={ci}
           title={d.awayAllDay !== null ? (d.awayAllDay || 'away') : undefined}
         >
           <b>{d.dom}</b>{d.dow}
@@ -51,19 +56,20 @@ function WeekGrid({ view }: { view: WeekView }) {
         </div>
       ))}
       {HOURS.map((h, hi) => (
-        <Fragment key={h}>
-          <div key={`axis-${h}`} className="week-axis">{hourLabel(h)}</div>
-          {view.days.map((d) => {
+        <div key={h} className="week-row">
+          <div className="week-axis">{hourLabel(h)}</div>
+          {view.days.map((d, ci) => {
             const c = d.cells[hi];
             return (
               <div
                 key={`${d.date}-${h}`}
                 className={cn('week-cell', c.state, d.past && 'past')}
+                data-c={ci}
                 title={`${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`}
               />
             );
           })}
-        </Fragment>
+        </div>
       ))}
     </div>
   );

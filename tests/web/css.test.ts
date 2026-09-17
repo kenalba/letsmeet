@@ -109,4 +109,13 @@ describe('built app.css', () => {
     ));
     expect(css).toMatch(new RegExp(`${utility}:where\\(\\[data-theme=["']?dark["']?\\] \\*`));
   });
+
+  it('lights the hovered week cell, its hour and its day, only where there is a pointer', () => {
+    const hover = /@media \(hover:hover\)\{([\s\S]*?)\}\}/g;
+    const blocks = [...css.matchAll(hover)].map((m) => m[1]).join('\n');
+    expect(blocks).toMatch(/\.week-cell:hover\{[^}]*outline:2px solid var\(--foreground\)/);
+    expect(blocks).toContain('.week-row:hover .week-axis');
+    expect(blocks).toMatch(/\.week:has\(\.week-cell\[data-c=["']?6["']?\]:hover\) \.week-head\[data-c=["']?6["']?\]/);
+    expect(css).toMatch(/\.week-row\{display:contents\}/);
+  });
 });
