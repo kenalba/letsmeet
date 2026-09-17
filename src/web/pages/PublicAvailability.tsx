@@ -1,7 +1,8 @@
+import { Fragment } from 'react';
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import {
-  buildWeekView, dateRangeLabel, hourLabel, HOURS, type WeekChoice, type WeekView,
+  buildWeekView, dateRangeLabel, hourLabel, localToday, HOURS, type WeekChoice, type WeekView,
 } from '../../core/weekView.js';
 import { cn } from '../lib/cn.js';
 import { buttonVariants } from '../ui/button.js';
@@ -37,27 +38,33 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
 /** Days across, hours down. Server-rendered; no script. */
 function WeekGrid({ view }: { view: WeekView }) {
   return (
-    <div className="week" aria-label={`usual week, ${view.title}`}>
+    <div className="week" aria-label={`usual week, ${view.title}`} role="img">
       <div className="week-corner" />
       {view.days.map((d) => (
-        <div key={d.date} className={cn('week-head', d.past && 'past', d.today && 'today')}>
+        <div
+          key={d.date}
+          className={cn('week-head', d.past && 'past', d.today && 'today')}
+          title={d.awayAllDay !== null ? (d.awayAllDay || 'away') : undefined}
+        >
           <b>{d.dom}</b>{d.dow}
           {d.awayAllDay !== null && <small>{d.awayAllDay || 'away'}</small>}
         </div>
       ))}
-      {HOURS.map((h, hi) => [
-        <div key={`axis-${h}`} className="week-axis">{hourLabel(h)}</div>,
-        ...view.days.map((d) => {
-          const c = d.cells[hi];
-          return (
-            <div
-              key={`${d.date}-${h}`}
-              className={cn('week-cell', c.state, d.past && 'past')}
-              title={`${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`}
-            />
-          );
-        }),
-      ])}
+      {HOURS.map((h, hi) => (
+        <Fragment key={h}>
+          <div key={`axis-${h}`} className="week-axis">{hourLabel(h)}</div>
+          {view.days.map((d) => {
+            const c = d.cells[hi];
+            return (
+              <div
+                key={`${d.date}-${h}`}
+                className={cn('week-cell', c.state, d.past && 'past')}
+                title={`${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`}
+              />
+            );
+          })}
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -72,11 +79,16 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   // below would throw). Say so rather than guess a zone or claim they posted nothing.
   const unreadable = !!rec && !isKnownZone(rec.timezone);
   const stale = rec ? isStale(rec, data.now) : false;
-  const upcoming = rec ? rec.away.filter((a) => a.end >= data.now.toISOString().slice(0, 10)) : [];
+  const upcoming = rec && !unreadable ? rec.away.filter((a) => a.end >= localToday(data.now, rec.timezone)) : [];
   const view = rec && !unreadable && !stale && week !== 'later'
     ? buildWeekView(rec, data.now, week === 'next' ? 1 : 0) : null;
   const later = rec && !unreadable && !stale
     ? buildWeekView(rec, data.now, 0).later : [];
+  const awayLaterCaption = later.length > 0 ? (
+    <p className="week-caption text-sm text-muted-foreground">
+      {`away later: ${later.map((a) => `${dateRangeLabel(a.start, a.end)}${a.note ? ` · ${a.note}` : ''}`).join(', ')}`}
+    </p>
+  ) : null;
   // Absolute, like the webcal link beside it: this page also serves on `<name>.sez.<site>`,
   // where only `/` and `/availability.ics` answer — a relative `/u/<handle>/availability.ics`
   // would 404 there. The week links, by contrast, are query-only so they stay on either host.
@@ -148,6 +160,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
                 </a>
                 <p className="text-sm text-muted-foreground">pick some dates, they mark what works.</p>
               </div>
+              {awayLaterCaption}
             </CardContent>
           </Card>
         ) : (
@@ -158,7 +171,9 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
                 {week === 'this'
                   ? <span className="off">← this week</span>
                   : <a href="?week=this">← this week</a>}
-                <a href={week === 'this' ? '?week=next' : '?week=later'}>next week →</a>
+                <a href={week === 'this' ? '?week=next' : '?week=later'}>
+                  {week === 'this' ? 'next week →' : 'further out →'}
+                </a>
               </CardAction>
             </CardHeader>
             <CardContent className="grid gap-4">
@@ -173,11 +188,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
                   between adjacent text children, which would split a plain-text match. */}
               <p className="week-caption text-sm text-muted-foreground">{`${describeWeekly(rec.weekly)}${freshness(rec, data.now)}`}</p>
               {rec.note && <p className="week-caption text-sm text-muted-foreground">{rec.note}</p>}
-              {later.length > 0 && (
-                <p className="week-caption text-sm text-muted-foreground">
-                  {`away later: ${later.map((a) => `${dateRangeLabel(a.start, a.end)}${a.note ? ` · ${a.note}` : ''}`).join(', ')}`}
-                </p>
-              )}
+              {awayLaterCaption}
               {links}
             </CardContent>
           </Card>

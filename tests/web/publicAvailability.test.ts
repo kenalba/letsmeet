@@ -145,17 +145,23 @@ describe('the week grid', () => {
     expect(html).toContain('sep 21 – 27');
     expect(html).toContain('href="?week=this"');
     expect(html).toContain('href="?week=later"');
+    expect(html).toContain('further out →');
+    expect(html).not.toContain('next week →');
     // The same away entry ends on monday the 21st.
     expect(html.match(/<small>out of town<\/small>/g)?.length).toBe(1);
   });
   it('further out is a prompt to make a poll, not a grid', () => {
-    const html = render({ week: 'later' });
+    const html = render({
+      week: 'later',
+      record: { ...rec, away: [{ start: '2026-10-03', end: '2026-10-05', note: 'wedding' }] },
+    });
     expect(html).toContain('further out');
     expect(html).toContain('a usual week only says so much that far ahead.');
     expect(html).toContain('make a poll with ken.wzrdz.cool');
     expect(html).toContain('href="https://letsmeet.lol/new"');
     expect(html).toContain('href="?week=next"');
     expect(html).toContain('pick some dates, they mark what works.');
+    expect(html).toContain('away later: oct 3 – 5 · wedding');
     expect(html).not.toContain('week-cell');
     expect(html).not.toContain('no sign-in');
   });
@@ -180,6 +186,15 @@ describe('the week grid', () => {
     expect(html).toContain('last they said: usually free tuesdays and thursdays 7pm to 10pm.');
     expect(html).toContain('out of town');
     expect(html).not.toContain('week-cell');
+  });
+  it('keeps a stale record\'s away entry that ends today in the record zone, even when utc is already tomorrow', () => {
+    // 02:00Z on the 17th is the evening of the 16th in New York.
+    const html = render({
+      now: new Date('2026-09-17T02:00:00Z'),
+      record: { ...rec, validUntil: '2026-09-01T00:00:00.000Z', away: [{ start: '2026-09-16', end: '2026-09-16', note: 'ends today' }] },
+    });
+    expect(html).toContain('treat as unknown and ask');
+    expect(html).toContain('ends today');
   });
   it('is chosen by the week query on the route', async () => {
     const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');

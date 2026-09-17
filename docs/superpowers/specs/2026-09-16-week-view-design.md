@@ -33,7 +33,7 @@ Three states, chosen by the `week` query parameter on the same URL. No JavaScrip
 - **The week** is Monday to Sunday in the record's timezone; "today" is today in that zone.
 - **Columns** are headed by the day number over the three-letter day name (`14` / `mon`).
   Days before today are dimmed. Today's header is underlined. An all-day away entry puts
-  its note (or nothing) in small type under the header.
+  its note, or the word `away`, in small type under the header.
 - **Rows** are the hours 7am through 11pm (seventeen rows), labelled down the left. A
   block that runs past midnight fills the 11pm row and stops; blocks before 7am are not
   drawn (the sentence still names them).
