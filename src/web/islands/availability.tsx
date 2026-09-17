@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { createRoot } from 'react-dom/client';
 import type { AwayEntry, WeeklyBlock } from '../../atproto/records.js';
 import {
-  buildGeom, strokeOp, rectKeys, applyPaint, paintToIntervals, intervalsToPaint, type PaintMap,
+  buildGeom, applyPaint, paintToIntervals, intervalsToPaint, type PaintMap,
 } from '../../core/gridModel.js';
+import { hourRows, hourState, hourStrokeOp, hourRectKeys, type HourCell } from '../../core/hourCells.js';
 import {
   describeWeekly, endOfLocalDay, normalizeAvailability, splitAtTemplateStart, templateSlots,
   templateIntervalsToWeekly, weeklyToTemplateIntervals,
@@ -49,19 +50,6 @@ function knownZone(z: string): boolean {
   try { new Intl.DateTimeFormat('en-GB', { timeZone: z }); return true; } catch { return false; }
 }
 
-/**
- * Minute-of-day of an instant in `zone` — the row axis. Slots on different days that start
- * at the same wall-clock time share a row, so each time is printed once, in the axis column.
- */
-function minutesInZone(iso: string, zone: string): number {
-  const [h, m] = new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone,
-  }).format(new Date(iso)).split(':').map(Number);
-  return h * 60 + m;
-}
-function fmtAxisTime(iso: string, zone: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: zone });
-}
 /** A calendar date, read back in UTC from a noon anchor so no zone can shift the day. */
 function fmtDate(d: string): string {
   return new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -93,20 +81,15 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [zoneText, setZoneText] = useState(data.timezone ?? HERE);
   const slots = useMemo(() => templateSlots(zone), [zone]);
   const geom = useMemo(() => buildGeom(slots, zone), [slots, zone]);
-  const rows = useMemo(() => {
-    const byMin = new Map<number, string>();
-    for (const keys of geom.columns.values()) {
-      for (const k of keys) {
-        const min = minutesInZone(k, zone);
-        if (!byMin.has(min)) byMin.set(min, k);
-      }
-    }
-    return [...byMin.entries()].sort((a, b) => a[0] - b[0]);
-  }, [geom, zone]);
-  const colMaps = useMemo(
-    () => geom.dates.map((d) => new Map(geom.columns.get(d)!.map((k) => [minutesInZone(k, zone), k]))),
-    [geom, zone],
-  );
+  // Hour rows over the half-hour slots (core/hourCells.ts): the record stays half-hour
+  // aligned; the grid draws and strokes by the hour.
+  const hours = useMemo(() => hourRows(geom, zone), [geom, zone]);
+  // The element under a moving pointer names its hour by the hour's first slot key.
+  const cellByKey = useMemo(() => {
+    const m = new Map<string, HourCell>();
+    for (const r of hours) for (const c of r.cells) if (c) m.set(c.keys[0], c);
+    return m;
+  }, [hours]);
 
   const [status, setStatus] = useState<string | null>(null);
 
@@ -158,7 +141,7 @@ function Editor({ data }: { data: AvailabilityData }) {
   const dirty = savedAt !== snapshot(weekly, away, note, validUntil, zone, alias);
 
   // ---- the stroke, as in grid.tsx
-  const drag = useRef<{ anchor: string; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
+  const drag = useRef<{ anchor: HourCell; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
   // A finger resting on a cell that is not yet a stroke: a stroke if it holds for HOLD_MS, a
   // tap if it lifts first, nothing if the browser turns its movement into a scroll.
   const press = useRef<{ key: string; timer: number } | null>(null);
@@ -186,23 +169,23 @@ function Editor({ data }: { data: AvailabilityData }) {
     el.addEventListener('touchmove', block, { passive: false });
     return () => el.removeEventListener('touchmove', block);
   }, []);
-  const paintTo = (key: string) => {
+  const paintTo = (cell: HourCell) => {
     const d = drag.current;
     if (!d) return;
-    setPainted(applyPaint(d.base, rectKeys(geom, d.anchor, key), d.op, 'available'));
+    setPainted(applyPaint(d.base, hourRectKeys(hours, d.anchor, cell), d.op, 'available'));
   };
-  const startStroke = (key: string, touch: boolean) => {
-    drag.current = { anchor: key, op: strokeOp(painted, key, 'available'), base: painted, touch };
-    paintTo(key);
+  const startStroke = (cell: HourCell, touch: boolean) => {
+    drag.current = { anchor: cell, op: hourStrokeOp(painted, cell), base: painted, touch };
+    paintTo(cell);
   };
-  const onDown = (key: string) => (e: ReactPointerEvent<HTMLDivElement>) => {
+  const onDown = (cell: HourCell) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
       cancelPress();
       press.current = {
-        key,
+        key: cell.keys[0],
         timer: window.setTimeout(() => {
           press.current = null;
-          startStroke(key, true);
+          startStroke(cell, true);
           // A nudge to say "you're marking now", where the device has one.
           try { navigator.vibrate?.(8); } catch { /* not this device */ }
         }, HOLD_MS),
@@ -213,20 +196,21 @@ function Editor({ data }: { data: AvailabilityData }) {
     // Capture keeps the move stream coming when the pointer wanders off the cell; the
     // hit-testing below still uses the real element under it.
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* unsupported id */ }
-    startStroke(key, false);
+    startStroke(cell, false);
   };
-  // A finger that lifts before the hold fires is a tap: mark (or unmark) that one cell.
-  const onUp = (key: string) => () => {
-    if (press.current?.key !== key) return;
+  // A finger that lifts before the hold fires is a tap: mark (or unmark) that one hour.
+  const onUp = (cell: HourCell) => () => {
+    if (press.current?.key !== cell.keys[0]) return;
     cancelPress();
-    startStroke(key, true);
+    startStroke(cell, true);
   };
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
     // `.cell[data-slot]` skips the unmarkable `.cell.gap` row-fillers.
-    const cell = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
-    if (cell?.dataset.slot) paintTo(cell.dataset.slot);
+    const hit = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
+    const cell = hit?.dataset.slot ? cellByKey.get(hit.dataset.slot) : undefined;
+    if (cell) paintTo(cell);
   };
 
   // ---- away entries
@@ -267,16 +251,19 @@ function Editor({ data }: { data: AvailabilityData }) {
     }
   };
 
-  const cell = (key: string) => (
-    <div
-      key={key}
-      className={cn('cell', painted.has(key) && 'available')}
-      data-slot={key}
-      title={fmtAxisTime(key, zone)}
-      onPointerDown={onDown(key)}
-      onPointerUp={onUp(key)}
-    />
-  );
+  const cell = (c: HourCell, label: string) => {
+    const state = hourState(painted, c);
+    return (
+      <div
+        key={c.keys[0]}
+        className={cn('cell', state !== 'none' && state)}
+        data-slot={c.keys[0]}
+        title={label}
+        onPointerDown={onDown(c)}
+        onPointerUp={onUp(c)}
+      />
+    );
+  };
 
   return (
     <div>
@@ -298,12 +285,12 @@ function Editor({ data }: { data: AvailabilityData }) {
       </label>
       {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
-      <p className="hint touch-hint">tap a slot to mark it. hold, then drag, for a block. swipe to scroll.</p>
+      <p className="hint touch-hint">tap an hour to mark it. hold, then drag, for a block. swipe to scroll.</p>
       <div ref={gridEl} className="grid canvas" onPointerMove={onMove}>
         <div className="col axis">
           <div className="col-head" />
-          {rows.map(([min, sample]) => (
-            <div key={min} className="axis-label">{fmtAxisTime(sample, zone)}</div>
+          {hours.map((r) => (
+            <div key={r.hour} className="axis-label">{r.label}</div>
           ))}
         </div>
         {geom.dates.map((d, ci) => (
@@ -311,11 +298,11 @@ function Editor({ data }: { data: AvailabilityData }) {
             <div className="col-head">
               <span className="dow">{DOW[new Date(d + 'T12:00:00Z').getUTCDay()]}</span>
             </div>
-            {rows.map(([min]) => {
-              const key = colMaps[ci].get(min);
-              // No slot at this wall-clock time on this day (a DST edge): hold the row open
-              // with an unmarkable blank so the columns stay aligned.
-              return key ? cell(key) : <div key={`gap-${min}`} className="cell gap" aria-hidden="true" />;
+            {hours.map((r) => {
+              const c = r.cells[ci];
+              // No slot at this hour on this day (a DST edge): hold the row open with an
+              // unmarkable blank so the columns stay aligned.
+              return c ? cell(c, r.label) : <div key={`gap-${r.hour}`} className="cell gap" aria-hidden="true" />;
             })}
           </div>
         ))}

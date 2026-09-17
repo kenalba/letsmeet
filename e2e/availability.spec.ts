@@ -38,9 +38,10 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
 
-  // Mark Sunday 7:00–8:00 (the first two cells of the first column) and read it back.
-  await markCells(page, '#availability-root', 0, 1);
-  await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
+  // Mark Sunday 7am–8am (the first hour cell of the first column) and read it back: one
+  // hour cell, which is two half-hour blocks in the record.
+  await markCells(page, '#availability-root', 0, 0);
+  await expect(page.locator('#availability-root .cell.available')).toHaveCount(1);
   await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 8am.');
 
   // Away on the fixture date, all day, with a note.
@@ -58,7 +59,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
 
   // Reload keeps it.
   await page.reload();
-  await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
+  await expect(page.locator('#availability-root .cell.available')).toHaveCount(1);
   await expect(page.locator('#availability-root .away li')).toContainText('out of town');
 
   // The public page reads the same record.

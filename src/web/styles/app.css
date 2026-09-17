@@ -545,6 +545,15 @@
       gap: 8px; align-items: end; margin-bottom: 18px;
     }
     .away-form label, .away-form input { margin: 0; }
+    /* Hour cells over a half-hour record: an hour with only one half marked is drawn half
+       full (top: the :00 half, bottom: the :30 half), so a saved 5:30pm still reads as
+       5:30pm until that hour is touched. */
+    .grid.canvas .cell.early { background: linear-gradient(to bottom, var(--primary) 50%, var(--card) 50%); }
+    .grid.canvas .cell.late { background: linear-gradient(to bottom, var(--card) 50%, var(--primary) 50%); }
+    /* The same ink outline the friend view's week grid gives a hovered cell. */
+    @media (hover: hover) {
+      .cell[data-slot]:hover { outline: 2px solid var(--foreground); outline-offset: -2px; }
+    }
     .save { margin-top: 12px; }
   }
 }
