@@ -322,9 +322,11 @@ them forever. nginx stays the front for this host like every other on the box.
   `/availability.ics` (the feed) on `<name>.sez.letsmeet.lol`, plus the static
   files that page loads, and 404s everything else — including any host with
   more than one label before `.sez.`, which no certificate covers anyway
-  (`aliasHostOnly`, `src/web/server.ts`). The session cookie is scoped to the
-  apex, so the alias could not show a signed-in page even if it routed one. A
-  name is resolved from the `sez_name` table first (claimed names, then
+  (`aliasHostOnly`, `src/web/server.ts`). The session cookie carries
+  `Domain=letsmeet.lol`, so every sez host receives it; the friend view uses
+  it for one thing, the owner's `this is you · edit` link, and the alias host
+  still routes nothing a session could act on. A name is resolved from the
+  `sez_name` table first (claimed names, then
   hyphenated handles this server has decoded before), then by reading the
   label as a hyphenated handle and resolving each way of putting the dots back
   (`src/services/sezNames.ts`). The table is **not** disposable: it is what makes a

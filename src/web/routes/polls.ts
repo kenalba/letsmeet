@@ -5,7 +5,7 @@ import type { AuthClient } from '../../atproto/oauthClient.js';
 import type { Interval } from '../../core/intervals.js';
 import type { SlotMinutes, SpecificDates } from '../../core/slots.js';
 import { UserError } from '../../core/errors.js';
-import { readSession, type SessionEnv } from '../session.js';
+import { readSession, sessionEnvFor } from '../session.js';
 import {
   countResponses, countResponsesByPoll, listPollsByHost, listPollsAnswered, type CachedPoll,
 } from '../../db/cache.js';
@@ -53,9 +53,7 @@ export function pollRoutes(
   deps: Deps, auth: AuthClient, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
 ): Hono {
   const app = new Hono();
-  const session: SessionEnv = {
-    db: deps.db, cookieSecret: env.COOKIE_SECRET, secure: env.PUBLIC_URL.startsWith('https'),
-  };
+  const session = sessionEnvFor(deps.db, env.COOKIE_SECRET, env.PUBLIC_URL);
   const sessionDid = async (c: import('hono').Context) =>
     (await readSession(c, session, deps.now().getTime()))?.did ?? null;
 

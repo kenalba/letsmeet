@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { authRoutes } from '../../src/web/routes/auth.js';
+import { cookieDomainFor, sessionEnvFor } from '../../src/web/session.js';
 import { openDb } from '../../src/db/db.js';
 import { getWebSession } from '../../src/db/webSessions.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
@@ -18,8 +19,7 @@ const stub: AuthClient = {
   restore: async () => { throw new Error('not used here'); },
 };
 const env = (publicUrl = 'https://poll.example') => ({
-  db: openDb(':memory:'), cookieSecret: 'test-cookie-secret', publicUrl,
-  secure: publicUrl.startsWith('https'),
+  ...sessionEnvFor(openDb(':memory:'), 'test-cookie-secret', publicUrl), publicUrl,
 });
 const app = authRoutes(stub, env());
 
@@ -32,7 +32,9 @@ const failingStub: AuthClient = {
 };
 const failingApp = authRoutes(failingStub, env());
 
-const cookieOf = (res: Response) => res.headers.get('set-cookie')!.split(';')[0];
+/** The live session cookie: the Set-Cookie that carries a value, not the host-only clear. */
+const cookieOf = (res: Response) =>
+  res.headers.getSetCookie().find((s) => s.startsWith('sid=') && !s.startsWith('sid=;'))!.split(';')[0];
 
 describe('auth routes', () => {
   it('serves client metadata as JSON', async () => {
@@ -52,18 +54,33 @@ describe('auth routes', () => {
     for (const k of body.keys) expect(k).not.toHaveProperty('d');
   });
 
-  it('marks the session cookie Secure, HttpOnly and Lax on an https origin', async () => {
+  it('marks the session cookie Secure, HttpOnly, Lax and Domain-wide on an https origin', async () => {
     const res = await app.request('/oauth/callback?code=abc&state=xyz');
-    const sc = res.headers.get('set-cookie')!;
-    expect(sc).toContain('Secure');
-    expect(sc).toContain('HttpOnly');
-    expect(sc).toContain('SameSite=Lax');
+    const all = res.headers.getSetCookie();
+    const live = all.find((s) => s.startsWith('sid=') && !s.startsWith('sid=;'))!;
+    expect(live).toContain('Secure');
+    expect(live).toContain('HttpOnly');
+    expect(live).toContain('SameSite=Lax');
+    // Every `<name>.sez.poll.example` gets it too: the friend view can know its owner there.
+    expect(live).toContain('Domain=poll.example');
+    // A cookie set before the Domain attribute existed is host-only and would ride beside
+    // this one on the apex: it is cleared in the same response.
+    expect(all.some((s) => s.startsWith('sid=;') && s.includes('Max-Age=0') && !s.includes('Domain='))).toBe(true);
   });
-
-  it('leaves the session cookie non-Secure on a plain-http origin', async () => {
+  it('sets a host-only cookie and no clear on a host with no dots (local dev)', async () => {
     const http = authRoutes(stub, env('http://localhost:8787'));
     const res = await http.request('/oauth/callback?code=abc&state=xyz');
-    expect(res.headers.get('set-cookie')).not.toContain('Secure');
+    const all = res.headers.getSetCookie();
+    expect(all.length).toBe(1);
+    expect(all[0]).not.toContain('Domain=');
+    expect(all[0]).not.toContain('Secure');
+  });
+  it('cookieDomainFor: the public host without its port; null for localhost and ip literals', () => {
+    expect(cookieDomainFor('https://letsmeet.lol')).toBe('letsmeet.lol');
+    expect(cookieDomainFor('https://poll.example:8443')).toBe('poll.example');
+    expect(cookieDomainFor('http://localhost:8787')).toBeNull();
+    expect(cookieDomainFor('http://127.0.0.1:8787')).toBeNull();
+    expect(cookieDomainFor('http://[::1]:8787')).toBeNull();
   });
 
   it('rate-limits a burst of sign-in attempts from one IP', async () => {
@@ -127,7 +144,9 @@ describe('auth routes', () => {
     expect(getWebSession(e.db, sid.sid, Date.now())).not.toBeNull();
     const res = await a.request('/logout', { method: 'POST', headers: { cookie } });
     expect(res.status).toBe(302);
-    expect(res.headers.get('set-cookie')).toContain('sid=;');
+    const clears = res.headers.getSetCookie();
+    expect(clears.some((s) => s.startsWith('sid=;') && s.includes('Domain=poll.example'))).toBe(true);
+    expect(clears.some((s) => s.startsWith('sid=;') && !s.includes('Domain='))).toBe(true);
     expect(getWebSession(e.db, sid.sid, Date.now())).toBeNull();
   });
   it('a session expires server-side after 30 days whatever the cookie claims', async () => {

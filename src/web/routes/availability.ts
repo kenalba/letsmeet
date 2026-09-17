@@ -5,7 +5,7 @@ import type { AvailabilityRecord } from '../../atproto/records.js';
 import { UserError } from '../../core/errors.js';
 import { describeWeekly, isKnownZone } from '../../core/availability.js';
 import { weekChoice } from '../../core/weekView.js';
-import { readSession, type SessionEnv } from '../session.js';
+import { readSession, sessionEnvFor } from '../session.js';
 import { explain, page } from '../respond.js';
 import { TokenBucket } from '../rateLimit.js';
 import { clientIp } from '../clientIp.js';
@@ -89,9 +89,7 @@ export function availabilityRoutes(
   deps: Deps, env: { COOKIE_SECRET: string; PUBLIC_URL: string },
 ): Hono {
   const app = new Hono();
-  const session: SessionEnv = {
-    db: deps.db, cookieSecret: env.COOKIE_SECRET, secure: env.PUBLIC_URL.startsWith('https'),
-  };
+  const session = sessionEnvFor(deps.db, env.COOKIE_SECRET, env.PUBLIC_URL);
   // 20 saves per ten minutes per account: a save is two PDS round trips (a claim rides on one).
   const saveLimiter = new TokenBucket(20, 20 / 600);
 

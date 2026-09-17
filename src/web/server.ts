@@ -13,7 +13,7 @@ import { availabilityRoutes, aliasHostOnly } from './routes/availability.js';
 import { apiRoutes } from './routes/api.js';
 import { bskyHandleSearch, cachedHandleSearch, type HandleSearch } from './handleSearch.js';
 import { page } from './respond.js';
-import { startSession, type SessionEnv } from './session.js';
+import { startSession, sessionEnvFor } from './session.js';
 import { ErrorPage } from './pages/ErrorPage.js';
 
 /**
@@ -33,9 +33,7 @@ export function createServer(
   env: { COOKIE_SECRET: string; PUBLIC_URL: string; devLogin?: boolean; handleSearch?: HandleSearch },
 ): Hono {
   const app = new Hono();
-  const session: SessionEnv = {
-    db: deps.db, cookieSecret: env.COOKIE_SECRET, secure: env.PUBLIC_URL.startsWith('https'),
-  };
+  const session = sessionEnvFor(deps.db, env.COOKIE_SECRET, env.PUBLIC_URL);
 
   app.use('*', secureHeaders({
     contentSecurityPolicy: {
