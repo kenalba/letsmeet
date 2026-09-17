@@ -200,8 +200,9 @@ export function availabilityRoutes(
 
   /**
    * `<label>.sez.<site>`: a claimed name or a hyphenated handle, then the handle the DID's
-   * document declares — the page is headed by it and canonicalised to `/u/<handle>`. Fake
-   * mode has no resolver; there the DID literal is the handle, as `/u/<did>` accepts.
+   * document declares, verified forward — the page is headed by it and canonicalised to
+   * `/u/<handle>`. Fake mode has no resolver; there the DID literal is the handle, as
+   * `/u/<did>` accepts.
    */
   const lookupLabel = async (c: Context, label: string): Promise<Found | Deny> => {
     if (!readLimiter.allow(clientIp(c), deps.now().getTime())) return tooMany(c);
@@ -219,6 +220,19 @@ export function availabilityRoutes(
     } catch (err) {
       console.warn(`handle lookup failed for ${did}:`, err);
       handle = null;
+    }
+    // A DID document's `alsoKnownAs` is a claim anyone can write: only resolving it forward
+    // proves the handle is this DID's. Heading someone's alias page with a handle that is
+    // not theirs — the operator's own domain, say — is an impersonation surface.
+    if (handle && deps.resolveDid) {
+      let back: string | null;
+      try {
+        back = await deps.resolveDid(handle);
+      } catch (err) {
+        console.warn(`handle verification failed for ${handle}:`, err);
+        back = null;
+      }
+      if (back !== did) handle = null;
     }
     if (!handle) return cannotResolve(c);
     return read(c, handle, did);

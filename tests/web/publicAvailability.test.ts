@@ -24,12 +24,16 @@ const rec: AvailabilityRecord = {
   note: 'text first', validUntil: '2026-12-31T23:59:59.000Z', updatedAt: '2026-09-10T12:00:00.000Z',
 };
 
-function setup(resolveDid?: Deps['resolveDid'], publicUrl = 'http://localhost:8787') {
+function setup(
+  resolveDid?: Deps['resolveDid'], publicUrl = 'http://localhost:8787',
+  resolveHandle?: Deps['resolveHandle'],
+) {
   const repo = new FakeRepo();
   const deps: Deps = {
     db: openDb(':memory:'), reader: repo, writerFor: async () => repo,
     now: () => new Date('2026-09-16T12:00:00Z'), revalidateTtlMs: 0, resolveDid,
-    resolveHandle: resolveDid ? async (d) => (d === KEN ? 'ken.wzrdz.cool' : null) : undefined,
+    resolveHandle: resolveHandle
+      ?? (resolveDid ? async (d) => (d === KEN ? 'ken.wzrdz.cool' : null) : undefined),
   };
   const app = createServer(deps, stubAuth, { COOKIE_SECRET: 's', PUBLIC_URL: publicUrl });
   return { app, deps, repo };
@@ -244,6 +248,23 @@ describe('<name>.sez.letsmeet.lol', () => {
     expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm.');
     expect(html).toContain(`<link rel="canonical" href="http://localhost:8787/u/${KEN}"`);
     expect((await app.request('/', host('ken-wzrdz-cool.sez.localhost:8787'))).status).toBe(404);
+  });
+  it('503s a name whose did declares a handle belonging to someone else', async () => {
+    // An alsoKnownAs is a claim, not a proof: without the forward check, anyone could point
+    // their did document at ken.wzrdz.cool and have their own alias page headed by it.
+    const NOTKEN = 'did:plc:notken';
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol', async () => 'ken.wzrdz.cool');
+    await repo.putRecord(NOTKEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'notken', NOTKEN, 0);
+    const res = await app.request('/', host('notken.sez.letsmeet.lol'));
+    expect(res.status).toBe(503);
+    expect(await res.text()).not.toContain('ken.wzrdz.cool');
+  });
+  it('503s a name whose did declares no handle at all', async () => {
+    const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol', async () => null);
+    await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
+    claimSezName(deps.db, 'ken', KEN, 0);
+    expect((await app.request('/', host('ken.sez.letsmeet.lol'))).status).toBe(503);
   });
   it('shows the address on the friend view: the claimed name, else the hyphenated handle', async () => {
     const { app, deps, repo } = setup(kenOnly, 'https://letsmeet.lol');
