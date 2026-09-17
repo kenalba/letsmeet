@@ -146,7 +146,10 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [alias, setAlias] = useState(data.alias);
   const [aliasSaved, setAliasSaved] = useState(data.aliasSaved);
   const aliasOk = alias === '' || isValidSezName(alias);
-  const address = alias ? `${alias}.${data.sezSuffix}` : data.addressFallback;
+  // A name that breaks the rule has no address to promise: the rule hint under the field
+  // says why, and the line below the grid falls back to "no address yet" rather than
+  // reading out a host that could never be claimed.
+  const address = alias ? (aliasOk ? `${alias}.${data.sezSuffix}` : null) : data.addressFallback;
   const [saving, setSaving] = useState(false);
   // What the server already has. The button lights up only when the editor differs from it —
   // an editor with no record to open stands at "nothing marked", which is not worth posting.
