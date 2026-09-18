@@ -65,13 +65,39 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .weekpick')).toHaveCount(0);
   await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
 
-  // Away on the fixture date, all day, with a note.
+  // Marks on a dated page are away. Sunday 11am–3pm: cells 4 through 7 of the column
+  // (the first is 7am). Sunday is today or later, so it is always paintable.
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  // Named sundayCol, not sunday: the poll at the end of this spec already has a `sunday`.
+  const sundayCol = page.locator('#availability-root .col[data-c="6"]');
+  await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
+
+  // A day header tap clears a day that has any away at all, window and note and all; the
+  // next one takes all day, and the column locks: a tap anywhere in it clears the day.
+  await sundayCol.locator('.col-head').click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
+  await sundayCol.locator('.col-head').click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(17);
+  await sundayCol.locator('[data-slot]').first().click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
+
+  // Painted again, so the rest of this flow has an away entry to name. The stroke is an
+  // entry on the record, not just paint: one sunday, 11am to 3pm.
+  await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
+  await expect(page.locator('#availability-root .away li')).toHaveCount(1);
+  await expect(page.locator('#availability-root .away li .when')).toContainText('11am–3pm');
+
+  // Away on the fixture date, all day, with a note. The painted sunday is on the list too
+  // now, so the assertions below name the entry they mean.
   await page.fill('#availability-root .away-form input[type=date] >> nth=0', FIXTURE_DATE_1);
   await page.fill('#availability-root .away-form input[type=text]', 'out of town');
   await page.click('#availability-root button.add-away');
-  await expect(page.locator('#availability-root .away li')).toContainText('out of town');
+  const outOfTown = page.locator('#availability-root .away li', { hasText: 'out of town' });
+  await expect(outOfTown).toHaveCount(1);
   // Added, not posted: the entry says so until the post button below publishes it.
-  await expect(page.locator('#availability-root .away li .unposted')).toHaveText('not posted yet');
+  await expect(outOfTown.locator('.unposted')).toHaveText('not posted yet');
   await expect(page.locator('#availability-root .away-hint')).toHaveText('post availability below to publish these.');
 
   // Timezone is what the grid was drawn in; the browser is pinned to UTC in the config.
@@ -86,7 +112,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // Reload keeps it.
   await page.reload();
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
-  await expect(page.locator('#availability-root .away li')).toContainText('out of town');
+  await expect(outOfTown).toHaveCount(1);
 
   // The public page reads the same record.
   await page.goto(`/u/${did}`);

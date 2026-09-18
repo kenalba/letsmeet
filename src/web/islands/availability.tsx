@@ -225,7 +225,20 @@ function Editor({ data }: { data: AvailabilityData }) {
   const dirty = savedAt !== snapshot(weekly, away, note, validUntil, zone, alias);
 
   // ---- the stroke, as in grid.tsx
-  const drag = useRef<{ anchor: HourCell; op: 'add' | 'remove'; base: PaintMap; touch: boolean } | null>(null);
+  const drag = useRef<{
+    anchor: HourCell;
+    op: 'add' | 'remove';
+    base: PaintMap;
+    touch: boolean;
+    /** The cell the stroke has reached; the note chip (Task 12) hangs off it. */
+    last: HourCell;
+    /** Set on a dated page only: the day map and entry list the stroke started from, and
+        the week it may rewrite. Absent on the usual week, where a stroke edits `weekly`. */
+    days?: AwayDays;
+    entries?: AwayEntry[];
+    from?: string;
+    to?: string;
+  } | null>(null);
   // A finger resting on a cell that is not yet a stroke: a stroke if it holds for HOLD_MS, a
   // tap if it lifts first, nothing if the browser turns its movement into a scroll. `key` is
   // the hour cell's first slot key, which is what identifies the cell under the finger.
@@ -258,13 +271,55 @@ function Editor({ data }: { data: AvailabilityData }) {
   const paintTo = (cell: HourCell) => {
     const d = drag.current;
     if (!d) return;
-    setPainted(applyPaint(d.base, hourRectKeys(hours, d.anchor, cell), d.op, 'available'));
+    d.last = cell;
+    const keys = hourRectKeys(hours, d.anchor, cell);
+    if (!d.days) {
+      setPainted(applyPaint(d.base, keys, d.op, 'available'));
+      return;
+    }
+    const at = keys.map((k) => local.get(k)).filter((x): x is { date: string; hm: string } => !!x);
+    // Past days are inert: a rectangle dragged across one paints the rest of it.
+    const dates2 = [...new Set(at.map((x) => x.date))].filter((date) => date >= today);
+    const halfHours = [...new Set(at.map((x) => x.hm))];
+    setAway(compactAway(
+      d.entries!, d.from!, d.to!, paintAway(d.days!, dates2, halfHours, d.op === 'add')));
   };
-  const startStroke = (cell: HourCell, touch: boolean) => {
-    // A dated page draws the record and takes no marks yet.
-    if (dated) return;
-    drag.current = { anchor: cell, op: hourStrokeOp(painted, cell), base: painted, touch };
+  /**
+   * A stroke starts. On the usual week it paints free hours, as it always has. On a dated
+   * page it paints away into the day map, with the op decided by the anchor cell as it is
+   * now; a past day starts nothing, and an all-day column is locked — a tap anywhere in it
+   * clears the day instead. Says whether a stroke really began, so a held finger only buzzes
+   * where one did.
+   */
+  const startStroke = (cell: HourCell, touch: boolean): boolean => {
+    if (!dated) {
+      drag.current = {
+        anchor: cell, op: hourStrokeOp(painted, cell), base: painted, touch, last: cell,
+      };
+      paintTo(cell);
+      return true;
+    }
+    drag.current = null;
+    const at = local.get(cell.keys[0]);
+    if (!at || at.date < today) return false;
+    if (days.get(at.date)?.away === 'all') {
+      setAway(compactAway(away, dates![0], dates![6], toggleAllDay(days, at.date)));
+      return false;
+    }
+    drag.current = {
+      anchor: cell, op: awayAt(cell) ? 'remove' : 'add', base: painted, touch, last: cell,
+      days, entries: away, from: dates![0], to: dates![6],
+    };
     paintTo(cell);
+    return true;
+  };
+  /**
+   * A day header tap: a day with any away at all is cleared, note and window and all;
+   * a clear day goes away all day.
+   */
+  const onHead = (date: string) => () => {
+    if (!dated || date < today) return;
+    setAway(compactAway(away, dates![0], dates![6], toggleAllDay(days, date)));
   };
   const onDown = (cell: HourCell) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
@@ -273,9 +328,10 @@ function Editor({ data }: { data: AvailabilityData }) {
         key: cell.keys[0],
         timer: window.setTimeout(() => {
           press.current = null;
-          startStroke(cell, true);
-          // A nudge to say "you're marking now", where the device has one.
-          try { navigator.vibrate?.(8); } catch { /* not this device */ }
+          const began = startStroke(cell, true);
+          // A nudge to say "you're marking now", where the device has one — and only where
+          // a stroke really began: a past day and a locked all-day column take none.
+          if (began) { try { navigator.vibrate?.(8); } catch { /* not this device */ } }
         }, HOLD_MS),
       };
       return;
@@ -425,6 +481,7 @@ function Editor({ data }: { data: AvailabilityData }) {
               <div
                 className={cn('col-head', dated && d === today && 'today')}
                 data-c={ci}
+                onClick={dated ? onHead(d) : undefined}
               >
                 {/* Empty on the usual week, which has no dates — the row keeps its height. */}
                 <span className="num">{dated ? domOf(d) : ''}</span>
