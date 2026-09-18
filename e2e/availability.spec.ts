@@ -8,22 +8,20 @@ import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
  */
 async function markCells(page: Page, cells: Locator, from: number, to: number) {
   await expect(cells.first()).toBeVisible();
-  // `boundingBox()` reports viewport-relative coordinates and does not scroll. The editor's
-  // address field sits below the grid now, so measuring straight after filling it would read
-  // cells that are off the top of the screen — and a sticky day header parked over row one
-  // would swallow the press even once they were. Start from the top of the page.
+  // The editor's address field sits below the grid, so measuring straight after filling it
+  // would find cells off the top of the screen — and a sticky day header parked over row one
+  // would swallow the press even once they were. Start from the top of the page, then let
+  // Playwright place each press itself: `hover`/`tap` re-measure the cell immediately before
+  // the pointer moves and refuse to act through anything covering it, where a bounding box
+  // read a moment earlier goes stale the instant the page scrolls (Firefox on CI did).
   await page.evaluate(() => window.scrollTo(0, 0));
-  const a = (await cells.nth(from).boundingBox())!;
-  const b = (await cells.nth(to).boundingBox())!;
+  const at = { position: { x: 5, y: 5 } };
   if (test.info().project.use.hasTouch) {
-    for (let i = from; i <= to; i++) {
-      const box = (await cells.nth(i).boundingBox())!;
-      await page.touchscreen.tap(box.x + 5, box.y + 5);
-    }
+    for (let i = from; i <= to; i++) await cells.nth(i).tap(at);
   } else {
-    await page.mouse.move(a.x + 5, a.y + 5);
+    await cells.nth(from).hover(at);
     await page.mouse.down();
-    await page.mouse.move(b.x + 5, b.y + 5);
+    await cells.nth(to).hover(at);
     await page.mouse.up();
   }
 }
@@ -53,6 +51,10 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // before any mark, so the cell indexes below are UTC's on every project. (On tz-kolkata the
   // alias field's blur flushes a Kolkata post first; the next post overwrites it.)
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
+  // Leave the field before marking: its blur flushes an autosave, and Firefox keeps a datalist
+  // popup open on a focused input. Neither should be in flight when the first stroke lands.
+  await page.locator('#availability-root input[list=tz-list]').blur();
+  await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
 
   // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,
   // so its 7am cell is number 102. Sunday is the last day of a Monday-first week, so it is
