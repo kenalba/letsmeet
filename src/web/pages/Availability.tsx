@@ -1,5 +1,5 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
-import { describeWeekly, localDateOf } from '../../core/availability.js';
+import { localDateOf } from '../../core/availability.js';
 import { cn } from '../lib/cn.js';
 import { buttonVariants } from '../ui/button.js';
 import { useNonce } from '../nonce.js';
@@ -58,9 +58,6 @@ export function AvailabilityPage(data: AvailabilityPageData) {
       <div className="grid gap-6">
         <div className="grid gap-1">
           <h1 className="pixel-heading">your availability</h1>
-          <p className="text-sm text-muted-foreground">
-            {rec ? describeWeekly(rec.weekly) : 'nothing marked yet.'}
-          </p>
         </div>
         {data.readFailed && (
           <p className="banner rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">

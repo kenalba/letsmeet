@@ -560,13 +560,15 @@
 }
 
 @layer island {
-  /* The editor's own furniture: the read-back sentence under the grid, the away list that
-     is the record, and the detail fields below it. Everything else it draws is the grid's. */
+  /* The editor's away list and detail fields. Everything else it draws is the grid's. */
   #availability-root {
-    .sentence { margin: 12px 0 18px; font-size: 12px; color: var(--primary); }
-    .address-line { margin: -12px 0 18px; font-size: 12px; color: var(--muted-foreground); }
-    .address-field { display: inline-flex; align-items: baseline; gap: 2px; }
+    .sentence { margin: 12px 0 18px; font-size: 14px; font-weight: 400; line-height: 1.6; color: var(--foreground); }
+    .col.axis { background: transparent; }
+    .address-label { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; }
+    .address-field { display: inline-flex; align-items: baseline; gap: 8px; }
     .address-field input { width: 14ch; }
+    .copy-address { font-size: 13px; color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .copy-address:disabled { opacity: 0.5; cursor: default; }
     .address-field .suffix { font-size: 13px; color: var(--muted-foreground); }
     /* Hour cells over a half-hour record: an hour with only one half marked is drawn half
        full (top: the :00 half, bottom: the :30 half), so a saved 5:30pm still reads as
@@ -581,7 +583,7 @@
     .status {
       position: sticky; bottom: 0; z-index: 3;
       display: flex; align-items: center; gap: 10px;
-      margin: 12px 0 0; padding: 8px 0;
+      margin: 12px 0 0; padding: 8px 12px;
       background: var(--background); border-top: 1px solid var(--border);
       color: var(--muted-foreground);
     }
@@ -598,7 +600,7 @@
        which is also what lets the sticky day header stick to the page. `position: relative`
        is the frame the zone labels are placed in. */
     .grid { overflow: visible; position: relative; }
-    .col { flex: 1 1 0; min-width: 0; --i: 0; }
+    .col { flex: 1 1 0; min-width: 0; max-width: none; --i: 0; }
     /* The chip is positioned against this, not against the scrolling grid. */
     .gridwrap { position: relative; }
     /* Two lines of head on every page, so paging does not move the grid: the date number
@@ -626,17 +628,9 @@
        in the sheet): a cell that is both is simply away. */
     .grid .cell.away, .grid.canvas .cell.away { background: var(--away); border-color: var(--away); }
 
-    /* The deal (keyframes at the top of the layer block below): the island sets `--i` per
-       column, so each one starts 25ms after the one to its left. */
-    .col.deal .cells { animation: deal 320ms ease both; animation-delay: calc(var(--i) * 25ms); }
-    .col.deal .num { animation: num-drop 220ms ease both; animation-delay: calc(var(--i) * 25ms + 120ms); }
-    @media (prefers-reduced-motion: reduce) {
-      .col.deal .cells, .col.deal .num { animation: none; }
-    }
-
     /* One pager: `‹ usual week ›`. Two lines always, so its height never moves. */
     .pager-wrap { position: relative; }
-    .pager { display: flex; align-items: stretch; max-width: 360px; }
+    .pager { display: flex; align-items: stretch; width: 100%; }
     .pager button {
       font-family: var(--font-pixel); font-size: 16px; line-height: 22px; padding: 4px 12px;
       border: 1px solid var(--border); background: var(--background); color: var(--foreground);
@@ -833,19 +827,38 @@
 }
 
 @layer island {
-  /* Keyframes cannot live inside a style rule (CSS nesting forbids it), so the three the
-     editor uses are declared here, at the layer's top level, beside everything else that is
-     shared by both grids. The deal: on a page change the columns cross-fade left to right,
-     25ms apart, and the date numbers drop in behind them. */
+  /* Both availability grids use the same motion. The editor animates a whole column;
+     the public grid animates its cells together using the same column index. Keep the
+     sticky headers stationary and animate only the date number inside them. */
+  :is(#availability-root .col.deal .cells, .week .week-cell) {
+    animation: deal 320ms ease backwards;
+    animation-delay: calc(var(--i) * 25ms);
+  }
+  :is(#availability-root .col.deal .num, .week .week-head b) {
+    animation: num-drop 220ms ease backwards;
+    animation-delay: calc(var(--i) * 25ms + 120ms);
+  }
+  .week [data-c="0"] { --i: 1; }
+  .week [data-c="1"] { --i: 2; }
+  .week [data-c="2"] { --i: 3; }
+  .week [data-c="3"] { --i: 4; }
+  .week [data-c="4"] { --i: 5; }
+  .week [data-c="5"] { --i: 6; }
+  .week [data-c="6"] { --i: 7; }
+  .week-cell.past, .week-head.past b { --motion-opacity: 0.42; }
+  @media (prefers-reduced-motion: reduce) {
+    :is(#availability-root .col.deal .cells, .week .week-cell,
+        #availability-root .col.deal .num, .week .week-head b) { animation: none; }
+  }
   @keyframes deal {
-    0% { opacity: 1; transform: translateY(0); }
+    0% { opacity: var(--motion-opacity, 1); transform: translateY(0); }
     42% { opacity: 0; transform: translateY(-4px); }
     58% { opacity: 0; transform: translateY(4px); }
-    100% { opacity: 1; transform: translateY(0); }
+    100% { opacity: var(--motion-opacity, 1); transform: translateY(0); }
   }
   @keyframes num-drop {
     from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: none; }
+    to { opacity: var(--motion-opacity, 1); transform: none; }
   }
   @keyframes chip-in {
     from { opacity: 0; transform: translateY(-4px); }

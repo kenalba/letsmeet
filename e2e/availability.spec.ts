@@ -62,6 +62,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await markCells(page, page.locator('#availability-root [data-slot]'), 6 * 17, 6 * 17 + 1);
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 9am.');
+  await expect(page.getByText('usually free sundays 7am to 9am.', { exact: true })).toHaveCount(1);
 
   // The pager: the usual week is page zero, and `›` pages into real weeks.
   await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
@@ -132,8 +133,17 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // No post button: the status line posts two seconds after the last change.
   await expect(page.locator('#availability-root button.save')).toHaveCount(0);
   await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
-  await expect(page.locator('#availability-root .address-line'))
-    .toHaveText(`your address: ${name}.sez.localhost:8787`);
+  await expect(page.locator('#availability-root .address-line')).toHaveCount(0);
+  await expect(page.locator('#availability-root .copy-address')).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => { document.documentElement.dataset.copiedUrl = text; } },
+    });
+  });
+  await page.locator('#availability-root .copy-address').click();
+  await expect(page.locator('#availability-root .copy-address')).toHaveText('copied.');
+  await expect(page.locator('html')).toHaveAttribute('data-copied-url', `http://${name}.sez.localhost:8787`);
 
   // Reload keeps it.
   await page.reload();
@@ -154,6 +164,19 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // that is the poll prompt.
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await expect(page.locator('.week-cell.free')).toHaveCount(2);
+  // The shareable grid uses the editor's column and date motion, with the same
+  // accessible opt-out. Past days must stay dim after the animation finishes.
+  await expect(page.locator('.week-cell').first()).toHaveCSS('animation-name', 'deal');
+  await expect(page.locator('.week-head b').first()).toHaveCSS('animation-name', 'num-drop');
+  await page.locator('.week').evaluate(async (grid) => {
+    await Promise.all(grid.getAnimations({ subtree: true }).map((animation) => animation.finished));
+  });
+  const pastCells = page.locator('.week-cell.past');
+  if (await pastCells.count()) await expect(pastCells.first()).toHaveCSS('opacity', '0.42');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.week-cell').first()).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.week-head b').first()).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   // Sensitive to the clock in the one project that is not in UTC: the editor drew (and this
   // count expects) the sunday of the browser's own week, while the record saves in UTC — so
   // between 00:00 and 05:30 IST on a monday that sunday belongs to the week just gone, and

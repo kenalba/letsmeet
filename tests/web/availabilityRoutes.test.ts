@@ -58,7 +58,7 @@ describe('/availability', () => {
     expect(html).toContain('id="availability-root"');
     expect(html).toContain('/assets/availability.js');
     expect(html).toContain('out of town');
-    expect(html).toContain('usually free tuesdays 7pm to 10pm.');
+    expect(html).not.toContain('usually free tuesdays 7pm to 10pm.');
     expect(html).toContain('data-copy-url="http://localhost:8787/u/me.test/availability.ics"');
     expect(html).toContain('>copy link</button>');
     expect(html).toContain('>download .ics</a>');

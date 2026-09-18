@@ -395,9 +395,8 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [alias, setAlias] = useState(data.alias);
   const [aliasSaved, setAliasSaved] = useState(data.aliasSaved);
   const aliasOk = alias === '' || isValidSezName(alias);
-  // A name that breaks the rule has no address to promise: the rule hint under the field
-  // says why, and the line below the grid falls back to "no address yet" rather than
-  // reading out a host that could never be claimed.
+  // Only offer a share link for a valid address.
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const address = alias ? (aliasOk ? `${alias}.${data.sezSuffix}` : null) : data.addressFallback;
   // ---- autosave: about two seconds after the last change, one post at a time
   // What the server already has: a post that would send this again sends nothing. A ref,
@@ -848,11 +847,8 @@ function Editor({ data }: { data: AvailabilityData }) {
           <span><i className="away" />away</span>
         </div>
       )}
-      <p className="sentence pixel-label" aria-live="polite">{describeWeekly(weekly)}</p>
-      <p className="address-line pixel-label" aria-live="polite">
-        {address ? `your address: ${address}` : 'no address yet. pick a name below.'}
-        {alias !== aliasSaved && ' (not saved yet)'}
-      </p>
+
+      <p className="sentence" aria-live="polite">{describeWeekly(weekly)}</p>
 
       <div className="awaybox">
         <h3>away</h3>
@@ -951,11 +947,13 @@ function Editor({ data }: { data: AvailabilityData }) {
             onBlur={flush}
           />
         </label>
-        <label className="full">your address
+        <div className="full address-label">
+          <label htmlFor="availability-alias">your address:</label>
           <span className="address-field">
             <input
               type="text"
               name="alias"
+              id="availability-alias"
               maxLength={32}
               value={alias}
               spellCheck={false}
@@ -965,6 +963,7 @@ function Editor({ data }: { data: AvailabilityData }) {
               onChange={(e) => {
                 const v = e.target.value.trim().toLowerCase();
                 setAlias(v);
+                setCopiedAddress(null);
                 // A name that breaks the rule has nothing to post: the hint below says why.
                 if (v === '' || isValidSezName(v)) queueSave();
               }}
@@ -972,7 +971,22 @@ function Editor({ data }: { data: AvailabilityData }) {
             />
             <span className="suffix">.{data.sezSuffix}</span>
           </span>
-        </label>
+          <button
+            type="button"
+            className="copy-address"
+            disabled={!address || alias !== aliasSaved}
+            onClick={async () => {
+              if (!address) return;
+              const url = `${window.location.protocol}//${address}`;
+              try {
+                await navigator.clipboard.writeText(url);
+                setCopiedAddress(address);
+              } catch {
+                window.prompt('copy this link:', url);
+              }
+            }}
+          >{copiedAddress === address && address ? 'copied.' : 'copy'}</button>
+        </div>
       </div>
       {zoneText !== zone && (
         <p className="hint">not a timezone this browser knows. still using {zone}.</p>

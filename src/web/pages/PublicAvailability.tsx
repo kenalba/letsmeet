@@ -260,7 +260,10 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
           <Card>
             <CardHeader>
               <CardTitle>further out</CardTitle>
-              <CardAction className="week-nav"><a href="?week=next">← next week</a></CardAction>
+              <CardAction className="week-nav">
+                <a href="?week=next">← last week</a>
+                <span className="off" aria-disabled="true">next week →</span>
+              </CardAction>
             </CardHeader>
             <CardContent>
               <div className="week-prompt">
@@ -279,10 +282,10 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               <CardTitle>{view!.title}</CardTitle>
               <CardAction className="week-nav">
                 {week === 'this'
-                  ? <span className="off">← this week</span>
-                  : <a href="?week=this">← this week</a>}
+                  ? <span className="off" aria-disabled="true">← last week</span>
+                  : <a href="?week=this">← last week</a>}
                 <a href={week === 'this' ? '?week=next' : '?week=later'}>
-                  {week === 'this' ? 'next week →' : 'further out →'}
+                  next week →
                 </a>
               </CardAction>
             </CardHeader>

@@ -168,7 +168,7 @@ describe('the week grid', () => {
   it('shows the week containing today, the away note inside its block, the captions, and no strip', () => {
     const html = render();
     expect(html).toContain('sep 14 – 20');
-    expect(html).toContain('<span class="off">← this week</span>');
+    expect(html).toContain('<span class="off" aria-disabled="true">← last week</span>');
     expect(html).toContain('href="?week=next"');
     // Tuesday and Thursday 7pm–10pm: the 7pm cell on each is free; Monday's is not.
     expect(html.match(/class="week-cell free/g)?.length).toBe(6);
@@ -188,8 +188,9 @@ describe('the week grid', () => {
     expect(html).toContain('sep 21 – 27');
     expect(html).toContain('href="?week=this"');
     expect(html).toContain('href="?week=later"');
-    expect(html).toContain('further out →');
-    expect(html).not.toContain('next week →');
+    expect(html).toContain('next week →');
+    expect(html).toContain('← last week');
+    expect(html).not.toContain('further out →');
     // The same away entry ends on monday the 21st: one column wide, so vertical.
     expect(html).toContain('<div class="zlabel v" data-past="" style="grid-row:2/19;grid-column:2/3">out of town</div>');
   });
@@ -204,6 +205,8 @@ describe('the week grid', () => {
     expect(html).toContain('href="https://letsmeet.lol/new"');
     expect(html).toContain('href="?week=next"');
     expect(html).toContain('pick some dates, they mark what works.');
+    expect(html).toContain('← last week');
+    expect(html).toContain('<span class="off" aria-disabled="true">next week →</span>');
     expect(html).toContain('away later: oct 3 – 5 · wedding');
     expect(html).not.toContain('week-cell');
     expect(html).not.toContain('no sign-in');
