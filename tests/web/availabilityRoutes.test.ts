@@ -108,15 +108,19 @@ describe('/availability', () => {
     expect(res.status).toBe(400);
     expect((await res.json() as { error: string }).error).toBe('malformed request body.');
   });
-  it('turns saves away once the account has spent its budget', async () => {
+  it('lets autosave post freely and turns saves away only past ninety', async () => {
     const { app } = setup();
     const cookie = await signIn(app, ME);
     const save = () => app.request('/availability', {
       method: 'POST', headers: { cookie, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
-    // The bucket holds 20 and the clock does not move, so the 21st finds it empty.
-    for (let i = 0; i < 20; i++) expect((await save()).status).toBe(200);
+    // The bucket holds 90 and the clock does not move, so the 91st finds it empty. The 21st
+    // is the one the old limit refused, which two minutes of autosave now reaches.
+    for (let i = 0; i < 90; i++) {
+      const res = await save();
+      expect([i, res.status]).toEqual([i, 200]);
+    }
     const res = await save();
     expect(res.status).toBe(429);
     expect((await res.json() as { error: string }).error).toBe('easy there. try again in a minute.');

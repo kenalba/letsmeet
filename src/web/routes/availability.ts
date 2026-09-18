@@ -90,8 +90,10 @@ export function availabilityRoutes(
 ): Hono {
   const app = new Hono();
   const session = sessionEnvFor(deps.db, env.COOKIE_SECRET, env.PUBLIC_URL);
-  // 20 saves per ten minutes per account: a save is two PDS round trips (a claim rides on one).
-  const saveLimiter = new TokenBucket(20, 20 / 600);
+  // 90 saves per ten minutes per account: a save is two PDS round trips (a claim rides on
+  // one), and the editor autosaves about two seconds after each change — so the budget has
+  // to hold a long editing session, not a handful of button presses.
+  const saveLimiter = new TokenBucket(90, 90 / 600);
 
   app.get('/availability', async (c) => {
     const who = await readSession(c, session, deps.now().getTime());
