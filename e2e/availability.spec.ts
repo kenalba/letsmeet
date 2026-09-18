@@ -95,9 +95,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   expect(alias.status()).toBe(200);
   const aliasText = await alias.text();
   expect(aliasText).toContain('usually free sundays 7am to 9am.');
-  // The signed-in viewer is the owner, so the alias response offers the edit link too:
+  // The signed-in viewer is the owner, so the alias response carries the edit button too:
   // `page.request` shares the browser context's cookie jar, so the session rides along.
-  expect(aliasText).toContain('this is you');
+  expect(aliasText).toContain('>edit</a>');
   expect(aliasText).toContain('href="http://localhost:8787/availability"');
   const aliasIcs = await page.request.get('/availability.ics', { headers: { host: aliasHost } });
   expect(aliasIcs.headers()['content-type']).toContain('text/calendar');

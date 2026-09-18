@@ -9,6 +9,7 @@ import { AVAILABILITY_NSID, AVAILABILITY_RKEY, type AvailabilityRecord } from '.
 import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
 import { claimSezName, getSezName } from '../../src/db/sezNames.js';
+import { ZONE_LABEL_SCRIPT } from '../../src/web/pages/zoneLabels.js';
 
 const KEN = 'did:plc:ken';
 const stubAuth: AuthClient = {
@@ -59,7 +60,10 @@ describe('/u/:handle', () => {
     expect(html).toContain('good through');
     expect(html).toContain('/u/ken.wzrdz.cool/availability.ics');
     expect(html).toContain('data-copy-url="http://localhost:8787/u/ken.wzrdz.cool/availability.ics"');
-    expect(html).toContain('>copy feed link</button>');
+    expect(html).toContain('>copy link</button>');
+    expect(html).toContain('>download .ics</a>');
+    expect(html).toContain('>subscribe</a>');
+    expect(html).not.toContain('subscribe (webcal)');
     expect(html).toContain("button[data-copy-url]"); // the copy script shipped with the page
   });
   it('accepts a did literal when no resolver is configured (fake mode)', async () => {
@@ -132,14 +136,15 @@ describe('/u/:handle', () => {
     // only for the owner, so no shared cache may hold one viewer's copy for the next.
     expect(guestRes.headers.get('cache-control')).toBe('private');
     const guest = await guestRes.text();
-    expect(guest).not.toContain('this is you');
+    expect(guest).not.toContain('>edit</a>');
     const other = await signIn(app, 'did:plc:other');
-    expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('this is you');
+    expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('>edit</a>');
     const mine = await signIn(app, KEN);
     const mineRes = await app.request('/u/ken.wzrdz.cool', { headers: { cookie: mine } });
     expect(mineRes.headers.get('cache-control')).toBe('private');
     const html = await mineRes.text();
-    expect(html).toContain('this is you');
+    expect(html).not.toContain('this is you');
+    expect(html).toContain('>edit</a>');
     expect(html).toContain('href="https://letsmeet.lol/availability"');
   });
 });
@@ -151,15 +156,17 @@ describe('the week grid', () => {
       record: rec, ...extra,
     }));
 
-  it('shows the week containing today, the away note under its date, the captions, and no strip', () => {
+  it('shows the week containing today, the away note inside its block, the captions, and no strip', () => {
     const html = render();
     expect(html).toContain('sep 14 – 20');
     expect(html).toContain('<span class="off">← this week</span>');
     expect(html).toContain('href="?week=next"');
     // Tuesday and Thursday 7pm–10pm: the 7pm cell on each is free; Monday's is not.
     expect(html.match(/class="week-cell free/g)?.length).toBe(6);
-    // The away entry (sat 19 – mon 21) sits under saturday's and sunday's dates.
-    expect(html.match(/<small>out of town<\/small>/g)?.length).toBe(2);
+    // The away entry (sat 19 – mon 21) is one label laid over saturday and sunday, rows 7
+    // through 23 — two columns wide, so the server's guess is horizontal.
+    expect(html).toContain('<div class="zlabel h" data-past="" style="grid-row:2/19;grid-column:7/9">out of town</div>');
+    expect(html).not.toContain('<small>');
     expect(html).toContain('class="week-legend"');
     // The sentence is a caption now, with the freshness on the same line.
     expect(html).toContain('usually free tuesdays and thursdays 7pm to 10pm. · updated 6 days ago · good through Dec 31');
@@ -174,8 +181,8 @@ describe('the week grid', () => {
     expect(html).toContain('href="?week=later"');
     expect(html).toContain('further out →');
     expect(html).not.toContain('next week →');
-    // The same away entry ends on monday the 21st.
-    expect(html.match(/<small>out of town<\/small>/g)?.length).toBe(1);
+    // The same away entry ends on monday the 21st: one column wide, so vertical.
+    expect(html).toContain('<div class="zlabel v" data-past="" style="grid-row:2/19;grid-column:2/3">out of town</div>');
   });
   it('further out is a prompt to make a poll, not a grid', () => {
     const html = render({
@@ -204,7 +211,8 @@ describe('the week grid', () => {
     // The lexicon allows startTime without endTime, and freeIntervals treats a lone one as
     // all day — the grid has to agree, or the day reads free with no mark on it.
     const html = render({ record: { ...rec, away: [{ start: '2026-09-18', end: '2026-09-18', startTime: '09:00' }] } });
-    expect(html).toContain('<small>away</small>');
+    // Nothing to label: an entry with no note carries no zone.
+    expect(html).not.toContain('zlabel');
     expect(html.match(/class="week-cell away/g)?.length).toBe(17);
   });
   it('keeps the stale card as it was, without a grid', () => {
@@ -246,7 +254,7 @@ describe('the week grid', () => {
     const text = "hey @ken.wzrdz.cool, let's meet (lol). 7pm on thu sep 17 looks good to me?";
     expect(html).toContain(`href="https://bsky.app/intent/compose?text=${encodeURIComponent(text).replace("'", '%27')}" target="_blank" rel="noopener"`);
     expect(html).toContain('title="thu 17 7pm · click to post at them"');
-    expect(html).toContain('click a free hour to post at them on bluesky.');
+    expect(html).toContain('click a free hour to ping on bluesky.');
     expect(html).not.toContain('week-ping');
     expect(html).toContain('role="group"');
     expect(html).not.toContain('role="img"');
@@ -255,6 +263,23 @@ describe('the week grid', () => {
     const html = render({ record: { ...rec, weekly: [{ day: 1, start: '19:00', end: '22:00' }] } }); // Mondays only: past
     expect(html).not.toContain('<a class="week-cell');
     expect(html).not.toContain('click a free hour');
+  });
+  it('places every cell and label explicitly, so a label overlaps rather than displaces', () => {
+    const html = render();
+    // Row 1 is the day headers; hour h is row h - 5. Column 1 is the axis.
+    expect(html).toContain('style="grid-row:1;grid-column:2"');
+    expect(html).toContain('style="grid-row:18;grid-column:8"');
+    expect(html.match(/grid-row:\d+;grid-column:\d+"/g)?.length).toBe(1 + 7 + 17 * 8);
+  });
+  it('labels nothing shorter than three rows', () => {
+    const html = render({ record: { ...rec, away: [{
+      start: '2026-09-17', end: '2026-09-17', startTime: '19:00', endTime: '21:00', note: 'dentist',
+    }] } });
+    expect(html).not.toContain('zlabel');
+    const tall = render({ record: { ...rec, away: [{
+      start: '2026-09-17', end: '2026-09-17', startTime: '19:00', endTime: '22:00', note: 'dentist',
+    }] } });
+    expect(tall).toContain('>dentist</div>');
   });
 });
 
@@ -441,7 +466,28 @@ describe('<name>.sez.letsmeet.lol', () => {
     // the header that arrives with it.
     const cookie = await signIn(app, KEN);
     const html = await (await app.request('/', { headers: { host: 'ken.sez.letsmeet.lol', cookie } })).text();
-    expect(html).toContain('this is you');
+    expect(html).toContain('>edit</a>');
     expect(html).toContain('href="https://letsmeet.lol/availability"');
+  });
+});
+
+describe('the zone-label script', () => {
+  /** The bare environment a browser hands it: labels with boxes, and a resize listener. */
+  const label = (text: string, w: number, h: number, past = false) => ({
+    textContent: text, className: `zlabel ${w < h ? 'v' : 'h'}`,
+    getAttribute: (n: string) => (n === 'data-past' && past ? '1' : null),
+    getBoundingClientRect: () => ({ width: w, height: h }),
+  });
+  it('classifies each label with fitLabel, keeping the past flag, and follows a resize', () => {
+    const els = [label('wedding', 200, 60), label('conference', 24, 90), label('out of town', 40, 60, true)];
+    const events: string[] = [];
+    new Function('document', 'window', ZONE_LABEL_SCRIPT)(
+      { querySelectorAll: () => els },
+      { addEventListener: (e: string) => events.push(e) },
+    );
+    // Wide box: one horizontal line. One column: down the column. The third fits neither
+    // on one line, and wraps horizontally in two.
+    expect(els.map((e) => e.className)).toEqual(['zlabel h one', 'zlabel v one', 'zlabel h past']);
+    expect(events).toEqual(['resize']);
   });
 });
