@@ -208,4 +208,22 @@ describe('weekNoteZones', () => {
     // Three rows is the shortest zone that carries a label at all.
     expect(MIN_LABEL_ROWS).toBe(3);
   });
+  it('reads a noted entry with only a start time as all day, as buildWeekView does', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-17', end: '2026-09-17', startTime: '17:30', note: 'half a window' },
+    ] }, week)).toEqual([{ c0: 3, c1: 3, h0: 7, h1: 23, note: 'half a window', past: false }]);
+  });
+  it('reads one with only an end time the same way', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-17', end: '2026-09-17', endTime: '18:30', note: 'half a window' },
+    ] }, week)).toEqual([{ c0: 3, c1: 3, h0: 7, h1: 23, note: 'half a window', past: false }]);
+  });
+  it('clips a range that runs past sunday, and one that overhangs both edges', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-18', end: '2026-09-23', note: 'conference' },
+    ] }, week)).toEqual([{ c0: 4, c1: 6, h0: 7, h1: 23, note: 'conference', past: false }]);
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-10', end: '2026-09-25', note: 'sabbatical' },
+    ] }, week)).toEqual([{ c0: 0, c1: 6, h0: 7, h1: 23, note: 'sabbatical', past: false }]);
+  });
 });
