@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildWeekView, mondayOf, localToday, weekTitle, dateRangeLabel, hourLabel, weekChoice, awayLater,
-  monthDayLabel, HOURS, type WeekView,
+  monthDayLabel, plusDays, weekOffsetOf, weekNoteZones, HOURS, MIN_LABEL_ROWS, type WeekView,
 } from '../../src/core/weekView.js';
 
 const TZ = 'America/New_York';
@@ -154,5 +154,58 @@ describe('monthDayLabel', () => {
   it('is the lowercase month and day', () => {
     expect(monthDayLabel('2026-09-17')).toBe('sep 17');
     expect(monthDayLabel('2026-10-03')).toBe('oct 3');
+  });
+});
+
+describe('plusDays / weekOffsetOf', () => {
+  it('walks dates and counts whole weeks from a monday, negative for weeks already over', () => {
+    expect(plusDays('2026-09-14', 6)).toBe('2026-09-20');
+    expect(plusDays('2026-09-14', -1)).toBe('2026-09-13');
+    expect(weekOffsetOf('2026-09-16', '2026-09-14')).toBe(0);
+    expect(weekOffsetOf('2026-09-20', '2026-09-14')).toBe(0);
+    expect(weekOffsetOf('2026-09-21', '2026-09-14')).toBe(1);
+    // Seven weeks out, across the date a northern-hemisphere DST change falls on.
+    expect(weekOffsetOf('2026-11-08', '2026-09-14')).toBe(7);
+    expect(weekOffsetOf('2026-09-13', '2026-09-14')).toBe(-1);
+  });
+});
+
+describe('weekNoteZones', () => {
+  const week = { monday: '2026-09-14', today: '2026-09-16' };
+  it('gives an all-day noted entry one rectangle over every row it covers', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-19', end: '2026-09-21', note: 'out of town' },
+    ] }, week)).toEqual([{ c0: 5, c1: 6, h0: 7, h1: 23, note: 'out of town', past: false }]);
+  });
+  it('clips a timed window to the hours it overlaps', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-17', end: '2026-09-17', startTime: '17:30', endTime: '18:30', note: 'dentist' },
+    ] }, week)).toEqual([{ c0: 3, c1: 3, h0: 17, h1: 18, note: 'dentist', past: false }]);
+  });
+  it('clips a range that starts before the week, and calls it past when it ends before today', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-10', end: '2026-09-15', note: 'trip' },
+    ] }, week)).toEqual([{ c0: 0, c1: 1, h0: 7, h1: 23, note: 'trip', past: true }]);
+  });
+  it('skips an entry with no note, one outside the week, and a window off the grid', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-19', end: '2026-09-19' },
+      { start: '2026-10-03', end: '2026-10-05', note: 'wedding' },
+      { start: '2026-09-18', end: '2026-09-18', startTime: '05:00', endTime: '06:00', note: 'gym' },
+    ] }, week)).toEqual([]);
+  });
+  it('reads a window ending at midnight as running to the last row', () => {
+    expect(weekNoteZones({ ...base, away: [
+      { start: '2026-09-18', end: '2026-09-18', startTime: '22:00', endTime: '00:00', note: 'show' },
+    ] }, week)[0]).toMatchObject({ h0: 22, h1: 23 });
+  });
+  it('takes a week view as its week, which is what both pages hand it', () => {
+    const v = buildWeekView(base, NOW, 0);
+    expect(v.today).toBe('2026-09-16');
+    expect(weekNoteZones(
+      { ...base, away: [{ start: '2026-09-14', end: '2026-09-14', note: 'x' }] }, v,
+    )).toEqual([{ c0: 0, c1: 0, h0: 7, h1: 23, note: 'x', past: true }]);
+    // Three rows is the shortest zone that carries a label at all.
+    expect(MIN_LABEL_ROWS).toBe(3);
   });
 });

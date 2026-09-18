@@ -34,6 +34,8 @@ export interface WeekDay {
 export interface WeekView {
   monday: string;
   sunday: string;
+  /** Today's date in the record's zone — what `past`/`today` on each day are measured from. */
+  today: string;
   title: string;     // 'sep 14 – 20'
   days: WeekDay[];
   hasAway: boolean;  // any away cell in this week: the legend is shown
@@ -43,7 +45,22 @@ export interface WeekView {
 
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const iso = (date: string) => DateTime.fromISO(date, { locale: 'en-US' });
-const plusDays = (date: string, n: number) => iso(date).plus({ days: n }).toISODate()!;
+/** ISO date + n days. Exported: the editor's pager and picker do the same arithmetic. */
+export function plusDays(date: string, n: number): string {
+  return iso(date).plus({ days: n }).toISODate()!;
+}
+
+/** How many whole weeks `date`'s Monday is from `thisMonday`; negative for a week already over. */
+export function weekOffsetOf(date: string, thisMonday: string): number {
+  return Math.round(iso(mondayOf(date)).diff(iso(thisMonday), 'days').days / 7);
+}
+
+/**
+ * The shortest zone that carries a note label: under three rows there is no room for one,
+ * and a clipped single character reads as a smudge. Both grids use it.
+ */
+export const MIN_LABEL_ROWS = 3;
+
 /** 'sep 17'. Lowercase, like the rest of the grid chrome. */
 export function monthDayLabel(date: string): string {
   return iso(date).toFormat('LLL d').toLowerCase();
@@ -131,8 +148,52 @@ export function buildWeekView(rec: AvailabilityInput, now: Date, offset: 0 | 1):
     });
   }
   return {
-    monday, sunday, title: weekTitle(monday, sunday), days, hasAway,
+    monday, sunday, today, title: weekTitle(monday, sunday), days, hasAway,
     // Relative to today's week whichever week is shown: next week's Sunday is day 13.
     later: awayLater(rec.away, plusDays(thisMonday, 13)),
   };
+}
+
+export interface NoteZone {
+  /** Column indexes into the week's days, inclusive. */
+  c0: number; c1: number;
+  /** Wall-clock hours, inclusive, clipped to HOURS. */
+  h0: number; h1: number;
+  note: string;
+  /** The whole rectangle is behind today: the label dims with the cells. */
+  past: boolean;
+}
+
+/**
+ * One rectangle per noted away entry in the shown week — the block the entry's own note is
+ * drawn inside, on the friend view and in the editor both. Entries with nothing to say are
+ * skipped, an all-day entry fills every row, and a range is clipped to the week's columns,
+ * so a range that straddles an edge labels the part on screen. Hours only; no pixels, and
+ * no zones: this is the same wall-clock arithmetic `buildWeekView` does.
+ */
+export function weekNoteZones(
+  rec: AvailabilityInput, week: { monday: string; today: string },
+): NoteZone[] {
+  const dates = Array.from({ length: 7 }, (_, i) => plusDays(week.monday, i));
+  const first = HOURS[0];
+  const last = HOURS[HOURS.length - 1];
+  const out: NoteZone[] = [];
+  for (const a of rec.away) {
+    if (!a.note || a.end < dates[0] || a.start > dates[6]) continue;
+    let c0 = 0;
+    while (dates[c0] < a.start) c0++;
+    let c1 = 6;
+    while (dates[c1] > a.end) c1--;
+    // Half a window is not a window: a lone startTime or endTime is all day, as
+    // freeIntervals reads it. An end at or before the start runs to midnight.
+    const timed = !!(a.startTime && a.endTime);
+    const s = timed ? minutes(a.startTime!) : first * 60;
+    const e0 = timed ? minutes(a.endTime!) : (last + 1) * 60;
+    const e = timed && e0 <= s ? 1440 : e0;
+    const h0 = Math.max(first, Math.floor(s / 60));
+    const h1 = Math.min(last, Math.ceil(e / 60) - 1);
+    if (h1 < h0) continue; // wholly before 7am or after 11pm: no cell stands for it
+    out.push({ c0, c1, h0, h1, note: a.note, past: dates[c1] < week.today });
+  }
+  return out;
 }
