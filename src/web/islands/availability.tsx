@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect, useMemo, useRef, useState,
+  type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { createRoot } from 'react-dom/client';
+import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../../atproto/records.js';
 import {
   buildGeom, applyPaint, paintToIntervals, intervalsToPaint, type PaintMap,
@@ -7,8 +11,15 @@ import {
 import { hourRows, hourState, hourStrokeOp, hourRectKeys, type HourCell } from '../../core/hourCells.js';
 import {
   describeWeekly, endOfLocalDay, normalizeAvailability, splitAtTemplateStart, templateSlots,
-  templateIntervalsToWeekly, weeklyToTemplateIntervals,
+  templateIntervalsToWeekly, weeklyOverDates, weeklyToTemplateIntervals, TEMPLATE_START,
 } from '../../core/availability.js';
+import {
+  compactAway, expandAway, paintAway, toggleAllDay, type AwayDays,
+} from '../../core/awayDays.js';
+import { materializeSlots } from '../../core/slots.js';
+import {
+  dateRangeLabel, localToday, mondayOf, monthDayLabel, plusDays, weekOffsetOf,
+} from '../../core/weekView.js';
 import { UserError } from '../../core/errors.js';
 import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
 // Only the class-string generator, never the <Button> component: <Button> stamps
@@ -32,6 +43,102 @@ interface AvailabilityData {
 /** How long a finger rests on a cell before it marks instead of scrolling — as in grid.tsx. */
 const HOLD_MS = 350;
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/** The columns' order, and the picker's header row. */
+const DOW_MON = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const MONTHS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/** Where the grid is pointed: the usual week, or a week offset from this Monday. */
+type Page = 'usual' | number;
+
+/** A first-of-month ISO date, n months along. */
+function addMonths(first: string, n: number): string {
+  const d = new Date(`${first}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n, 1);
+  return d.toISOString().slice(0, 10);
+}
+const monthTitle = (first: string) => `${MONTHS[Number(first.slice(5, 7)) - 1]} ${first.slice(0, 4)}`;
+const domOf = (date: string) => Number(date.slice(8, 10));
+/** `this week`, `next week`, `in 3 weeks` — the pager's name for a dated page. */
+const pageName = (off: number) => (off === 0 ? 'this week' : off === 1 ? 'next week' : `in ${off} weeks`);
+
+/**
+ * A small calendar whose rows are the choice: click a row to show that week. Weeks already
+ * over are disabled, today is underlined, a day with away carries an orange dot, and the
+ * usual week sits above the calendar. Escape or a click outside closes it.
+ */
+function WeekPicker({ page, today, thisMonday, hasAway, onPick, onClose }: {
+  page: Page;
+  today: string;
+  thisMonday: string;
+  hasAway: (date: string) => boolean;
+  onPick: (p: Page) => void;
+  onClose: () => void;
+}) {
+  const [month, setMonth] = useState(
+    () => `${(page === 'usual' ? today : plusDays(thisMonday, page * 7)).slice(0, 8)}01`);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const click = (e: MouseEvent) => {
+      if (e.target instanceof Node && !box.current?.contains(e.target)) onClose();
+    };
+    window.addEventListener('keydown', key);
+    // A tick late: the click that opened the picker must not also close it.
+    const t = window.setTimeout(() => window.addEventListener('click', click), 0);
+    return () => {
+      window.removeEventListener('keydown', key);
+      window.clearTimeout(t);
+      window.removeEventListener('click', click);
+    };
+  }, [onClose]);
+  const weeks: string[] = [];
+  const last = plusDays(addMonths(month, 1), -1);
+  for (let m = mondayOf(month); m <= last; m = plusDays(m, 7)) weeks.push(m);
+  return (
+    <div className="weekpick" role="dialog" aria-label="pick a week" ref={box}>
+      <button
+        type="button"
+        className={cn('usual', page === 'usual' && 'current')}
+        onClick={() => onPick('usual')}
+      >&gt; usual week</button>
+      <div className="mh">
+        <button type="button" aria-label="previous month" onClick={() => setMonth(addMonths(month, -1))}>‹</button>
+        <span>{monthTitle(month)}</span>
+        <button type="button" aria-label="next month" onClick={() => setMonth(addMonths(month, 1))}>›</button>
+      </div>
+      <div className="dows">{DOW_MON.map((d) => <span key={d}>{d.slice(0, 2)}</span>)}</div>
+      {weeks.map((mon) => {
+        const off = weekOffsetOf(mon, thisMonday);
+        return (
+          <button
+            key={mon}
+            type="button"
+            className={cn('wk', off === page && 'current')}
+            disabled={off < 0}
+            aria-label={`week of ${monthDayLabel(mon)}`}
+            onClick={() => onPick(off)}
+          >
+            {Array.from({ length: 7 }, (_, i) => plusDays(mon, i)).map((d) => (
+              <span
+                key={d}
+                className={cn(
+                  d.slice(0, 7) !== month.slice(0, 7) && 'out',
+                  d === today && 'today',
+                  hasAway(d) && 'away',
+                )}
+              >{domOf(d)}</span>
+            ))}
+          </button>
+        );
+      })}
+      <div className="foot">a row is a week. dots are away days.</div>
+    </div>
+  );
+}
 
 /** Every zone this browser knows, for the timezone field's datalist. Empty where it can't say. */
 const ZONES: string[] = (() => {
@@ -79,7 +186,25 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [zone, setZone] = useState(
     data.timezone && knownZone(data.timezone) ? data.timezone : HERE);
   const [zoneText, setZoneText] = useState(data.timezone ?? HERE);
-  const slots = useMemo(() => templateSlots(zone), [zone]);
+  const [page, setPage] = useState<Page>('usual');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // "Today" is read once, in the record's zone: an editor left open across midnight keeps
+  // the page it is on rather than shifting under the pointer.
+  const [now] = useState(() => new Date());
+  const today = useMemo(() => localToday(now, zone), [now, zone]);
+  const thisMonday = useMemo(() => mondayOf(today), [today]);
+  const dated = page !== 'usual';
+  /** The seven dates the page shows, or null on the usual week (which has no dates). */
+  const dates = useMemo(() => (page === 'usual'
+    ? null
+    : Array.from({ length: 7 }, (_, i) => plusDays(thisMonday, page * 7 + i))), [page, thisMonday]);
+  // A dated page is the same grid over real dates: same 7am-to-midnight window, same
+  // half-hour slots, so the hour rows and the stroke geometry are the template's.
+  const slots = useMemo(() => (dates
+    ? materializeSlots({
+      dates, window: { start: TEMPLATE_START, end: '00:00' }, slotMinutes: 30, timezone: zone,
+    })
+    : templateSlots(zone)), [dates, zone]);
   const geom = useMemo(() => buildGeom(slots, zone), [slots, zone]);
   // Hour rows over the half-hour slots (core/hourCells.ts): the record stays half-hour
   // aligned; the grid draws and strokes by the hour.
@@ -88,6 +213,21 @@ function Editor({ data }: { data: AvailabilityData }) {
   const cellByKey = useMemo(() => {
     const m = new Map<string, HourCell>();
     for (const r of hours) for (const c of r.cells) if (c) m.set(c.keys[0], c);
+    return m;
+  }, [hours]);
+  /** Each slot key as the date and half hour it falls on in the record's zone. */
+  const local = useMemo(() => {
+    const m = new Map<string, { date: string; hm: string }>();
+    for (const s of slots) {
+      const d = DateTime.fromISO(s.start, { zone: 'utc' }).setZone(zone);
+      m.set(s.start, { date: d.toISODate()!, hm: d.toFormat('HH:mm') });
+    }
+    return m;
+  }, [slots, zone]);
+  /** Where each hour cell sits, for the note chip's anchor (Task 12). */
+  const pos = useMemo(() => {
+    const m = new Map<string, { ri: number; ci: number }>();
+    hours.forEach((r, ri) => r.cells.forEach((c, ci) => { if (c) m.set(c.keys[0], { ri, ci }); }));
     return m;
   }, [hours]);
 
@@ -104,8 +244,11 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [offGrid] = useState<WeeklyBlock[]>(() => {
     try { return splitAtTemplateStart(data.weekly).offGrid; } catch { return []; }
   });
-  const painted = useMemo<PaintMap>(
-    () => intervalsToPaint(weeklyToTemplateIntervals(weekly, zone), [], slots), [weekly, zone, slots]);
+  /** The usual week's free hours, drawn on whichever seven dates are on screen. */
+  const painted = useMemo<PaintMap>(() => intervalsToPaint(
+    dates ? weeklyOverDates(weekly, dates, zone) : weeklyToTemplateIntervals(weekly, zone),
+    [], slots,
+  ), [weekly, dates, zone, slots]);
   /**
    * A stroke, written back as the record: what the cells now say, plus the blocks the grid
    * cannot show, merged and re-sorted. The one thing that can be refused here is a week of
@@ -124,6 +267,29 @@ function Editor({ data }: { data: AvailabilityData }) {
   };
 
   const [away, setAway] = useState<AwayEntry[]>(data.away);
+  /** The away day map for the week on screen: what a stroke on a dated page edits. */
+  const days = useMemo<AwayDays>(
+    () => (dates ? expandAway(away, dates[0], dates[6]) : new Map()), [away, dates]);
+  /** Any away at all in this hour cell — half an hour of it is enough to colour the cell. */
+  const awayAt = (c: HourCell): boolean => {
+    const at = local.get(c.keys[0]);
+    const d = at && days.get(at.date);
+    if (!d) return false;
+    const set = d.away;
+    if (set === 'all') return true;
+    return c.keys.some((k) => {
+      const l = local.get(k);
+      return !!l && set.has(l.hm);
+    });
+  };
+  /** The picker's orange dots. */
+  const hasAway = (date: string) => away.some((a) => a.start <= date && date <= a.end);
+  /** A page change: dismiss what belonged to the old page. */
+  const switchPage = (next: Page) => {
+    if (next === page) return;
+    setPickerOpen(false);
+    setPage(next);
+  };
   // What the server has been told about away, entry by entry, so a new one can say it is
   // not up yet: "i'm away" only adds to this list, and the post button — a long page below
   // — is what publishes. Compared as JSON: the editor builds entries in the same key order
@@ -154,6 +320,7 @@ function Editor({ data }: { data: AvailabilityData }) {
   // the hour cell's first slot key, which is what identifies the cell under the finger.
   const press = useRef<{ key: string; timer: number } | null>(null);
   const gridEl = useRef<HTMLDivElement>(null);
+  const wrapEl = useRef<HTMLDivElement>(null);
   const cancelPress = () => {
     if (press.current) window.clearTimeout(press.current.timer);
     press.current = null;
@@ -183,6 +350,8 @@ function Editor({ data }: { data: AvailabilityData }) {
     setPainted(applyPaint(d.base, hourRectKeys(hours, d.anchor, cell), d.op, 'available'));
   };
   const startStroke = (cell: HourCell, touch: boolean) => {
+    // A dated page draws the record and takes no marks yet.
+    if (dated) return;
     drag.current = { anchor: cell, op: hourStrokeOp(painted, cell), base: painted, touch };
     paintTo(cell);
   };
@@ -260,12 +429,12 @@ function Editor({ data }: { data: AvailabilityData }) {
     }
   };
 
-  const cell = (c: HourCell, label: string) => {
+  const cell = (c: HourCell, label: string, isAway: boolean) => {
     const state = hourState(painted, c);
     return (
       <div
         key={c.keys[0]}
-        className={cn('cell', state !== 'none' && state)}
+        className={cn('cell', state !== 'none' && state, isAway && 'away')}
         data-slot={c.keys[0]}
         title={label}
         onPointerDown={onDown(c)}
@@ -276,46 +445,103 @@ function Editor({ data }: { data: AvailabilityData }) {
 
   return (
     <div>
-      <label className="address">your address
-        <span className="address-field">
-          <input
-            type="text"
-            name="alias"
-            maxLength={32}
-            value={alias}
-            spellCheck={false}
-            autoCapitalize="none"
-            autoCorrect="off"
-            placeholder="pick a name"
-            onChange={(e) => setAlias(e.target.value.trim().toLowerCase())}
+      <div className="pager-wrap">
+        <div className={cn('pager', dated && 'dated')}>
+          <button
+            type="button"
+            className="arrow"
+            aria-label="previous week"
+            disabled={!dated}
+            onClick={() => switchPage(page === 0 ? 'usual' : (page as number) - 1)}
+          >‹</button>
+          {/* Always two lines — a name over a date range, or over "repeats every week" — so
+              the pager's height never moves when the page changes. */}
+          <button
+            type="button"
+            className="label"
+            aria-haspopup="dialog"
+            aria-expanded={pickerOpen}
+            title="pick a week"
+            onClick={() => setPickerOpen(!pickerOpen)}
+          >
+            <span className="name">{dated ? pageName(page as number) : 'usual week'}</span>
+            <small>{dates ? dateRangeLabel(dates[0], dates[6]) : 'repeats every week'}</small>
+          </button>
+          <button
+            type="button"
+            className="arrow"
+            aria-label="next week"
+            onClick={() => switchPage(dated ? (page as number) + 1 : 0)}
+          >›</button>
+        </div>
+        {pickerOpen && (
+          <WeekPicker
+            page={page}
+            today={today}
+            thisMonday={thisMonday}
+            hasAway={hasAway}
+            onPick={(p) => { switchPage(p); setPickerOpen(false); }}
+            onClose={() => setPickerOpen(false)}
           />
-          <span className="suffix">.{data.sezSuffix}</span>
-        </span>
-      </label>
-      {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
+        )}
+      </div>
+      <p className="hint">{dated
+        ? 'free hours come from your usual week. drag hours to mark away. tap a day for all day.'
+        : "mark when you're usually free. this is a public record in your own repo, like your polls."}</p>
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
-      <p className="hint touch-hint">tap an hour to mark it. hold, then drag, for a block. swipe to scroll.</p>
-      <div ref={gridEl} className="grid canvas" onPointerMove={onMove}>
-        <div className="col axis">
-          <div className="col-head" />
-          {hours.map((r) => (
-            <div key={r.hour} className="axis-label">{r.label}</div>
+      <p className="hint touch-hint">tap an hour to mark it. hold, then drag, for a block.</p>
+      <div className="gridwrap" ref={wrapEl}>
+        <div
+          ref={gridEl}
+          className={cn('grid canvas', dated ? 'dated' : 'usual')}
+          onPointerMove={onMove}
+        >
+          <div className="col axis">
+            <div className="col-head" />
+            <div className="cells">
+              {hours.map((r) => (
+                <div key={r.hour} className="axis-label">{r.label}</div>
+              ))}
+            </div>
+          </div>
+          {geom.dates.map((d, ci) => (
+            <div
+              className={cn('col', dated && d < today && 'past')}
+              key={d}
+              data-c={ci}
+              style={{ '--i': ci + 1 } as CSSProperties}
+            >
+              <div
+                className={cn('col-head', dated && d === today && 'today')}
+                data-c={ci}
+              >
+                {/* Empty on the usual week, which has no dates — the row keeps its height. */}
+                <span className="num">{dated ? domOf(d) : ''}</span>
+                <span className="dow">{DOW[new Date(`${d}T12:00:00Z`).getUTCDay()]}</span>
+              </div>
+              <div className="cells">
+                {hours.map((r) => {
+                  const c = r.cells[ci];
+                  // No slot at this hour on this day (a DST edge): hold the row open with an
+                  // unmarkable blank so the columns stay aligned.
+                  return c
+                    ? cell(c, r.label, dated && awayAt(c))
+                    : <div key={`gap-${r.hour}`} className="cell gap" aria-hidden="true" />;
+                })}
+              </div>
+            </div>
           ))}
         </div>
-        {geom.dates.map((d, ci) => (
-          <div className="col" key={d}>
-            <div className="col-head">
-              <span className="dow">{DOW[new Date(d + 'T12:00:00Z').getUTCDay()]}</span>
-            </div>
-            {hours.map((r) => {
-              const c = r.cells[ci];
-              // No slot at this hour on this day (a DST edge): hold the row open with an
-              // unmarkable blank so the columns stay aligned.
-              return c ? cell(c, r.label) : <div key={`gap-${r.hour}`} className="cell gap" aria-hidden="true" />;
-            })}
-          </div>
-        ))}
       </div>
+      {dated && (
+        <p className="caption hint">what friends see this week. <b>marks here are away</b>, and stick to the date.</p>
+      )}
+      {dated && (
+        <div className="week-legend">
+          <span><i className="free" />usually free</span>
+          <span><i className="away" />away</span>
+        </div>
+      )}
       <p className="sentence pixel-label" aria-live="polite">{describeWeekly(weekly)}</p>
       <p className="address-line pixel-label" aria-live="polite">
         {address ? `your address: ${address}` : 'no address yet. pick a name above.'}
@@ -360,32 +586,53 @@ function Editor({ data }: { data: AvailabilityData }) {
       </div>
 
       <h3 className="pixel-heading">details</h3>
-      <label>timezone
-        <input
-          type="text"
-          value={zoneText}
-          list="tz-list"
-          onChange={(e) => {
-            const v = e.target.value;
-            setZoneText(v);
-            if (knownZone(v)) setZone(v);
-          }}
-        />
-        <datalist id="tz-list">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
-      </label>
+      <div className="details">
+        <label>timezone
+          <input
+            type="text"
+            value={zoneText}
+            list="tz-list"
+            onChange={(e) => {
+              const v = e.target.value;
+              setZoneText(v);
+              if (knownZone(v)) setZone(v);
+            }}
+          />
+          <datalist id="tz-list">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
+        </label>
+        <label>good through
+          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+        </label>
+        <label className="full">note for friends
+          <input
+            type="text"
+            maxLength={300}
+            placeholder="text me first, weeknights are flexible"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </label>
+        <label className="full">your address
+          <span className="address-field">
+            <input
+              type="text"
+              name="alias"
+              maxLength={32}
+              value={alias}
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              placeholder="pick a name"
+              onChange={(e) => setAlias(e.target.value.trim().toLowerCase())}
+            />
+            <span className="suffix">.{data.sezSuffix}</span>
+          </span>
+        </label>
+      </div>
       {zoneText !== zone && (
         <p className="hint">not a timezone this browser knows. still using {zone}.</p>
       )}
-      <label>good through <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} /></label>
-      <label>note for friends
-        <input
-          type="text"
-          maxLength={300}
-          placeholder="text me first, weeknights are flexible"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </label>
+      {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
       <p className="note">this record is public, like your polls. anyone with your handle can read it.</p>
       {/* Sticky at the bottom of the viewport while the editor is on screen: the page is
           long, and a change made at the top must not hide the one button that saves it. */}

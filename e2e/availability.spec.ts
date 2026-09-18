@@ -8,6 +8,11 @@ import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
  */
 async function markCells(page: Page, cells: Locator, from: number, to: number) {
   await expect(cells.first()).toBeVisible();
+  // `boundingBox()` reports viewport-relative coordinates and does not scroll. The editor's
+  // address field sits below the grid now, so measuring straight after filling it would read
+  // cells that are off the top of the screen — and a sticky day header parked over row one
+  // would swallow the press even once they were. Start from the top of the page.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const a = (await cells.nth(from).boundingBox())!;
   const b = (await cells.nth(to).boundingBox())!;
   if (test.info().project.use.hasTouch) {
@@ -43,6 +48,22 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await markCells(page, page.locator('#availability-root [data-slot]'), 6 * 17, 6 * 17 + 1);
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 9am.');
+
+  // The pager: the usual week is page zero, and `›` pages into real weeks.
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
+  await expect(page.locator('#availability-root .grid.usual')).toBeVisible();
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('this week');
+  await expect(page.locator('#availability-root .grid.dated')).toBeVisible();
+  // Dates appear in the headers, and the marked Sunday still reads as free.
+  await expect(page.locator('#availability-root .col[data-c="6"] .col-head .num')).not.toBeEmpty();
+  await expect(page.locator('#availability-root .col[data-c="6"] .cell.available')).toHaveCount(2);
+  // The week picker jumps back to the usual week.
+  await page.click('#availability-root .pager .label');
+  await expect(page.locator('#availability-root .weekpick')).toBeVisible();
+  await page.click('#availability-root .weekpick .usual');
+  await expect(page.locator('#availability-root .weekpick')).toHaveCount(0);
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
 
   // Away on the fixture date, all day, with a note.
   await page.fill('#availability-root .away-form input[type=date] >> nth=0', FIXTURE_DATE_1);
