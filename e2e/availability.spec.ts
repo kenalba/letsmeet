@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
 
 /**
@@ -6,8 +6,7 @@ import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
  * split `poll.spec.ts` uses for the poll grid: a touch project taps each cell (Playwright's
  * touchscreen has no drag primitive), a pointer project drags across both.
  */
-async function markCells(page: Page, root: string, from: number, to: number) {
-  const cells = page.locator(`${root} [data-slot]`);
+async function markCells(page: Page, cells: Locator, from: number, to: number) {
   await expect(cells.first()).toBeVisible();
   const a = (await cells.nth(from).boundingBox())!;
   const b = (await cells.nth(to).boundingBox())!;
@@ -38,9 +37,10 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
 
-  // Mark Sunday 7am–9am, the first two hour cells of the first column: one stroke across two
-  // hours, four half-hour blocks in the record.
-  await markCells(page, '#availability-root', 0, 1);
+  // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,
+  // so its 7am cell is number 102. Sunday is the last day of a Monday-first week, so it is
+  // never in the past — which the reach-out step below needs.
+  await markCells(page, page.locator('#availability-root [data-slot]'), 6 * 17, 6 * 17 + 1);
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 9am.');
 

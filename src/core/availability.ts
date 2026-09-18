@@ -244,13 +244,23 @@ export function describeWeekly(weekly: WeeklyBlock[]): string {
 
 // ---- Template week: lets the editor reuse the poll grid model ---------------------
 
-/** A Sunday. The editor grid is these seven dates; only the weekday of each matters. */
-export const TEMPLATE_SUNDAY = '2026-01-04';
+/** A Monday. The editor grid is these seven dates; only the weekday of each matters. */
+export const TEMPLATE_MONDAY = '2026-01-05';
 export const TEMPLATE_START = '07:00';
 
-function templateDates(): string[] {
+/**
+ * The template week, Monday first — the order every grid in this app runs its columns in
+ * (`mondayOf`, `buildWeekView`), so a column keeps its identity when the editor pages from
+ * the usual week into a real one.
+ */
+export function templateDates(): string[] {
   return Array.from({ length: 7 }, (_, i) =>
-    DateTime.fromISO(TEMPLATE_SUNDAY).plus({ days: i }).toISODate()!);
+    DateTime.fromISO(TEMPLATE_MONDAY).plus({ days: i }).toISODate()!);
+}
+
+/** The template date whose weekday is `day` (0 = Sunday, as the record counts weekdays). */
+export function templateDateFor(day: number): string {
+  return templateDates()[(day + 6) % 7];
 }
 
 /** 7 × 34 half-hour UTC slots in `timezone`, in the poll grid's Interval shape. */
@@ -261,15 +271,32 @@ export function templateSlots(timezone: string): Interval[] {
   });
 }
 
-export function weeklyToTemplateIntervals(weekly: WeeklyBlock[], timezone: string): Interval[] {
-  const dates = templateDates();
-  const ivs = weekly.map((b) => {
-    const start = DateTime.fromISO(`${dates[b.day]}T${b.start}`, { zone: timezone });
-    let end = DateTime.fromISO(`${dates[b.day]}T${b.end}`, { zone: timezone });
-    if (end <= start) end = end.plus({ days: 1 });
-    return { start: start.toUTC().toISO()!, end: end.toUTC().toISO()! };
-  });
+/**
+ * Every weekly block on each of `dates`, as UTC intervals: a block lands on a date when the
+ * date's own weekday is the block's. The template week is seven dates like any other, so the
+ * editor's usual page and its dated pages both come from here — and reading the weekday off
+ * the date, rather than indexing the list by it, is what makes the two one function. Local
+ * wall clock in, UTC out, DST handled per date by luxon.
+ */
+export function weeklyOverDates(
+  weekly: WeeklyBlock[], dates: string[], timezone: string,
+): Interval[] {
+  const ivs: Interval[] = [];
+  for (const date of dates) {
+    const weekday = DateTime.fromISO(date, { zone: timezone }).weekday % 7; // luxon: 7 = Sunday
+    for (const b of weekly) {
+      if (b.day !== weekday) continue;
+      const start = DateTime.fromISO(`${date}T${b.start}`, { zone: timezone });
+      let end = DateTime.fromISO(`${date}T${b.end}`, { zone: timezone });
+      if (end <= start) end = end.plus({ days: 1 }); // past midnight
+      ivs.push({ start: start.toUTC().toISO()!, end: end.toUTC().toISO()! });
+    }
+  }
   return ivs.length ? mergeIntervals(ivs) : [];
+}
+
+export function weeklyToTemplateIntervals(weekly: WeeklyBlock[], timezone: string): Interval[] {
+  return weeklyOverDates(weekly, templateDates(), timezone);
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeAvailability, describeWeekly, isStale, splitAtTemplateStart, templateSlots,
   weeklyToTemplateIntervals, templateIntervalsToWeekly, sanitizeForeignRecord, isKnownZone,
-  endOfLocalDay, localDateOf,
+  endOfLocalDay, localDateOf, templateDates, templateDateFor, weeklyOverDates, TEMPLATE_MONDAY,
 } from '../../src/core/availability.js';
 
 const TZ = 'America/New_York';
@@ -115,10 +115,41 @@ describe('isStale', () => {
 });
 
 describe('template week', () => {
-  it('has 7 days of 34 half-hour slots from 7am to midnight', () => {
+  it('has 7 days of 34 half-hour slots from 7am to midnight, monday first', () => {
     const slots = templateSlots(TZ);
     expect(slots).toHaveLength(7 * 34);
-    expect(slots[0].start).toBe('2026-01-04T12:00:00.000Z'); // 07:00 EST, Sunday
+    expect(slots[0].start).toBe('2026-01-05T12:00:00.000Z'); // 07:00 EST, Monday
+  });
+  it('runs monday to sunday, so a column keeps its identity across pages', () => {
+    expect(TEMPLATE_MONDAY).toBe('2026-01-05');
+    expect(templateDates()).toEqual([
+      '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08',
+      '2026-01-09', '2026-01-10', '2026-01-11',
+    ]);
+    // The record counts weekdays from Sunday; the grid draws them from Monday.
+    expect(templateDateFor(1)).toBe('2026-01-05');
+    expect(templateDateFor(0)).toBe('2026-01-11');
+  });
+  it('round-trips a sunday block, which is the last column now', () => {
+    const weekly = [{ day: 0, start: '11:00', end: '13:00' }];
+    const ivs = weeklyToTemplateIntervals(weekly, 'UTC');
+    expect(ivs).toEqual([{ start: '2026-01-11T11:00:00.000Z', end: '2026-01-11T13:00:00.000Z' }]);
+    expect(templateIntervalsToWeekly(ivs, 'UTC')).toEqual(weekly);
+  });
+  it('puts each weekly block on every real date with that weekday', () => {
+    // 2026-09-14 and 2026-09-21 are Mondays; the 15th is a Tuesday and gets nothing.
+    expect(weeklyOverDates(
+      [{ day: 1, start: '19:00', end: '22:00' }],
+      ['2026-09-14', '2026-09-15', '2026-09-21'], 'UTC',
+    )).toEqual([
+      { start: '2026-09-14T19:00:00.000Z', end: '2026-09-14T22:00:00.000Z' },
+      { start: '2026-09-21T19:00:00.000Z', end: '2026-09-21T22:00:00.000Z' },
+    ]);
+  });
+  it('rolls a past-midnight block onto the next real date', () => {
+    expect(weeklyOverDates(
+      [{ day: 6, start: '22:00', end: '00:00' }], ['2026-09-19'], 'UTC',
+    )).toEqual([{ start: '2026-09-19T22:00:00.000Z', end: '2026-09-20T00:00:00.000Z' }]);
   });
   it('round-trips weekly blocks through template intervals', () => {
     const weekly = [{ day: 2, start: '19:00', end: '22:00' }, { day: 5, start: '22:00', end: '00:00' }];

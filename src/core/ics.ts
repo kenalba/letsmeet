@@ -1,5 +1,5 @@
 import type { AvailabilityInput } from './availability.js';
-import { TEMPLATE_SUNDAY } from './availability.js';
+import { templateDateFor } from './availability.js';
 import { localWindow } from './slots.js';
 import type { AwayEntry } from '../atproto/records.js';
 
@@ -128,9 +128,9 @@ export function buildAvailabilityIcs(
     `X-WR-TIMEZONE:${esc(tz)}`,
   ];
   for (const b of rec.weekly) {
-    const date = plusDays(TEMPLATE_SUNDAY, b.day);
+    const date = ymd(templateDateFor(b.day));
     // A past-midnight block ends on the next calendar day.
-    const endDate = b.end <= b.start ? plusDays(TEMPLATE_SUNDAY, b.day + 1) : date;
+    const endDate = b.end <= b.start ? plusDays(templateDateFor(b.day), 1) : date;
     const exdates = awayDatesOn(rec.away, b.day);
     L.push(
       'BEGIN:VEVENT',
