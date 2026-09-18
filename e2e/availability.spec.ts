@@ -19,10 +19,6 @@ async function markCells(page: Page, cells: Locator, from: number, to: number) {
     for (let i = from; i <= to; i++) {
       const box = (await cells.nth(i).boundingBox())!;
       await page.touchscreen.tap(box.x + 5, box.y + 5);
-      // Every tap that marks away offers a note chip, and the chip hangs over the cells just
-      // below the one tapped: dismiss it so the next tap lands on the grid. The last one
-      // stays up — the caller's assertions are about it.
-      if (i < to) await page.keyboard.press('Escape');
     }
   } else {
     await page.mouse.move(a.x + 5, a.y + 5);
@@ -30,6 +26,16 @@ async function markCells(page: Page, cells: Locator, from: number, to: number) {
     await page.mouse.move(b.x + 5, b.y + 5);
     await page.mouse.up();
   }
+}
+
+/**
+ * Dismiss the note chip the way the project's device can: Escape where there is a keyboard,
+ * a tap off the chip where there is not — which is the only free way out on a phone, and so
+ * the one worth asserting there.
+ */
+async function dismissChip(page: Page) {
+  if (test.info().project.use.hasTouch) await page.locator('#availability-root .hint').first().tap();
+  else await page.keyboard.press('Escape');
 }
 
 test('mark a week, go away, see it public, answer a poll pre-marked', async ({ page }) => {
@@ -83,9 +89,13 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
   await sundayCol.locator('.col-head').click();
   await expect(sundayCol.locator('.cell.away')).toHaveCount(17);
-  // The all-day tap offers a note chip, which hangs over the top of the column: dismiss it
-  // so the next click lands on a cell and not on the chip.
-  await page.keyboard.press('Escape');
+  // A header tap offers a chip for the column it just marked, on every device — it hangs
+  // over the top of the column, so dismissing it is also what lets the next click land on a
+  // cell. Escape, or a tap off the chip where there is no keyboard: neither writes anything.
+  const chip = page.locator('#availability-root .note-chip');
+  await expect(chip.locator('.when')).toContainText('away');
+  await dismissChip(page);
+  await expect(chip).toHaveCount(0);
   await sundayCol.locator('[data-slot]').first().click();
   await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
 
@@ -94,12 +104,21 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
   await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
 
-  // Marking away drops a chip under the cells: the range, and a note field.
-  const chip = page.locator('#availability-root .note-chip');
-  await expect(chip.locator('.when')).toContainText('away');
-  await chip.locator('input').fill('out of town');
-  await chip.locator('input').press('Enter');
-  await expect(chip).toHaveCount(0);
+  const noteEdit = page.locator('#availability-root .away-list input.note-edit');
+  if (test.info().project.use.hasTouch) {
+    // One hour tapped with a finger offers no chip — it would land over the rows being
+    // tapped next. The note for it comes from the list instead.
+    await expect(chip).toHaveCount(0);
+    await page.locator('#availability-root .away-list .note').tap();
+    await noteEdit.fill('out of town');
+    await noteEdit.press('Enter');
+  } else {
+    // A stroke drops a chip under the cells: the range it wrote, and a note field.
+    await expect(chip.locator('.when')).toContainText('away');
+    await chip.locator('input').fill('out of town');
+    await chip.locator('input').press('Enter');
+    await expect(chip).toHaveCount(0);
+  }
 
   // The list under the grid is the record: the entry, with its window and its note.
   await expect(page.locator('#availability-root .away-list li')).toHaveCount(1);
@@ -128,6 +147,10 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // that is the poll prompt.
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await expect(page.locator('.week-cell.free')).toHaveCount(2);
+  // Sensitive to the clock in the one project that is not in UTC: the editor drew (and this
+  // count expects) the sunday of the browser's own week, while the record saves in UTC — so
+  // between 00:00 and 05:30 IST on a monday that sunday belongs to the week just gone, and
+  // this page would draw it on no week at all.
   await expect(page.locator('.week-cell.away')).toHaveCount(4);
   // The day headers stay on screen while the hours scroll under them. Only worth checking
   // where the grid is taller than the viewport, which is the phone: `.week-head` is a grid

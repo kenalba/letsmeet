@@ -694,9 +694,12 @@
     .weekpick .wk:disabled { opacity: 0.3; cursor: default; }
     .weekpick .foot { font-size: 11px; color: var(--muted-foreground); }
 
-    /* The note chip: appears under the cells just marked away. */
+    /* The note chip: appears under the cells just marked away. Above the cells (it comes
+       after the grid in the markup) but below the sticky day heads, which are z-index 3 in
+       this same stacking context — its `top` is frozen at the moment it is offered, so a
+       scroll slides it up the grid and it must pass under the header band, not over it. */
     .note-chip {
-      position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px;
+      position: absolute; z-index: 2; display: flex; align-items: center; gap: 8px;
       padding: 6px 8px; max-width: calc(100% - 8px);
       background: var(--card); border: 1px solid var(--away); box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
       animation: chip-in 160ms ease both;

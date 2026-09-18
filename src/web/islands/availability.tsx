@@ -73,6 +73,19 @@ function withNote(list: AwayEntry[], on: AwayEntry, note: string): AwayEntry[] {
   });
 }
 
+/** `list` without the entry `on`, matched the way `withNote` matches it: never by index. */
+function withoutEntry(list: AwayEntry[], on: AwayEntry): AwayEntry[] {
+  return list.filter((a) =>
+    a.start !== on.start || a.end !== on.end || a.startTime !== on.startTime);
+}
+
+/**
+ * Which row of the list an inline edit belongs to. Not the index: `compactAway` renumbers
+ * `away` on every stroke, and an index would follow the row rather than the entry — the
+ * blur would then write the draft to whatever entry had taken that place.
+ */
+const entryKey = (a: AwayEntry) => `${a.start}-${a.startTime ?? ''}`;
+
 /** `sep 19 11am–3pm`, or `oct 3 – 5 all day` — what the chip and the list call an entry. */
 function chipWhen(a: AwayEntry): string {
   return `${dateRangeLabel(a.start, a.end)}${a.startTime && a.endTime
@@ -92,8 +105,12 @@ interface Chip {
   left: number;
 }
 
-/** Wide enough for the range, the field and the button; the chip is clamped to the grid. */
-const CHIP_WIDTH = 260;
+/**
+ * About what the chip measures: the range label, the gaps, a 15ch field and the button, per
+ * `.note-chip` in app.css. Only the clamp that keeps a chip inside the grid reads it, so a
+ * few pixels either way just shifts one offered at the right-hand edge.
+ */
+const CHIP_WIDTH = 330;
 
 /** A touch device: the chip waits for a tap rather than raising the keyboard. */
 function coarsePointer(): boolean {
@@ -281,23 +298,40 @@ function Editor({ data }: { data: AvailabilityData }) {
   const chipEntry = chip ? entryAt(away, chip.date, chip.hm) : undefined;
   const saveChip = () => {
     if (!chip || !chipEntry) { setChip(null); return; }
-    setAway(withNote(away, chipEntry, chip.note.trim()));
+    setAway((prev) => withNote(prev, chipEntry, chip.note.trim()));
     setChip(null);
   };
-  // Escape dismisses the chip wherever the focus is: a touch chip is deliberately not
-  // focused, so the key never reaches the field's own handler.
+  const chipBox = useRef<HTMLDivElement>(null);
+  /**
+   * The two ways out that cost nothing: Escape, and a click or tap off the chip — the week
+   * picker's own pattern, down to the grace tick. Both are needed rather than just the
+   * field's own Escape: a touch chip is deliberately not focused (no keyboard jumping up),
+   * and a phone has no Escape key at all, so without the outside tap every way out of a
+   * chip would write to the record. Keyed on whether there is a chip, not on which one:
+   * re-arming per keystroke would restart the grace tick under the field.
+   */
   useEffect(() => {
     if (!chip) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setChip(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [chip]);
-  /** Which entry's note is being edited in the list, by its index in `away`, and the draft. */
-  const [editing, setEditing] = useState<number | null>(null);
+    // The picker closes on Escape too, and it is the one in front: leave that key to it.
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !pickerOpen) setChip(null); };
+    const click = (e: MouseEvent) => {
+      if (e.target instanceof Node && !chipBox.current?.contains(e.target)) setChip(null);
+    };
+    window.addEventListener('keydown', key);
+    // A tick late: the tap that offered the chip must not also dismiss it.
+    const t = window.setTimeout(() => window.addEventListener('click', click), 0);
+    return () => {
+      window.removeEventListener('keydown', key);
+      window.clearTimeout(t);
+      window.removeEventListener('click', click);
+    };
+  }, [!!chip, pickerOpen]);
+  /** Which entry's note the list is editing, by `entryKey`, and the draft in the field. */
+  const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   // Entries already over are not the record any more: nothing can be done about them, and
   // the list is a list of things to edit.
-  const upcoming = away.map((a, i) => ({ a, i })).filter(({ a }) => a.end >= today);
+  const upcoming = away.filter((a) => a.end >= today);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
   const [alias, setAlias] = useState(data.alias);
@@ -351,17 +385,26 @@ function Editor({ data }: { data: AvailabilityData }) {
     const d = drag.current;
     drag.current = null;
     if (!d || !d.days || d.op !== 'add') return;
+    // One hour, tapped with a finger: no chip. It would hang over the next two rows of a
+    // column being tapped down, and a phone has neither an Escape key nor a pointer to
+    // rest outside — the list's `+ note` is the way into that hour's note instead. The
+    // stroke's own pointer decides, not the device: a mouse click keeps its chip.
+    if (d.touch && d.anchor.keys[0] === d.last.keys[0]) return;
     const pa = pos.get(d.anchor.keys[0]);
     const pb = pos.get(d.last.keys[0]);
     const bottom = (pa && pb ? hours[Math.max(pa.ri, pb.ri)].cells[pb.ci] : null) ?? d.last;
     const at = local.get(bottom.keys[0]);
     const anchor = local.get(d.anchor.keys[0]);
-    // `d.wrote`, not `away`: a tap paints and ends inside one pointerup, so the render
-    // holding this closure has not seen the entry the chip is about yet.
+    // `d.wrote` is the list the last paint wrote, which `away` here may be a render behind:
+    // a held finger paints and ends inside one pointerup. It is always set by the time a
+    // stroke with a day map ends — `startStroke` paints before it returns — so the `??` is
+    // the optional field's formality, not a case.
     if (at && anchor) offerChip(d.wrote ?? away, at.date, anchor.hm, cellEl(bottom.keys[0]), !d.touch);
   };
   const endRef = useRef(endStroke);
-  endRef.current = endStroke;
+  // Assigned in an effect rather than during render: a render React throws away must not
+  // leave its closure behind as the live stroke-end handler.
+  useEffect(() => { endRef.current = endStroke; });
   // A pointer released off the grid (or cancelled by the OS) must still end the stroke.
   useEffect(() => {
     const end = () => endRef.current();
@@ -419,7 +462,8 @@ function Editor({ data }: { data: AvailabilityData }) {
     if (!at || at.date < today) return false;
     setChip(null);
     if (days.get(at.date)?.away === 'all') {
-      setAway(compactAway(away, dates![0], dates![6], toggleAllDay(days, at.date)));
+      const day = toggleAllDay(days, at.date);
+      setAway((prev) => compactAway(prev, dates![0], dates![6], day));
       return false;
     }
     drag.current = {
@@ -437,10 +481,14 @@ function Editor({ data }: { data: AvailabilityData }) {
     if (!dated || date < today) return;
     setChip(null);
     const had = days.has(date);
-    const next = compactAway(away, dates![0], dates![6], toggleAllDay(days, date));
-    setAway(next);
-    // A fresh all-day column has something to say; clearing one has not.
-    if (!had) offerChip(next, date, '07:00', e.currentTarget, !coarsePointer());
+    // The week's own paint, applied to whatever list the queue holds by then: a note edit
+    // elsewhere in the list must not be undone by a header tap.
+    const week = (list: AwayEntry[]) => compactAway(list, dates![0], dates![6], toggleAllDay(days, date));
+    setAway(week);
+    // A fresh all-day column has something to say; clearing one has not. The chip reads its
+    // entry off this render's list — the only thing it wants is the day just marked, which
+    // both lists agree on.
+    if (!had) offerChip(week(away), date, '07:00', e.currentTarget, !coarsePointer());
   };
   const onDown = (cell: HourCell) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
@@ -610,7 +658,7 @@ function Editor({ data }: { data: AvailabilityData }) {
           ))}
         </div>
         {chip && chipEntry && (
-          <div className="note-chip" style={{ top: chip.top, left: chip.left }}>
+          <div className="note-chip" ref={chipBox} style={{ top: chip.top, left: chip.left }}>
             <span className="when">{`away ${chipWhen(chipEntry)}`}</span>
             <input
               type="text"
@@ -647,8 +695,10 @@ function Editor({ data }: { data: AvailabilityData }) {
       <div className="awaybox">
         <h3>away</h3>
         <ul className="away-list">
-          {upcoming.map(({ a, i }) => (
-            <li key={`${a.start}-${a.startTime ?? ''}-${i}`}>
+          {/* The index rides along in the key only: two entries cannot share a start and a
+              window in a record we wrote, but a foreign one is not ours to trust. */}
+          {upcoming.map((a, i) => (
+            <li key={`${entryKey(a)}-${i}`}>
               <button
                 type="button"
                 className="jump"
@@ -659,7 +709,7 @@ function Editor({ data }: { data: AvailabilityData }) {
                 <span className="when">{dateRangeLabel(a.start, a.end)}</span>
                 {a.startTime && a.endTime && ` ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
               </button>
-              {editing === i ? (
+              {editing === entryKey(a) ? (
                 <input
                   className="note-edit"
                   type="text"
@@ -674,20 +724,23 @@ function Editor({ data }: { data: AvailabilityData }) {
                     // the same value the entry already has.
                     if (e.key === 'Escape') { setDraft(a.note ?? ''); e.currentTarget.blur(); }
                   }}
-                  onBlur={() => { setEditing(null); setAway(withNote(away, a, draft.trim())); }}
+                  onBlur={() => {
+                    setEditing(null);
+                    setAway((prev) => withNote(prev, a, draft.trim()));
+                  }}
                 />
               ) : (
                 <button
                   type="button"
                   className={cn('note', !a.note && 'add')}
-                  onClick={() => { setEditing(i); setDraft(a.note ?? ''); }}
+                  onClick={() => { setEditing(entryKey(a)); setDraft(a.note ?? ''); }}
                 >{a.note ? `· ${a.note}` : '+ note'}</button>
               )}
               <button
                 type="button"
                 className="x"
                 aria-label="remove"
-                onClick={() => { setChip(null); setAway(away.filter((_, j) => j !== i)); }}
+                onClick={() => { setChip(null); setAway((prev) => withoutEntry(prev, a)); }}
               >remove</button>
             </li>
           ))}
