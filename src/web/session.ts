@@ -74,8 +74,12 @@ export async function startSession(
   }
 }
 
-/** The request is on the apex itself, whatever case, trailing dot or port the Host carries. */
-export function isPublicHost(host: string | undefined, domain: string): boolean {
+/**
+ * The request is on the apex itself, whatever case, trailing dot or port the Host carries.
+ * The counterpart of `isAliasHost` (`src/web/routes/availability.ts`): between them they
+ * name the two kinds of host this app is ever served on.
+ */
+export function isApexHost(host: string | undefined, domain: string): boolean {
   return (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '') === domain;
 }
 
@@ -88,7 +92,7 @@ export function isPublicHost(host: string | undefined, domain: string): boolean 
  * write is logged and dropped: the next request tries again.
  */
 async function reissueCookie(c: Context, env: SessionEnv, sid: string): Promise<void> {
-  if (!env.domain || !isPublicHost(c.req.header('host'), env.domain)) return;
+  if (!env.domain || !isApexHost(c.req.header('host'), env.domain)) return;
   deleteCookie(c, COOKIE, { path: '/' });
   await setNamedCookie(c, env.cookieSecret, COOKIE, sid, { ...cookieOpts(env), domain: env.domain });
   try {
@@ -98,7 +102,12 @@ async function reissueCookie(c: Context, env: SessionEnv, sid: string): Promise<
   }
 }
 
-/** The live session behind the request's cookie, or null — expired and revoked both read as null. */
+/**
+ * The live session behind the request's cookie, or null — expired and revoked both read as
+ * null. Not a pure read: on the apex, a session minted before the domain cookie is migrated
+ * here, once, which adds a `Set-Cookie` pair to the response and writes one row. Callers
+ * that cache or short-circuit around this need to know it has that side effect.
+ */
 export async function readSession(c: Context, env: SessionEnv, nowMs: number): Promise<WebSession | null> {
   const sid = await getNamedCookie(c, env.cookieSecret, COOKIE);
   if (!sid) return null;

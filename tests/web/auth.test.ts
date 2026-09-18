@@ -1,8 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { authRoutes } from '../../src/web/routes/auth.js';
-import { cookieDomainFor, sessionEnvFor } from '../../src/web/session.js';
-import { isPublicHost, readSession } from '../../src/web/session.js';
+import { cookieDomainFor, isApexHost, readSession, sessionEnvFor } from '../../src/web/session.js';
 import { openDb } from '../../src/db/db.js';
 import { getWebSession } from '../../src/db/webSessions.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
@@ -285,11 +284,51 @@ describe('sessions minted before the domain cookie', () => {
     expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 1 });
   });
 
-  it('isPublicHost reads the apex through case, a trailing dot and a port', () => {
-    expect(isPublicHost('poll.example', 'poll.example')).toBe(true);
-    expect(isPublicHost('POLL.example.', 'poll.example')).toBe(true);
-    expect(isPublicHost('poll.example:443', 'poll.example')).toBe(true);
-    expect(isPublicHost('ken.sez.poll.example', 'poll.example')).toBe(false);
-    expect(isPublicHost(undefined, 'poll.example')).toBe(false);
+  it('a write that fails leaves the row for the next request to retry', async () => {
+    const e = env();
+    const signedIn = await authRoutes(stub, e).request('/oauth/callback?code=abc&state=xyz');
+    const cookie = cookieOf(signedIn);
+    e.db.prepare('UPDATE web_session SET cookie_v = 0').run();
+    const app = probe(e);
+
+    // The SELECT still works, so the session reads fine; only the mark fails.
+    e.db.exec("CREATE TRIGGER no_mark BEFORE UPDATE ON web_session BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = await app.request('/probe', { headers: { cookie, host: 'poll.example' } });
+
+    // The user is served: the cookie is re-issued even though nothing recorded it.
+    expect(first.status).toBe(200);
+    expect((await first.json() as { did: string }).did).toBe('did:plc:host');
+    expect(first.headers.getSetCookie().some((c) =>
+      c.startsWith('sid=') && !c.startsWith('sid=;') && c.includes('Domain=poll.example'))).toBe(true);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 0 });
+
+    // Still 0, so the next request tries the whole thing again — and this time it sticks.
+    e.db.exec('DROP TRIGGER no_mark');
+    const second = await app.request('/probe', { headers: { cookie, host: 'poll.example' } });
+    expect(second.headers.getSetCookie().some((c) =>
+      c.startsWith('sid=') && !c.startsWith('sid=;') && c.includes('Domain=poll.example'))).toBe(true);
+    expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 1 });
+  });
+
+  it('isApexHost reads the apex through case, a trailing dot and a port', () => {
+    expect(isApexHost('poll.example', 'poll.example')).toBe(true);
+    expect(isApexHost('POLL.example.', 'poll.example')).toBe(true);
+    expect(isApexHost('poll.example:443', 'poll.example')).toBe(true);
+    expect(isApexHost('ken.sez.poll.example', 'poll.example')).toBe(false);
+    expect(isApexHost(undefined, 'poll.example')).toBe(false);
+  });
+
+  it('isApexHost takes nothing that merely contains the apex', () => {
+    // Every one of these is a host a browser could send; none of them is letsmeet.lol.
+    expect(isApexHost('LETSMEET.LOL', 'letsmeet.lol')).toBe(true);
+    expect(isApexHost('letsmeet.lol.', 'letsmeet.lol')).toBe(true);
+    expect(isApexHost('letsmeet.lol:8443', 'letsmeet.lol')).toBe(true);
+    expect(isApexHost('evil-letsmeet.lol', 'letsmeet.lol')).toBe(false);
+    expect(isApexHost('letsmeet.lol.evil', 'letsmeet.lol')).toBe(false);
+    expect(isApexHost('letsmeet.lol@evil.com', 'letsmeet.lol')).toBe(false);
+    expect(isApexHost('ken.sez.letsmeet.lol', 'letsmeet.lol')).toBe(false);
   });
 });
