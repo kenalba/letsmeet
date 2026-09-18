@@ -19,6 +19,8 @@ export interface PublicAvailabilityData {
   publicUrl: string;
   /** Where this person's page is shared. */
   sezAddress?: string;
+  /** The alias host already displays the address in the browser bar. */
+  showAddress?: boolean;
   /** Which week the grid shows; `later` is the poll prompt. From `?week=`. */
   week?: WeekChoice;
   /** The viewer is this person: offer the way back to the editor. */
@@ -180,8 +182,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   // Absolute, like the webcal link beside it: this page also serves on `<name>.sez.<site>`,
   // where only `/` and `/availability.ics` answer — a relative `/u/<handle>/availability.ics`
   // would 404 there. The week links, by contrast, are query-only so they stay on either host.
-  // The copy button hands over the plain https address: Google Calendar's "from URL" box
-  // and a pasted chat message both want that, and neither can take a click on webcal://.
+  // Sharing copies the public page; download and subscribe use the calendar feed.
   const links = (
     <div className="feed-actions">
       <a href={feedUrl} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>download .ics</a>
@@ -192,7 +193,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       >subscribe</a>
       <button
         type="button"
-        data-copy-url={feedUrl}
+        data-copy-url={data.sezAddress ? `${new URL(base).protocol}//${data.sezAddress}` : `${base}${path}`}
         hidden
         className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
       >copy link</button>
@@ -206,109 +207,111 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       homeHref={`${base}/`}
     >
       <div className="grid gap-6">
-        <div className="fv-head">
-          <div className="grid gap-1">
-            <h1 className="pixel-heading">{data.handle}</h1>
-            {/* `select-all`: one click selects the whole address, the thing worth copying. */}
-            {data.sezAddress && <p className="pixel-label text-muted-foreground select-all">{data.sezAddress}</p>}
-            {rec && !unreadable && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
-          </div>
-          {/* The owner's way back to the editor. Absolute: on the alias host `/availability`
-              answers nothing. */}
-          {data.own && (
-            <a
-              href={`${base}/availability`}
-              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'fv-edit')}
-            >edit</a>
+        <Card className="bleed">
+          <CardHeader className="fv-head">
+            <div className="grid gap-1">
+              <h1 className="pixel-heading">{data.handle}</h1>
+              {/* `select-all`: one click selects the whole address, the thing worth copying. */}
+              {data.sezAddress && data.showAddress !== false && <p className="pixel-label text-muted-foreground select-all">{data.sezAddress}</p>}
+              {rec && !unreadable && <p className="text-sm text-muted-foreground">times in {rec.timezone}</p>}
+            </div>
+            {/* The owner's way back to the editor. Absolute: on the alias host `/availability`
+                answers nothing. */}
+            {data.own && (
+              <a
+                href={`${base}/availability`}
+                className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'fv-edit')}
+              >edit</a>
+            )}
+          </CardHeader>
+          {!rec ? (
+            <CardContent><p className="hint text-sm text-muted-foreground">no availability posted. ask them.</p></CardContent>
+          ) : unreadable ? (
+            <CardContent><p className="hint text-sm text-muted-foreground">
+              couldn't read this one — it is posted in a timezone this app doesn't know. ask them.
+            </p></CardContent>
+          ) : stale ? (
+            <>
+              <CardHeader>
+                <CardTitle>this might be out of date</CardTitle>
+                <CardDescription>
+                  {`expired ${fmtDate(localDateOf(rec.validUntil!, rec.timezone))}. treat as unknown and ask.`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <p className="text-sm text-muted-foreground">{`last they said: ${describeWeekly(rec.weekly)}`}</p>
+                {upcoming.length > 0 && (
+                  <div className="grid gap-1">
+                    <p className="pixel-label text-muted-foreground">away</p>
+                    <ul className="grid gap-1 text-sm">
+                      {upcoming.map((a, i) => (
+                        <li key={i} className="tabular-nums">
+                          <strong>{a.start === a.end ? fmtDate(a.start) : `${fmtDate(a.start)} – ${fmtDate(a.end)}`}</strong>
+                          {a.startTime && a.endTime && ` ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
+                          {a.note && <span className="text-muted-foreground"> · {a.note}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {rec.note && <p className="text-sm">{rec.note}</p>}
+                {links}
+              </CardContent>
+            </>
+          ) : week === 'later' ? (
+            <>
+              <CardHeader>
+                <CardTitle>further out</CardTitle>
+                <CardAction className="week-nav">
+                  <a href="?week=next">← last week</a>
+                  <span className="off" aria-disabled="true">next week →</span>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <div className="week-prompt">
+                  <p>a usual week only says so much that far ahead.</p>
+                  <a href={`${base}/new`} className={cn(buttonVariants({ variant: 'default' }))}>
+                    {`make a poll with ${data.handle}`}
+                  </a>
+                  <p className="text-sm text-muted-foreground">pick some dates, they mark what works.</p>
+                </div>
+                {awayLaterCaption}
+              </CardContent>
+            </>
+          ) : (
+            <>
+              <CardHeader>
+                <CardTitle>{view!.title}</CardTitle>
+                <CardAction className="week-nav">
+                  {week === 'this'
+                    ? <span className="off" aria-disabled="true">← last week</span>
+                    : <a href="?week=this">← last week</a>}
+                  <a href={week === 'this' ? '?week=next' : '?week=later'}>
+                    next week →
+                  </a>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <WeekGrid view={view!} zones={zones} handle={data.handle} />
+                {view!.hasAway && (
+                  <div className="week-legend">
+                    <span><i className="free" />free</span>
+                    <span><i className="away" />away</span>
+                  </div>
+                )}
+                {reachable && (
+                  <p className="week-caption text-sm text-muted-foreground">click a free hour to ping on bluesky.</p>
+                )}
+                {/* One template literal per caption: React's renderToString puts <!-- -->
+                    between adjacent text children, which would split a plain-text match. */}
+                <p className="week-caption text-sm text-muted-foreground">{`${describeWeekly(rec.weekly)}${freshness(rec, data.now)}`}</p>
+                {rec.note && <p className="week-caption text-sm text-muted-foreground">{rec.note}</p>}
+                {awayLaterCaption}
+                {links}
+              </CardContent>
+            </>
           )}
-        </div>
-        {!rec ? (
-          <Card><CardContent><p className="hint text-sm text-muted-foreground">no availability posted. ask them.</p></CardContent></Card>
-        ) : unreadable ? (
-          <Card><CardContent><p className="hint text-sm text-muted-foreground">
-            couldn't read this one — it is posted in a timezone this app doesn't know. ask them.
-          </p></CardContent></Card>
-        ) : stale ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>this might be out of date</CardTitle>
-              <CardDescription>
-                {`expired ${fmtDate(localDateOf(rec.validUntil!, rec.timezone))}. treat as unknown and ask.`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <p className="text-sm text-muted-foreground">{`last they said: ${describeWeekly(rec.weekly)}`}</p>
-              {upcoming.length > 0 && (
-                <div className="grid gap-1">
-                  <p className="pixel-label text-muted-foreground">away</p>
-                  <ul className="grid gap-1 text-sm">
-                    {upcoming.map((a, i) => (
-                      <li key={i} className="tabular-nums">
-                        <strong>{a.start === a.end ? fmtDate(a.start) : `${fmtDate(a.start)} – ${fmtDate(a.end)}`}</strong>
-                        {a.startTime && a.endTime && ` ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
-                        {a.note && <span className="text-muted-foreground"> · {a.note}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {rec.note && <p className="text-sm">{rec.note}</p>}
-              {links}
-            </CardContent>
-          </Card>
-        ) : week === 'later' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>further out</CardTitle>
-              <CardAction className="week-nav">
-                <a href="?week=next">← last week</a>
-                <span className="off" aria-disabled="true">next week →</span>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <div className="week-prompt">
-                <p>a usual week only says so much that far ahead.</p>
-                <a href={`${base}/new`} className={cn(buttonVariants({ variant: 'default' }))}>
-                  {`make a poll with ${data.handle}`}
-                </a>
-                <p className="text-sm text-muted-foreground">pick some dates, they mark what works.</p>
-              </div>
-              {awayLaterCaption}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>{view!.title}</CardTitle>
-              <CardAction className="week-nav">
-                {week === 'this'
-                  ? <span className="off" aria-disabled="true">← last week</span>
-                  : <a href="?week=this">← last week</a>}
-                <a href={week === 'this' ? '?week=next' : '?week=later'}>
-                  next week →
-                </a>
-              </CardAction>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <WeekGrid view={view!} zones={zones} handle={data.handle} />
-              {view!.hasAway && (
-                <div className="week-legend">
-                  <span><i className="free" />free</span>
-                  <span><i className="away" />away</span>
-                </div>
-              )}
-              {reachable && (
-                <p className="week-caption text-sm text-muted-foreground">click a free hour to ping on bluesky.</p>
-              )}
-              {/* One template literal per caption: React's renderToString puts <!-- -->
-                  between adjacent text children, which would split a plain-text match. */}
-              <p className="week-caption text-sm text-muted-foreground">{`${describeWeekly(rec.weekly)}${freshness(rec, data.now)}`}</p>
-              {rec.note && <p className="week-caption text-sm text-muted-foreground">{rec.note}</p>}
-              {awayLaterCaption}
-              {links}
-            </CardContent>
-          </Card>
-        )}
+        </Card>
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
         {zones.length > 0 && (
           <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: ZONE_LABEL_SCRIPT }} />

@@ -3,8 +3,8 @@
  * button copies the CANONICAL path from the attribute (origin-prefixed at click time),
  * never `location.href` — a guest viewing through an edit link is on `/p/<rkey>/e/<token>`,
  * and sharing that would hand their private edit token to the group chat. A url button
- * copies its absolute URL verbatim: the availability feed's address is the same whichever
- * host the page is served on, and on `<name>.sez.<site>` the page's own origin is not it.
+ * copies its absolute URL verbatim, so availability pages share the same public address
+ * whether opened on the main site or a `<name>.sez.<site>` host.
  * Buttons are server-rendered `hidden` and revealed here, so a no-JS page shows no button
  * that does nothing. Inline, not an island: three lines of DOM work per button don't earn
  * a bundle.

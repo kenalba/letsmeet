@@ -63,7 +63,7 @@ describe('/u/:handle', () => {
     expect(html).toContain('text first');
     expect(html).toContain('good through');
     expect(html).toContain('/u/ken.wzrdz.cool/availability.ics');
-    expect(html).toContain('data-copy-url="http://localhost:8787/u/ken.wzrdz.cool/availability.ics"');
+    expect(html).toContain('data-copy-url="http://ken-wzrdz-cool.sez.localhost:8787"');
     expect(html).toContain('>copy link</button>');
     expect(html).toContain('>download .ics</a>');
     expect(html).toContain('>subscribe</a>');
@@ -357,8 +357,8 @@ describe('<name>.sez.letsmeet.lol', () => {
     expect(html).toContain('href="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
     expect(html).toContain('webcal://letsmeet.lol/u/ken.wzrdz.cool/availability.ics');
     expect(html).toMatch(/class="brand[^"]*"\s+href="https:\/\/letsmeet\.lol\/"/);
-    // Absolute: on the alias host the page's own origin is not where the feed lives.
-    expect(html).toContain('data-copy-url="https://letsmeet.lol/u/ken.wzrdz.cool/availability.ics"');
+    // Share the public alias page while calendar actions still use the feed.
+    expect(html).toContain('data-copy-url="https://ken.sez.letsmeet.lol"');
     const ics = await app.request('/availability.ics', host('ken.sez.letsmeet.lol'));
     expect(ics.headers.get('content-type')).toContain('text/calendar');
   });

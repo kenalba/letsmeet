@@ -257,7 +257,8 @@ export function availabilityRoutes(
     c.header('cache-control', 'private');
     return page(c, createElement(PublicAvailabilityPage, {
       handle: r.handle, record: r.record, now: deps.now(), publicUrl: env.PUBLIC_URL,
-      sezAddress: opts.address ? sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined : undefined,
+      sezAddress: sezAddressFor(deps, r.did, r.handle, env.PUBLIC_URL) ?? undefined,
+      showAddress: opts.address,
       week: weekChoice(c.req.query('week')),
       own: who?.did === r.did,
     }));

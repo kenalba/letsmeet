@@ -23,7 +23,6 @@ import {
 } from '../../core/weekView.js';
 import { WeekPicker, type Page } from './weekPicker.js';
 import { UserError } from '../../core/errors.js';
-import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
 import { cn } from '../lib/cn.js';
 
 interface AvailabilityData {
@@ -32,10 +31,7 @@ interface AvailabilityData {
   away: AwayEntry[];
   note: string;
   validUntil: string; // YYYY-MM-DD or ''
-  alias: string;          // what the field opens with (the claim, or a suggestion)
   aliasSaved: string;     // the claim the server holds, '' for none
-  sezSuffix: string;      // 'sez.letsmeet.lol'
-  addressFallback: string | null; // the hyphenated-handle address, or null
 }
 
 /** How long a finger rests on a cell before it marks instead of scrolling — as in grid.tsx. */
@@ -392,12 +388,6 @@ function Editor({ data }: { data: AvailabilityData }) {
   }, [editing, away, today]);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
-  const [alias, setAlias] = useState(data.alias);
-  const [aliasSaved, setAliasSaved] = useState(data.aliasSaved);
-  const aliasOk = alias === '' || isValidSezName(alias);
-  // Only offer a share link for a valid address.
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const address = alias ? (aliasOk ? `${alias}.${data.sezSuffix}` : null) : data.addressFallback;
   // ---- autosave: about two seconds after the last change, one post at a time
   // What the server already has: a post that would send this again sends nothing. A ref,
   // not state: the timer, the requeue and the stroke deferral each hold the `post` of the
@@ -416,12 +406,8 @@ function Editor({ data }: { data: AvailabilityData }) {
   const timer = useRef<number | null>(null);
   const inFlight = useRef(false);
   const requeue = useRef(false);
-  // A name that breaks the rule is no name to post: `normalizeSezName` refuses one, and a
-  // refused post is the whole record refused — a half-typed address must not hold a grid
-  // stroke back. A post carries the name the server already has until the field holds one
-  // it could keep; the hint under the field is what says why. An empty field is a release,
-  // which is a name the rule allows.
-  const postAlias = aliasOk ? alias : aliasSaved;
+  // Keep the existing claim when saving availability.
+  const postAlias = data.aliasSaved;
   /**
    * The live record, read by a post that fires after the render which changed it — a
    * closure would still be holding the values from the render that scheduled it. `today` is
@@ -482,7 +468,6 @@ function Editor({ data }: { data: AvailabilityData }) {
       });
       const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok) { setError(out.error ?? 'could not post.'); return; }
-      setAliasSaved(body.alias);
       savedAt.current = sent;
       setPosted(true);
     } catch {
@@ -765,7 +750,7 @@ function Editor({ data }: { data: AvailabilityData }) {
       </div>
       <p className="hint">{dated
         ? 'free hours come from your usual week. drag hours to mark away. tap a day for all day.'
-        : "mark when you're usually free. this is a public record in your own repo, like your polls."}</p>
+        : "mark when you're usually free."}</p>
       {/* Above the grid, which is taller than a phone screen: read before the first touch. */}
       <p className="hint touch-hint">tap an hour to mark it. hold, then drag, for a block.</p>
       <div className="gridwrap" ref={wrapEl}>
@@ -947,51 +932,10 @@ function Editor({ data }: { data: AvailabilityData }) {
             onBlur={flush}
           />
         </label>
-        <div className="full address-label">
-          <label htmlFor="availability-alias">your address:</label>
-          <span className="address-field">
-            <input
-              type="text"
-              name="alias"
-              id="availability-alias"
-              maxLength={32}
-              value={alias}
-              spellCheck={false}
-              autoCapitalize="none"
-              autoCorrect="off"
-              placeholder="pick a name"
-              onChange={(e) => {
-                const v = e.target.value.trim().toLowerCase();
-                setAlias(v);
-                setCopiedAddress(null);
-                // A name that breaks the rule has nothing to post: the hint below says why.
-                if (v === '' || isValidSezName(v)) queueSave();
-              }}
-              onBlur={flush}
-            />
-            <span className="suffix">.{data.sezSuffix}</span>
-          </span>
-          <button
-            type="button"
-            className="copy-address"
-            disabled={!address || alias !== aliasSaved}
-            onClick={async () => {
-              if (!address) return;
-              const url = `${window.location.protocol}//${address}`;
-              try {
-                await navigator.clipboard.writeText(url);
-                setCopiedAddress(address);
-              } catch {
-                window.prompt('copy this link:', url);
-              }
-            }}
-          >{copiedAddress === address && address ? 'copied.' : 'copy'}</button>
-        </div>
       </div>
       {zoneText !== zone && (
         <p className="hint">not a timezone this browser knows. still using {zone}.</p>
       )}
-      {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
       <p className="note">this record is public, like your polls. anyone with your handle can read it.</p>
       {/* Sticky at the bottom of the viewport while the editor is on screen: this line is
           the only thing that says whether what is on the grid is up there too. */}

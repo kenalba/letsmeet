@@ -8,7 +8,7 @@ import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
  */
 async function markCells(page: Page, cells: Locator, from: number, to: number) {
   await expect(cells.first()).toBeVisible();
-  // The editor's address field sits below the grid, so measuring straight after filling it
+  // The editor's details sit below the grid, so measuring straight after filling them
   // would find cells off the top of the screen — and a sticky day header parked over row one
   // would swallow the press even once they were. Start from the top of the page, then let
   // Playwright place each press itself: `hover`/`tap` re-measure the cell immediately before
@@ -44,12 +44,13 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.getByRole('heading', { name: 'your availability' })).toBeVisible();
   await page.click('a[href="/availability"]');
 
-  // Claim a name of our own (one per project, so the four runs never contend for it).
+  // Seed an existing address through the API; the editor preserves it on autosave.
   const name = `e2e-${test.info().project.name.replace(/[^a-z0-9-]/gi, '')}`;
-  await page.fill('#availability-root input[name=alias]', name);
-  // Timezone is what the grid is drawn in; the browser is pinned to UTC in the config. Filled
-  // before any mark, so the cell indexes below are UTC's on every project. (On tz-kolkata the
-  // alias field's blur flushes a Kolkata post first; the next post overwrites it.)
+  const seeded = await page.request.post('/availability', { data: {
+    timezone: 'UTC', weekly: [], away: [], note: '', alias: name,
+  } });
+  expect(seeded.ok()).toBeTruthy();
+  await page.reload();
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
   // Leave the field before marking: its blur flushes an autosave, and Firefox keeps a datalist
   // popup open on a focused input. Neither should be in flight when the first stroke lands.
@@ -134,15 +135,18 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root button.save')).toHaveCount(0);
   await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
   await expect(page.locator('#availability-root .address-line')).toHaveCount(0);
-  await expect(page.locator('#availability-root .copy-address')).toBeEnabled();
+  await expect(page.locator('#availability-root input[name=alias]')).toHaveCount(0);
+  await expect(page.getByText('friends can see this at', { exact: false })).toHaveCount(0);
+  await expect(page.locator('button[data-copy-url]')).toHaveCount(1);
+  await expect(page.locator('[data-slot="card"] .feed-actions')).toHaveCount(1);
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: async (text: string) => { document.documentElement.dataset.copiedUrl = text; } },
     });
   });
-  await page.locator('#availability-root .copy-address').click();
-  await expect(page.locator('#availability-root .copy-address')).toHaveText('copied.');
+  await page.locator('button[data-copy-url]').click();
+  await expect(page.locator('button[data-copy-url]')).toHaveText('copied.');
   await expect(page.locator('html')).toHaveAttribute('data-copied-url', `http://${name}.sez.localhost:8787`);
 
   // Reload keeps it.
@@ -237,18 +241,18 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   expect((await page.request.get('/new', { headers: { host: aliasHost } })).status()).toBe(404);
 
   // Two bits only chromium is asked to cover (the other projects already exercise the pages
-  // themselves above): the scripted feed-link copy, and the reach-out popup. Guarded on the
+  // themselves above): the scripted page-link copy, and the reach-out popup. Guarded on the
   // project, not `test.skip`, which would skip the whole test on every project.
   if (test.info().project.name === 'chromium') {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 
-    // copy feed link: the button is hidden until the script reveals it.
+    // copy page link: the button is hidden until the script reveals it.
     const copyButton = page.locator('button[data-copy-url]');
     await expect(copyButton).toBeVisible();
     await copyButton.click();
     await expect(copyButton).toHaveText('copied.');
-    const copiedFeedUrl = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copiedFeedUrl).toBe(`http://localhost:8787/u/${did}/availability.ics`);
+    const copiedPageUrl = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copiedPageUrl).toBe(`http://${name}.sez.localhost:8787`);
 
     // reach out: clicking a free hour opens bluesky's compose sheet with a post at the
     // person already written.

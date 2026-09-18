@@ -96,7 +96,7 @@ export function LandingPage({ did, handle, polls = [], answered = [], archived =
     sentence: string; stale: boolean;
     /**
      * `ken.sez.letsmeet.lol` and the link to it: the one public link. The apex `/u/<handle>`
-     * form is the same page, so it is not repeated here; the editor still names both.
+     * form is the same page, so it is not repeated here.
      */
     address?: { host: string; href: string };
   } | null;

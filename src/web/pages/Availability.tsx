@@ -50,6 +50,8 @@ export function AvailabilityPage(data: AvailabilityPageData) {
   };
   const base = data.publicUrl.replace(/\/$/, '');
   const publicPath = data.handle ? `/u/${data.handle}` : null;
+  const address = data.sez.aliasSaved ? `${data.sez.aliasSaved}.${data.sez.suffix}` : data.sez.addressFallback;
+  const shareUrl = address ? `${new URL(base).protocol}//${address}` : `${base}${publicPath}`;
   const webcal = publicPath
     ? `webcal://${base.replace(/^https?:\/\//, '')}${publicPath}/availability.ics`
     : null;
@@ -69,14 +71,14 @@ export function AvailabilityPage(data: AvailabilityPageData) {
             {/* A single template literal, not adjacent {} expressions: React's renderToString
                 inserts <!-- --> markers between adjacent text children, which would split
                 this sentence and break a plain-text match on the rendered HTML. */}
-            {`your address ${data.sez.lost}.${data.sez.suffix} is someone else's now. pick another below and save.`}
+            {`your address ${data.sez.lost}.${data.sez.suffix} is someone else's now. your availability is still available from your profile link.`}
           </p>
         )}
         {/* The island owns this card: the pager at the top says which page the grid is on,
             and the hint under it changes with the page. `bleed` lets it reach the screen
             edges at phone width (app.css). */}
         <Card className="bleed">
-          <CardContent>
+          <CardContent className="grid gap-4">
             <script
               id="availability-data"
               type="application/json"
@@ -84,35 +86,27 @@ export function AvailabilityPage(data: AvailabilityPageData) {
               dangerouslySetInnerHTML={{ __html: scriptJson(islandData) }}
             />
             <div id="availability-root" />
+            {publicPath && (
+              <div className="feed-actions">
+                <a
+                  href={`${base}${publicPath}/availability.ics`}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+                >download .ics</a>
+                <a
+                  href={webcal!}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+                  title="subscribe in your calendar (webcal)"
+                >subscribe</a>
+                <button
+                  type="button"
+                  data-copy-url={shareUrl}
+                  hidden
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+                >copy link</button>
+              </div>
+            )}
           </CardContent>
         </Card>
-        {publicPath && (
-          <div className="grid gap-2">
-            <p className="hint text-sm text-muted-foreground">
-              friends can see this at{' '}
-              <a href={publicPath} className="text-primary underline underline-offset-4">
-                {base.replace(/^https?:\/\//, '')}{publicPath}
-              </a>
-            </p>
-            <div className="feed-actions">
-              <a
-                href={`${base}${publicPath}/availability.ics`}
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-              >download .ics</a>
-              <a
-                href={webcal!}
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-                title="subscribe in your calendar (webcal)"
-              >subscribe</a>
-              <button
-                type="button"
-                data-copy-url={`${base}${publicPath}/availability.ics`}
-                hidden
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-              >copy link</button>
-            </div>
-          </div>
-        )}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>
     </Layout>
