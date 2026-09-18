@@ -107,7 +107,11 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
     if (hasStart !== hasEnd) throw new UserError('an away window needs both a start and an end time');
     if (hasStart) {
       const s = toMinutes(a.startTime, 'an away window start', false);
-      const e = toMinutes(a.endTime, 'an away window end', false);
+      let e = toMinutes(a.endTime, 'an away window end', false);
+      // Midnight is the one end that may sort before its start: it means the end of the day,
+      // which is how localWindow, freeIntervals and buildWeekView already read it. The
+      // editor's last row is the 11pm hour, so a stroke there has no other end to name.
+      if (e === 0) e = 1440;
       if (e <= s) throw new UserError('an away window must end after it starts');
       entry.startTime = fromMinutes(s);
       entry.endTime = fromMinutes(e);

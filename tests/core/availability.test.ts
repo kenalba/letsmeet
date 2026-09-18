@@ -77,6 +77,15 @@ describe('normalizeAvailability', () => {
     });
     expect(normalizeAvailability(a)).toEqual(a);
   });
+  it('keeps an away window that ends at midnight, and still rejects an inverted one', () => {
+    const midnight = { start: '2026-09-19', end: '2026-09-19', startTime: '23:00', endTime: '00:00' };
+    expect(normalizeAvailability({ timezone: TZ, weekly: [], away: [midnight] }).away)
+      .toEqual([midnight]);
+    expect(() => normalizeAvailability({
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-09-19', end: '2026-09-19', startTime: '18:00', endTime: '09:00' }],
+    })).toThrow(/end after it starts/);
+  });
 });
 
 describe('describeWeekly', () => {
