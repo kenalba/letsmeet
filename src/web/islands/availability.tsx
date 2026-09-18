@@ -345,8 +345,11 @@ function Editor({ data }: { data: AvailabilityData }) {
   // reading out a host that could never be claimed.
   const address = alias ? (aliasOk ? `${alias}.${data.sezSuffix}` : null) : data.addressFallback;
   // ---- autosave: about two seconds after the last change, one post at a time
-  // What the server already has: a post that would send this again sends nothing.
-  const [savedAt, setSavedAt] = useState(
+  // What the server already has: a post that would send this again sends nothing. A ref,
+  // not state: the timer, the requeue and the stroke deferral each hold the `post` of the
+  // render that armed them, and a post that landed in between would be invisible to it — a
+  // mark undone while its post was in flight would then read as already up there, and skip.
+  const savedAt = useRef(
     snapshot(data.weekly, data.away, data.note, data.validUntil, data.timezone ?? HERE, data.aliasSaved));
   const [pending, setPending] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -385,7 +388,6 @@ function Editor({ data }: { data: AvailabilityData }) {
       void post();
     }, SAVE_MS);
     setPending(true);
-    setError(null);
   };
   /** `retry`, and a text field losing focus: post now rather than in two seconds. */
   const saveNow = () => {
@@ -395,7 +397,7 @@ function Editor({ data }: { data: AvailabilityData }) {
   /** A blur that follows a change. A blur that follows nothing posts nothing. */
   const flush = () => { if (pending) saveNow(); };
 
-  const post = async () => {
+  const post = async (keepalive = false) => {
     // One in flight at a time; a change made during a post schedules the next one.
     if (inFlight.current) { requeue.current = true; return; }
     const body = latest.current;
@@ -404,14 +406,18 @@ function Editor({ data }: { data: AvailabilityData }) {
     // would otherwise grow toward the lexicon's cap on how many it may hold.
     const kept = pruneAway(body.away, body.today);
     const sent = snapshot(body.weekly, kept, body.note, body.validUntil, body.zone, body.alias);
-    if (sent === savedAt) { setPending(false); return; }
+    if (sent === savedAt.current) { setPending(false); return; }
     inFlight.current = true;
     setPending(false);
     setPosting(true);
+    // Cleared here and not when the change is queued: a stroke that could not be marked says
+    // so through the same line, and its pointer-up queues a save in the same gesture.
+    setError(null);
     try {
       const res = await fetch('/availability', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        keepalive,
         body: JSON.stringify({
           timezone: body.zone, weekly: body.weekly, away: kept, note: body.note,
           alias: body.alias,
@@ -422,9 +428,8 @@ function Editor({ data }: { data: AvailabilityData }) {
       });
       const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok) { setError(out.error ?? 'could not post.'); return; }
-      setError(null);
       setAliasSaved(body.alias);
-      setSavedAt(sent);
+      savedAt.current = sent;
       setPosted(true);
     } catch {
       setError('could not reach the server.');
@@ -434,6 +439,29 @@ function Editor({ data }: { data: AvailabilityData }) {
       if (requeue.current) { requeue.current = false; queueSave(); }
     }
   };
+
+  const postRef = useRef(post);
+  useEffect(() => { postRef.current = post; });
+  // Leaving the page — a phone switching apps, a tab closed — must not lose the two seconds:
+  // the timer is dropped and whatever differs from the server goes now, `keepalive` so the
+  // request outlives the page. Never mid-stroke: the stroke's own end (the OS cancels the
+  // pointer when the app goes) queues the save. A page that stays alive sees the response
+  // the usual way; one that is gone cannot be told, and needs no telling.
+  useEffect(() => {
+    const hide = () => {
+      if (drag.current !== null) return;
+      if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; }
+      void postRef.current(true);
+    };
+    const vis = () => { if (document.visibilityState === 'hidden') hide(); };
+    window.addEventListener('pagehide', hide);
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      document.removeEventListener('visibilitychange', vis);
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    };
+  }, []);
 
   const statusText = error ? error
     : posting ? 'posting…'

@@ -3213,7 +3213,9 @@ Replace the `saving` / `savedAt` / `dirty` state and the whole `submit` function
 
 ```tsx
   // ---- autosave: about two seconds after the last change, one post at a time
-  const [savedAt, setSavedAt] = useState(
+  // A ref, not state: the timer, the requeue and the stroke deferral each hold the `post` of
+  // the render that armed them, and a post that landed in between would be invisible to it.
+  const savedAt = useRef(
     snapshot(data.weekly, data.away, data.note, data.validUntil, data.timezone ?? HERE, data.aliasSaved));
   const [pending, setPending] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -3238,7 +3240,6 @@ Replace the `saving` / `savedAt` / `dirty` state and the whole `submit` function
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => { timer.current = null; void post(); }, SAVE_MS);
     setPending(true);
-    setError(null);
   };
   /** `retry`, and a text field losing focus: post now rather than in two seconds. */
   const saveNow = () => {
@@ -3253,10 +3254,13 @@ Replace the `saving` / `savedAt` / `dirty` state and the whole `submit` function
     if (inFlight.current) { requeue.current = true; return; }
     const body = latest.current;
     const sent = snapshot(body.weekly, body.away, body.note, body.validUntil, body.zone, body.alias);
-    if (sent === savedAt) { setPending(false); return; }
+    if (sent === savedAt.current) { setPending(false); return; }
     inFlight.current = true;
     setPending(false);
     setPosting(true);
+    // Cleared here, not when the change is queued: a stroke that could not be marked says
+    // so through the same line, and its pointer-up queues a save in the same gesture.
+    setError(null);
     try {
       const res = await fetch('/availability', {
         method: 'POST',
@@ -3271,9 +3275,8 @@ Replace the `saving` / `savedAt` / `dirty` state and the whole `submit` function
       });
       const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok) { setError(out.error ?? 'could not post.'); return; }
-      setError(null);
       setAliasSaved(body.alias);
-      setSavedAt(sent);
+      savedAt.current = sent;
       setPosted(true);
     } catch {
       setError('could not reach the server.');

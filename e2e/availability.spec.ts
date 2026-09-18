@@ -49,7 +49,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // Claim a name of our own (one per project, so the four runs never contend for it).
   const name = `e2e-${test.info().project.name.replace(/[^a-z0-9-]/gi, '')}`;
   await page.fill('#availability-root input[name=alias]', name);
-  // Timezone is what the grid is drawn in; the browser is pinned to UTC in the config.
+  // Timezone is what the grid is drawn in; the browser is pinned to UTC in the config. Filled
+  // before any mark, so the cell indexes below are UTC's on every project. (On tz-kolkata the
+  // alias field's blur flushes a Kolkata post first; the next post overwrites it.)
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
 
   // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,

@@ -186,7 +186,8 @@ describe('pruneAway', () => {
   it('drops an entry already over, keeping one that ends today and one still to come', () => {
     const today = '2026-09-23';
     const over: AwayEntry = { start: '2026-09-19', end: '2026-09-19', startTime: '11:00', endTime: '15:00' };
-    const ending: AwayEntry = { start: '2026-09-21', end: today, note: 'conference' };
+    // A window on today's date, whatever the clock says now: `today` is a date, not a moment.
+    const ending: AwayEntry = { start: today, end: today, startTime: '07:00', endTime: '08:00', note: 'dentist' };
     const later: AwayEntry = { start: '2026-10-03', end: '2026-10-05', note: 'wedding' };
     expect(pruneAway([over, ending, later], today)).toEqual([ending, later]);
   });
