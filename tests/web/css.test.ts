@@ -164,10 +164,12 @@ describe('built app.css', () => {
 
   it('deals the columns on a page change and holds still under reduced motion', () => {
     expect(css).toContain('@keyframes deal');
-    expect(css).toMatch(/\.col\.deal \.cells\{[^}]*animation/);
+    expect(css).toMatch(/:is\(#availability-root \.col\.deal \.cells,\.week \.week-cell\)\{[^}]*animation/);
     const reduce = /@media \(prefers-reduced-motion:reduce\)\{([\s\S]*?)\}\}/g;
     const blocks = [...css.matchAll(reduce)].map((m) => m[1]).join('\n');
     expect(blocks).toContain('.col.deal .cells');
+    expect(blocks).toContain('.week .week-cell');
+    expect(blocks).toContain('.week .week-head b');
     expect(blocks).toContain('animation:none');
   });
 
