@@ -16,9 +16,10 @@ import {
 import {
   compactAway, expandAway, paintAway, pruneAway, toggleAllDay, type AwayDays,
 } from '../../core/awayDays.js';
+import { fitLabel, type LabelFit } from '../../core/labelFit.js';
 import { materializeSlots } from '../../core/slots.js';
 import {
-  dateRangeLabel, domOf, localToday, mondayOf, plusDays, weekOffsetOf,
+  dateRangeLabel, domOf, labelZones, localToday, mondayOf, plusDays, weekOffsetOf,
 } from '../../core/weekView.js';
 import { WeekPicker, type Page } from './weekPicker.js';
 import { UserError } from '../../core/errors.js';
@@ -41,6 +42,8 @@ interface AvailabilityData {
 const HOLD_MS = 350;
 /** How long after the last change the record is posted. */
 const SAVE_MS = 2000;
+/** The deal: seven columns, 25ms apart, 320ms each — plus the numbers dropping in behind. */
+const DEAL_MS = 7 * 25 + 320;
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 /** `this week`, `next week`, `in 3 weeks` — the pager's name for a dated page. */
@@ -102,6 +105,9 @@ interface Chip {
   top: number;
   left: number;
 }
+
+/** A note label, placed over the block it belongs to inside `.grid`. */
+interface Placed { note: string; past: boolean; fit: LabelFit; box: CSSProperties }
 
 /**
  * About what the chip measures: the range label, the gaps, a 15ch field and the button, per
@@ -258,18 +264,67 @@ function Editor({ data }: { data: AvailabilityData }) {
   // Stable: it is the picker's outside-click effect's only dependency, so an unstable one
   // would tear the listeners down and re-arm them — grace tick and all — on every render.
   const closePicker = useCallback(() => setPickerOpen(false), []);
+  // The first page the editor opens on arrives without a deal; every change of page after
+  // that re-deals the columns. The columns are keyed by date, so a page change remounts them
+  // and the animation runs once, on its own.
+  const [dealt, setDealt] = useState(false);
   /** A page change: dismiss what belonged to the old page. */
   const switchPage = (next: Page) => {
     setChip(null);
     if (next === page) return;
     setPickerOpen(false);
     setPage(next);
+    setDealt(true);
   };
 
   const [chip, setChip] = useState<Chip | null>(null);
-  /** The cell element for a slot key, for positioning the chip. */
+  /** The cell element for a slot key, for positioning the chip and the note labels. */
   const cellEl = (key: string) =>
     gridEl.current?.querySelector<HTMLElement>(`.cell[data-slot="${key}"]`) ?? null;
+  const [labels, setLabels] = useState<Placed[]>([]);
+  /**
+   * The labels are the one thing on the grid that cannot come out of the record alone: a
+   * rectangle of cells has a pixel size only the browser knows. So they are placed from the
+   * cells' own rects — after every paint and page change (twice: once now, once when the
+   * deal has landed and the columns have settled) and on every resize. `labelZones` is the
+   * friend view's list: too short to carry a note dropped, biggest first, so an entry inside
+   * another paints on top of it.
+   */
+  useEffect(() => {
+    const place = () => {
+      const grid = gridEl.current;
+      // The usual week has no dates and no away: nothing to place, and nothing to re-render
+      // for when there was nothing before either.
+      if (!grid || !dates) { setLabels((prev) => (prev.length ? [] : prev)); return; }
+      const frame = grid.getBoundingClientRect();
+      const out: Placed[] = [];
+      for (const z of labelZones({ timezone: zone, weekly, away }, { monday: dates[0], today })) {
+        const rowA = hours.find((r) => r.hour === z.h0)?.cells[z.c0];
+        const rowB = hours.find((r) => r.hour === z.h1)?.cells[z.c1];
+        const a = rowA && cellEl(rowA.keys[0]);
+        const b = rowB && cellEl(rowB.keys[0]);
+        if (!a || !b) continue;
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        const width = rb.right - ra.left;
+        const height = rb.bottom - ra.top;
+        // `position` is the island's to supply: `.zlabel` in app.css leaves it out so the
+        // same rule serves the friend view's grid items.
+        const box: CSSProperties = {
+          position: 'absolute', left: ra.left - frame.left, top: ra.top - frame.top, width, height,
+        };
+        out.push({ note: z.note, past: z.past, fit: fitLabel(z.note, width, height), box });
+      }
+      setLabels(out);
+    };
+    place();
+    const settled = window.setTimeout(place, DEAL_MS);
+    window.addEventListener('resize', place);
+    return () => {
+      window.clearTimeout(settled);
+      window.removeEventListener('resize', place);
+    };
+  }, [dates, zone, weekly, away, today, hours]);
   /**
    * Put a chip under `el` for the entry covering `date`. `list` is passed in rather than read
    * off state: the caller has usually just built the entry the chip is about.
@@ -730,7 +785,7 @@ function Editor({ data }: { data: AvailabilityData }) {
           </div>
           {geom.dates.map((d, ci) => (
             <div
-              className={cn('col', dated && d < today && 'past')}
+              className={cn('col', dated && d < today && 'past', dealt && 'deal')}
               key={d}
               data-c={ci}
               style={{ '--i': ci + 1 } as CSSProperties}
@@ -755,6 +810,13 @@ function Editor({ data }: { data: AvailabilityData }) {
                 })}
               </div>
             </div>
+          ))}
+          {labels.map((l, i) => (
+            <div
+              key={`zone-${i}`}
+              className={cn('zlabel', l.fit.orient, l.fit.lines === 1 && 'one', l.past && 'past')}
+              style={l.box}
+            >{l.note}</div>
           ))}
         </div>
         {chip && chipEntry && (

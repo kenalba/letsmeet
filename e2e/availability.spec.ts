@@ -138,6 +138,10 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
 
+  // The note is drawn inside its own away block, on the editor's grid too.
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  await expect(page.locator('#availability-root .grid .zlabel')).toHaveText('out of town');
+
   // The public page reads the same record.
   await page.goto(`/u/${did}`);
   await expect(page.getByText('usually free sundays 7am to 9am.')).toBeVisible();
@@ -153,6 +157,8 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // between 00:00 and 05:30 IST on a monday that sunday belongs to the week just gone, and
   // this page would draw it on no week at all.
   await expect(page.locator('.week-cell.away')).toHaveCount(4);
+  // The away block is orange, four hours of it, with the note drawn inside it.
+  await expect(page.locator('.week .zlabel')).toHaveText('out of town');
   // The day headers stay on screen while the hours scroll under them. Only worth checking
   // where the grid is taller than the viewport, which is the phone: `.week-head` is a grid
   // item, so it can only stick inside its own grid area — it spans every row for that
@@ -252,4 +258,27 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
     .toHaveText("marked from your availability. fix what's off, then save.");
   await expect(page.locator('#grid-root .cell.available')).toHaveCount(4);
   await expect(page.locator('button.save')).toBeEnabled();
+
+  // The mobile project only: the week card bleeds to the screen edges, and the day headers
+  // stay put while the grid scrolls past them.
+  if (test.info().project.name === 'mobile') {
+    await page.goto('/availability');
+    await expect(page.locator('#availability-root .grid')).toBeVisible();
+    // The island's card is the first card on the page (the banners above it are <p>).
+    const box = (await page.locator('[data-slot="card"]').first().boundingBox())!;
+    expect(box.x).toBeLessThanOrEqual(0.5);
+    expect(box.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 0.5);
+    // The day headers are sticky, and the grid is not its own scrollport — so scrolling the
+    // grid's top past the viewport leaves the header at the top of it.
+    expect(await page.evaluate(() => getComputedStyle(
+      document.querySelector('#availability-root .col-head')!).position)).toBe('sticky');
+    await page.evaluate(() => window.scrollBy(0, 400));
+    const offsets = await page.evaluate(() => ({
+      grid: document.querySelector('#availability-root .grid')!.getBoundingClientRect().top,
+      head: document.querySelector('#availability-root .col[data-c="0"] .col-head')!
+        .getBoundingClientRect().top,
+    }));
+    expect(offsets.grid).toBeLessThan(0);
+    expect(offsets.head).toBeGreaterThanOrEqual(-1);
+  }
 });

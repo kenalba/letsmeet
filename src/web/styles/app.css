@@ -617,6 +617,8 @@
        and opacity on it would turn its background translucent and let the cells scroll
        through the band. */
     .grid.dated .col.past .cell { opacity: 0.42; cursor: default; }
+    /* The head is inert on a past day too: no pointer over a tap that does nothing. */
+    .grid.dated .col.past .col-head { cursor: default; }
     .grid.dated .col.past .col-head .dow,
     .grid.dated .col.past .col-head .dom,
     .grid.dated .col.past .col-head .num { opacity: 0.42; }
