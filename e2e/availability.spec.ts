@@ -19,6 +19,10 @@ async function markCells(page: Page, cells: Locator, from: number, to: number) {
     for (let i = from; i <= to; i++) {
       const box = (await cells.nth(i).boundingBox())!;
       await page.touchscreen.tap(box.x + 5, box.y + 5);
+      // Every tap that marks away offers a note chip, and the chip hangs over the cells just
+      // below the one tapped: dismiss it so the next tap lands on the grid. The last one
+      // stays up — the caller's assertions are about it.
+      if (i < to) await page.keyboard.press('Escape');
     }
   } else {
     await page.mouse.move(a.x + 5, a.y + 5);
@@ -79,6 +83,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
   await sundayCol.locator('.col-head').click();
   await expect(sundayCol.locator('.cell.away')).toHaveCount(17);
+  // The all-day tap offers a note chip, which hangs over the top of the column: dismiss it
+  // so the next click lands on a cell and not on the chip.
+  await page.keyboard.press('Escape');
   await sundayCol.locator('[data-slot]').first().click();
   await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
 
@@ -86,45 +93,42 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // entry on the record, not just paint: one sunday, 11am to 3pm.
   await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
   await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
-  await expect(page.locator('#availability-root .away li')).toHaveCount(1);
-  await expect(page.locator('#availability-root .away li .when')).toContainText('11am–3pm');
 
-  // Away on the fixture date, all day, with a note. The painted sunday is on the list too
-  // now, so the assertions below name the entry they mean.
-  await page.fill('#availability-root .away-form input[type=date] >> nth=0', FIXTURE_DATE_1);
-  await page.fill('#availability-root .away-form input[type=text]', 'out of town');
-  await page.click('#availability-root button.add-away');
-  const outOfTown = page.locator('#availability-root .away li', { hasText: 'out of town' });
-  await expect(outOfTown).toHaveCount(1);
-  // Added, not posted: the entry says so until the post button below publishes it.
-  await expect(outOfTown.locator('.unposted')).toHaveText('not posted yet');
-  await expect(page.locator('#availability-root .away-hint')).toHaveText('post availability below to publish these.');
+  // Marking away drops a chip under the cells: the range, and a note field.
+  const chip = page.locator('#availability-root .note-chip');
+  await expect(chip.locator('.when')).toContainText('away');
+  await chip.locator('input').fill('out of town');
+  await chip.locator('input').press('Enter');
+  await expect(chip).toHaveCount(0);
+
+  // The list under the grid is the record: the entry, with its window and its note.
+  await expect(page.locator('#availability-root .away-list li')).toHaveCount(1);
+  await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
+  await expect(page.locator('#availability-root .away-list .jump')).toContainText('11am–3pm');
 
   // Timezone is what the grid was drawn in; the browser is pinned to UTC in the config.
   await page.fill('#availability-root input[list=tz-list]', 'UTC');
   await page.click('#availability-root button.save');
   await expect(page.locator('#availability-root .status')).toHaveText('availability posted.');
-  await expect(page.locator('#availability-root .away li .unposted')).toHaveCount(0);
-  await expect(page.locator('#availability-root .away-hint')).toHaveCount(0);
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787`);
 
   // Reload keeps it.
   await page.reload();
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
-  await expect(outOfTown).toHaveCount(1);
+  await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
 
   // The public page reads the same record.
   await page.goto(`/u/${did}`);
   await expect(page.getByText('usually free sundays 7am to 9am.')).toBeVisible();
   await expect(page.getByText('out of town')).toBeVisible();
 
-  // The week grid: sunday 7am and 8am are the free cells in the week containing today; the
-  // away date is at least two weeks out, so it reads on the "away later" line. Next week is
-  // a link, and one past that is the poll prompt.
+  // The week grid: sunday 7am and 8am are the free cells in the week containing today, and
+  // the four away hours are this sunday's, in orange. Next week is a link, and one past
+  // that is the poll prompt.
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await expect(page.locator('.week-cell.free')).toHaveCount(2);
-  await expect(page.getByText('away later:')).toBeVisible();
+  await expect(page.locator('.week-cell.away')).toHaveCount(4);
   // The day headers stay on screen while the hours scroll under them. Only worth checking
   // where the grid is taller than the viewport, which is the phone: `.week-head` is a grid
   // item, so it can only stick inside its own grid area — it spans every row for that

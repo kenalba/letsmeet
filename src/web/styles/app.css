@@ -560,26 +560,14 @@
 }
 
 @layer island {
-  /* The editor's own furniture: the read-back sentence under the grid, the away list, and
-     the date/time fields that add to it. Everything else it draws is the grid's. */
+  /* The editor's own furniture: the read-back sentence under the grid, the away list that
+     is the record, and the detail fields below it. Everything else it draws is the grid's. */
   #availability-root {
     .sentence { margin: 12px 0 18px; font-size: 12px; color: var(--primary); }
     .address-line { margin: -12px 0 18px; font-size: 12px; color: var(--muted-foreground); }
     .address-field { display: inline-flex; align-items: baseline; gap: 2px; }
     .address-field input { width: 14ch; }
     .address-field .suffix { font-size: 13px; color: var(--muted-foreground); }
-    /* `ul.away`, not `.away`: the dated page's away cells and the legend's away swatch
-       carry the same class inside this block, and a bare selector here wins on document
-       order — the margin would knock every away cell off the hour axis. */
-    ul.away { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
-    .away li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-    .away .when { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .away .note { color: var(--muted-foreground); }
-    .away-form {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 8px; align-items: end; margin-bottom: 18px;
-    }
-    .away-form label, .away-form input { margin: 0; }
     /* Hour cells over a half-hour record: an hour with only one half marked is drawn half
        full (top: the :00 half, bottom: the :30 half), so a saved 5:30pm still reads as
        5:30pm until that hour is touched. */
@@ -589,8 +577,6 @@
     @media (hover: hover) {
       .cell[data-slot]:hover { outline: 2px solid var(--foreground); outline-offset: -2px; }
     }
-    .away .unposted { font-size: 12px; color: var(--muted-foreground); }
-    .away-hint { margin: 0 0 10px; }
     /* The post button rides the bottom of the viewport while the editor is on screen. */
     .save-bar {
       position: sticky; bottom: 0; z-index: 1;

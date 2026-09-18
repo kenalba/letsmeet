@@ -17,7 +17,9 @@ import {
   compactAway, expandAway, paintAway, toggleAllDay, type AwayDays,
 } from '../../core/awayDays.js';
 import { materializeSlots } from '../../core/slots.js';
-import { dateRangeLabel, domOf, localToday, mondayOf, plusDays } from '../../core/weekView.js';
+import {
+  dateRangeLabel, domOf, localToday, mondayOf, plusDays, weekOffsetOf,
+} from '../../core/weekView.js';
 import { WeekPicker, type Page } from './weekPicker.js';
 import { UserError } from '../../core/errors.js';
 import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
@@ -46,6 +48,58 @@ const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 /** `this week`, `next week`, `in 3 weeks` — the pager's name for a dated page. */
 const pageName = (off: number) => (off === 0 ? 'this week' : off === 1 ? 'next week' : `in ${off} weeks`);
 
+/**
+ * The entry a chip or a note edit is about: the one covering `date` whose window holds `hm`
+ * (a single day can carry two windows), else the first entry that covers the date at all.
+ */
+function entryAt(list: AwayEntry[], date: string, hm: string): AwayEntry | undefined {
+  const covering = list.filter((a) => a.start <= date && date <= a.end);
+  return covering.find((a) => !a.startTime || !a.endTime
+    || (a.startTime <= hm && (a.endTime === '00:00' || hm < a.endTime))) ?? covering[0];
+}
+
+/**
+ * `list` with `note` set on — or, for an empty note, cleared from — the entry `on`. Rebuilt
+ * rather than spread, so the keys stay in the record's order (start, end, startTime,
+ * endTime, note) and the save path's snapshot comparison still matches.
+ */
+function withNote(list: AwayEntry[], on: AwayEntry, note: string): AwayEntry[] {
+  return list.map((a) => {
+    if (a.start !== on.start || a.end !== on.end || a.startTime !== on.startTime) return a;
+    const next: AwayEntry = { start: a.start, end: a.end };
+    if (a.startTime && a.endTime) { next.startTime = a.startTime; next.endTime = a.endTime; }
+    if (note) next.note = note;
+    return next;
+  });
+}
+
+/** `sep 19 11am–3pm`, or `oct 3 – 5 all day` — what the chip and the list call an entry. */
+function chipWhen(a: AwayEntry): string {
+  return `${dateRangeLabel(a.start, a.end)}${a.startTime && a.endTime
+    ? ` ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`
+    : ' all day'}`;
+}
+
+/** The chip offered under a fresh away mark. */
+interface Chip {
+  /** A date the entry covers, and the half hour the stroke anchored on: which entry it is. */
+  date: string;
+  hm: string;
+  note: string;
+  /** A mouse stroke focuses the field; a touch one waits for a tap, so no keyboard jumps up. */
+  focus: boolean;
+  top: number;
+  left: number;
+}
+
+/** Wide enough for the range, the field and the button; the chip is clamped to the grid. */
+const CHIP_WIDTH = 260;
+
+/** A touch device: the chip waits for a tap rather than raising the keyboard. */
+function coarsePointer(): boolean {
+  try { return window.matchMedia('(pointer: coarse)').matches; } catch { return false; }
+}
+
 /** Every zone this browser knows, for the timezone field's datalist. Empty where it can't say. */
 const ZONES: string[] = (() => {
   try { return Intl.supportedValuesOf('timeZone'); } catch { return []; }
@@ -63,10 +117,6 @@ function knownZone(z: string): boolean {
   try { new Intl.DateTimeFormat('en-GB', { timeZone: z }); return true; } catch { return false; }
 }
 
-/** A calendar date, read back in UTC from a noon anchor so no zone can shift the day. */
-function fmtDate(d: string): string {
-  return new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
 function fmtClock(t: string): string {
   const [h, m] = t.split(':').map(Number);
   const hour = ((h + 11) % 12) + 1;
@@ -132,7 +182,7 @@ function Editor({ data }: { data: AvailabilityData }) {
     }
     return m;
   }, [slots, zone]);
-  /** Where each hour cell sits, for the note chip's anchor (Task 12). */
+  /** Where each hour cell sits: which cell a stroke's rectangle hangs its chip under. */
   const pos = useMemo(() => {
     const m = new Map<string, { ri: number; ci: number }>();
     hours.forEach((r, ri) => r.cells.forEach((c, ci) => { if (c) m.set(c.keys[0], { ri, ci }); }));
@@ -197,17 +247,57 @@ function Editor({ data }: { data: AvailabilityData }) {
   const closePicker = useCallback(() => setPickerOpen(false), []);
   /** A page change: dismiss what belonged to the old page. */
   const switchPage = (next: Page) => {
+    setChip(null);
     if (next === page) return;
     setPickerOpen(false);
     setPage(next);
   };
-  // What the server has been told about away, entry by entry, so a new one can say it is
-  // not up yet: "i'm away" only adds to this list, and the post button — a long page below
-  // — is what publishes. Compared as JSON: the editor builds entries in the same key order
-  // the record comes back in (start, end, startTime, endTime, note).
-  const [postedAway, setPostedAway] = useState<Set<string>>(
-    () => new Set(data.away.map((a) => JSON.stringify(a))));
-  const unposted = (a: AwayEntry) => !postedAway.has(JSON.stringify(a));
+
+  const [chip, setChip] = useState<Chip | null>(null);
+  /** The cell element for a slot key, for positioning the chip. */
+  const cellEl = (key: string) =>
+    gridEl.current?.querySelector<HTMLElement>(`.cell[data-slot="${key}"]`) ?? null;
+  /**
+   * Put a chip under `el` for the entry covering `date`. `list` is passed in rather than read
+   * off state: the caller has usually just built the entry the chip is about.
+   */
+  const offerChip = (
+    list: AwayEntry[], date: string, hm: string, el: HTMLElement | null, focus: boolean,
+  ) => {
+    const wrap = wrapEl.current;
+    const entry = entryAt(list, date, hm);
+    if (!wrap || !el || !entry) { setChip(null); return; }
+    const r = el.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    setChip({
+      date,
+      hm,
+      note: entry.note ?? '',
+      focus,
+      top: r.bottom - w.top + 6,
+      left: Math.max(4, Math.min(r.left - w.left, w.width - CHIP_WIDTH)),
+    });
+  };
+  const chipEntry = chip ? entryAt(away, chip.date, chip.hm) : undefined;
+  const saveChip = () => {
+    if (!chip || !chipEntry) { setChip(null); return; }
+    setAway(withNote(away, chipEntry, chip.note.trim()));
+    setChip(null);
+  };
+  // Escape dismisses the chip wherever the focus is: a touch chip is deliberately not
+  // focused, so the key never reaches the field's own handler.
+  useEffect(() => {
+    if (!chip) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setChip(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [chip]);
+  /** Which entry's note is being edited in the list, by its index in `away`, and the draft. */
+  const [editing, setEditing] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+  // Entries already over are not the record any more: nothing can be done about them, and
+  // the list is a list of things to edit.
+  const upcoming = away.map((a, i) => ({ a, i })).filter(({ a }) => a.end >= today);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
   const [alias, setAlias] = useState(data.alias);
@@ -230,7 +320,7 @@ function Editor({ data }: { data: AvailabilityData }) {
     op: 'add' | 'remove';
     base: PaintMap;
     touch: boolean;
-    /** The cell the stroke has reached; the note chip (Task 12) hangs off it. */
+    /** The cell the stroke has reached; the note chip hangs off it. */
     last: HourCell;
     /** Set on a dated page only: the day map and entry list the stroke started from, and
         the week it may rewrite. Absent on the usual week, where a stroke edits `weekly`. */
@@ -238,6 +328,8 @@ function Editor({ data }: { data: AvailabilityData }) {
     entries?: AwayEntry[];
     from?: string;
     to?: string;
+    /** What the last paint wrote, which `away` may not have caught up with yet. */
+    wrote?: AwayEntry[];
   } | null>(null);
   // A finger resting on a cell that is not yet a stroke: a stroke if it holds for HOLD_MS, a
   // tap if it lifts first, nothing if the browser turns its movement into a scroll. `key` is
@@ -249,9 +341,30 @@ function Editor({ data }: { data: AvailabilityData }) {
     if (press.current) window.clearTimeout(press.current.timer);
     press.current = null;
   };
+  /**
+   * Where a stroke ends. On a dated page that added away, the chip is offered under the
+   * bottom-most cell of the rectangle, in the column the pointer left from — which is where
+   * the eye already is.
+   */
+  const endStroke = () => {
+    cancelPress();
+    const d = drag.current;
+    drag.current = null;
+    if (!d || !d.days || d.op !== 'add') return;
+    const pa = pos.get(d.anchor.keys[0]);
+    const pb = pos.get(d.last.keys[0]);
+    const bottom = (pa && pb ? hours[Math.max(pa.ri, pb.ri)].cells[pb.ci] : null) ?? d.last;
+    const at = local.get(bottom.keys[0]);
+    const anchor = local.get(d.anchor.keys[0]);
+    // `d.wrote`, not `away`: a tap paints and ends inside one pointerup, so the render
+    // holding this closure has not seen the entry the chip is about yet.
+    if (at && anchor) offerChip(d.wrote ?? away, at.date, anchor.hm, cellEl(bottom.keys[0]), !d.touch);
+  };
+  const endRef = useRef(endStroke);
+  endRef.current = endStroke;
   // A pointer released off the grid (or cancelled by the OS) must still end the stroke.
   useEffect(() => {
-    const end = () => { cancelPress(); drag.current = null; };
+    const end = () => endRef.current();
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
     return () => {
@@ -281,8 +394,10 @@ function Editor({ data }: { data: AvailabilityData }) {
     // Past days are inert: a rectangle dragged across one paints the rest of it.
     const dates2 = [...new Set(at.map((x) => x.date))].filter((date) => date >= today);
     const halfHours = [...new Set(at.map((x) => x.hm))];
-    setAway(compactAway(
-      d.entries!, d.from!, d.to!, paintAway(d.days!, dates2, halfHours, d.op === 'add')));
+    const next = compactAway(
+      d.entries!, d.from!, d.to!, paintAway(d.days!, dates2, halfHours, d.op === 'add'));
+    d.wrote = next;
+    setAway(next);
   };
   /**
    * A stroke starts. On the usual week it paints free hours, as it always has. On a dated
@@ -302,6 +417,7 @@ function Editor({ data }: { data: AvailabilityData }) {
     drag.current = null;
     const at = local.get(cell.keys[0]);
     if (!at || at.date < today) return false;
+    setChip(null);
     if (days.get(at.date)?.away === 'all') {
       setAway(compactAway(away, dates![0], dates![6], toggleAllDay(days, at.date)));
       return false;
@@ -317,9 +433,14 @@ function Editor({ data }: { data: AvailabilityData }) {
    * A day header tap: a day with any away at all is cleared, note and window and all;
    * a clear day goes away all day.
    */
-  const onHead = (date: string) => () => {
+  const onHead = (date: string) => (e: ReactMouseEvent<HTMLDivElement>) => {
     if (!dated || date < today) return;
-    setAway(compactAway(away, dates![0], dates![6], toggleAllDay(days, date)));
+    setChip(null);
+    const had = days.has(date);
+    const next = compactAway(away, dates![0], dates![6], toggleAllDay(days, date));
+    setAway(next);
+    // A fresh all-day column has something to say; clearing one has not.
+    if (!had) offerChip(next, date, '07:00', e.currentTarget, !coarsePointer());
   };
   const onDown = (cell: HourCell) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
@@ -357,17 +478,6 @@ function Editor({ data }: { data: AvailabilityData }) {
     if (hourCell) paintTo(hourCell);
   };
 
-  // ---- away entries
-  const [form, setForm] = useState({ start: '', end: '', startTime: '', endTime: '', note: '' });
-  const addAway = () => {
-    if (!form.start) return;
-    const entry: AwayEntry = { start: form.start, end: form.end || form.start };
-    if (form.startTime && form.endTime) { entry.startTime = form.startTime; entry.endTime = form.endTime; }
-    if (form.note.trim()) entry.note = form.note.trim();
-    setAway([...away, entry].sort((a, b) => a.start.localeCompare(b.start)));
-    setForm({ start: '', end: '', startTime: '', endTime: '', note: '' });
-  };
-
   const submit = async () => {
     setSaving(true);
     setStatus(null);
@@ -386,7 +496,6 @@ function Editor({ data }: { data: AvailabilityData }) {
         { ok?: boolean; written?: boolean; error?: string };
       if (!res.ok) { setStatus(out.error ?? 'could not save.'); return; }
       setAliasSaved(alias);
-      setPostedAway(new Set(away.map((a) => JSON.stringify(a))));
       setSavedAt(snapshot(weekly, away, note, validUntil, zone, alias));
       setStatus(out.written ? 'availability posted.' : 'nothing changed.');
     } catch {
@@ -500,6 +609,25 @@ function Editor({ data }: { data: AvailabilityData }) {
             </div>
           ))}
         </div>
+        {chip && chipEntry && (
+          <div className="note-chip" style={{ top: chip.top, left: chip.left }}>
+            <span className="when">{`away ${chipWhen(chipEntry)}`}</span>
+            <input
+              type="text"
+              maxLength={80}
+              placeholder="add a note"
+              aria-label="note"
+              autoFocus={chip.focus}
+              value={chip.note}
+              onChange={(e) => setChip({ ...chip, note: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveChip();
+                if (e.key === 'Escape') setChip(null);
+              }}
+            />
+            <button type="button" className="ok" onClick={saveChip}>add</button>
+          </div>
+        )}
       </div>
       {dated && (
         <p className="caption hint">what friends see this week. <b>marks here are away</b>, and stick to the date.</p>
@@ -512,45 +640,61 @@ function Editor({ data }: { data: AvailabilityData }) {
       )}
       <p className="sentence pixel-label" aria-live="polite">{describeWeekly(weekly)}</p>
       <p className="address-line pixel-label" aria-live="polite">
-        {address ? `your address: ${address}` : 'no address yet. pick a name above.'}
+        {address ? `your address: ${address}` : 'no address yet. pick a name below.'}
         {alias !== aliasSaved && ' (not saved yet)'}
       </p>
 
-      <h3 className="pixel-heading">away</h3>
-      <p className="hint">dates that beat the usual week. leave the times empty for all day.</p>
-      <ul className="away">
-        {away.map((a, i) => (
-          <li key={`${a.start}-${a.startTime ?? ''}-${i}`}>
-            <span className="when">
-              {a.start === a.end ? fmtDate(a.start) : `${fmtDate(a.start)} – ${fmtDate(a.end)}`}
-              {/* Both are optional in the lexicon and only paired by our own normalize, so a
-                  record written by another client can carry one without the other. */}
-              {a.startTime && a.endTime && ` · ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
-            </span>
-            {a.note && <span className="note"> {a.note}</span>}
-            {unposted(a) && <span className="unposted">not posted yet</span>}
-            <button
-              type="button"
-              className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
-              onClick={() => setAway(away.filter((_, j) => j !== i))}
-            >remove</button>
-          </li>
-        ))}
-        {away.length === 0 && <li className="hint">nothing yet. your usual week stands as-is.</li>}
-      </ul>
-      {away.some(unposted) && <p className="hint away-hint">post availability below to publish these.</p>}
-      <div className="away-form">
-        <label>from <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></label>
-        <label>to <input type="date" value={form.end} min={form.start} onChange={(e) => setForm({ ...form, end: e.target.value })} /></label>
-        <label>between <input type="time" step={1800} value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></label>
-        <label>and <input type="time" step={1800} value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></label>
-        <label>note <input type="text" maxLength={80} placeholder="out of town" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label>
-        <button
-          type="button"
-          className={cn(buttonVariants({ variant: 'secondary' }), 'add-away')}
-          disabled={!form.start}
-          onClick={addAway}
-        >i'm away</button>
+      <div className="awaybox">
+        <h3>away</h3>
+        <ul className="away-list">
+          {upcoming.map(({ a, i }) => (
+            <li key={`${a.start}-${a.startTime ?? ''}-${i}`}>
+              <button
+                type="button"
+                className="jump"
+                // A range that started in a week already over jumps to this week, not to a
+                // page the pager has no name for.
+                onClick={() => switchPage(Math.max(0, weekOffsetOf(a.start, thisMonday)))}
+              >
+                <span className="when">{dateRangeLabel(a.start, a.end)}</span>
+                {a.startTime && a.endTime && ` ${fmtClock(a.startTime)}–${fmtClock(a.endTime)}`}
+              </button>
+              {editing === i ? (
+                <input
+                  className="note-edit"
+                  type="text"
+                  maxLength={80}
+                  placeholder="wedding"
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    // Escape puts the note back and lets the blur below save that, which is
+                    // the same value the entry already has.
+                    if (e.key === 'Escape') { setDraft(a.note ?? ''); e.currentTarget.blur(); }
+                  }}
+                  onBlur={() => { setEditing(null); setAway(withNote(away, a, draft.trim())); }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={cn('note', !a.note && 'add')}
+                  onClick={() => { setEditing(i); setDraft(a.note ?? ''); }}
+                >{a.note ? `· ${a.note}` : '+ note'}</button>
+              )}
+              <button
+                type="button"
+                className="x"
+                aria-label="remove"
+                onClick={() => { setChip(null); setAway(away.filter((_, j) => j !== i)); }}
+              >remove</button>
+            </li>
+          ))}
+        </ul>
+        {upcoming.length === 0 && (
+          <p className="hint">nothing yet. page to a week, then drag hours or tap a day.</p>
+        )}
       </div>
 
       <h3 className="pixel-heading">details</h3>
