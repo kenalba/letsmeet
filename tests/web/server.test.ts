@@ -781,8 +781,15 @@ describe('request hardening', () => {
   });
 
   it('sends a CSP whose nonce matches every inline script, plus the other headers', async () => {
-    const { app, poll } = await setup();
-    for (const path of ['/', `/p/${poll.rkey}`, '/login']) {
+    const { app, deps, poll } = await setup();
+    // The friend view is in the sweep with a note to label: that page ships two inline
+    // scripts, and the zone-label classifier is the newer one. No resolver is configured
+    // here, so the did stands in for the handle, as it does everywhere in fake mode.
+    await saveAvailability(deps, HOST, {
+      timezone: 'UTC', weekly: [{ day: 1, start: '09:00', end: '12:00' }],
+      away: [{ start: '2026-09-05', end: '2026-09-06', note: 'out of town' }],
+    });
+    for (const path of ['/', `/p/${poll.rkey}`, '/login', `/u/${HOST}`]) {
       const res = await app.request(path);
       const csp = res.headers.get('content-security-policy')!;
       const m = csp.match(/script-src 'self' 'nonce-([^']+)'/);
@@ -795,6 +802,9 @@ describe('request hardening', () => {
       const inline = body.match(/<script(?![^>]*\bsrc=)(?![^>]*type="application\/json")[^>]*>/g) ?? [];
       expect(inline.length, path).toBeGreaterThan(0);
       for (const tag of inline) expect(tag, `${path}: ${tag}`).toContain(`nonce="${m![1]}"`);
+      // Guard the coverage itself: if the friend view ever stopped drawing a label the
+      // classifier would drop out of this sweep without a test noticing.
+      if (path.startsWith('/u/')) expect(body, path).toContain('zlabel');
       expect(res.headers.get('x-frame-options')).toBe('DENY');
       expect(res.headers.get('x-content-type-options')).toBe('nosniff');
       expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');

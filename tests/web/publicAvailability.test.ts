@@ -10,6 +10,10 @@ import type { Deps } from '../../src/atproto/types.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
 import { claimSezName, getSezName } from '../../src/db/sezNames.js';
 import { ZONE_LABEL_SCRIPT } from '../../src/web/pages/zoneLabels.js';
+import { HOURS } from '../../src/core/weekView.js';
+
+/** Seven days across, plus the time axis; the hour rows come from HOURS. */
+const DAYS = 7;
 
 const KEN = 'did:plc:ken';
 const stubAuth: AuthClient = {
@@ -65,6 +69,10 @@ describe('/u/:handle', () => {
     expect(html).toContain('>subscribe</a>');
     expect(html).not.toContain('subscribe (webcal)');
     expect(html).toContain("button[data-copy-url]"); // the copy script shipped with the page
+    // The away entry carries a label, so the classifier ships too — nonce-tagged, like every
+    // inline script on the page (the CSP is `script-src 'self' 'nonce-…'`).
+    expect(html).toMatch(/<script nonce="[^"]+">\(function\(\)\{var __name=/);
+    expect(html).toContain(ZONE_LABEL_SCRIPT);
   });
   it('accepts a did literal when no resolver is configured (fake mode)', async () => {
     const { app, repo } = setup();
@@ -136,14 +144,15 @@ describe('/u/:handle', () => {
     // only for the owner, so no shared cache may hold one viewer's copy for the next.
     expect(guestRes.headers.get('cache-control')).toBe('private');
     const guest = await guestRes.text();
-    expect(guest).not.toContain('>edit</a>');
+    expect(guest).not.toContain('fv-edit');
     const other = await signIn(app, 'did:plc:other');
-    expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('>edit</a>');
+    expect(await (await app.request('/u/ken.wzrdz.cool', { headers: { cookie: other } })).text()).not.toContain('fv-edit');
     const mine = await signIn(app, KEN);
     const mineRes = await app.request('/u/ken.wzrdz.cool', { headers: { cookie: mine } });
     expect(mineRes.headers.get('cache-control')).toBe('private');
     const html = await mineRes.text();
     expect(html).not.toContain('this is you');
+    expect(html).toContain('fv-edit');
     expect(html).toContain('>edit</a>');
     expect(html).toContain('href="https://letsmeet.lol/availability"');
   });
@@ -269,7 +278,8 @@ describe('the week grid', () => {
     // Row 1 is the day headers; hour h is row h - 5. Column 1 is the axis.
     expect(html).toContain('style="grid-row:1;grid-column:2"');
     expect(html).toContain('style="grid-row:18;grid-column:8"');
-    expect(html.match(/grid-row:\d+;grid-column:\d+"/g)?.length).toBe(1 + 7 + 17 * 8);
+    expect(html.match(/grid-row:\d+;grid-column:\d+"/g)?.length)
+      .toBe(1 + DAYS + HOURS.length * (1 + DAYS));
   });
   it('labels nothing shorter than three rows', () => {
     const html = render({ record: { ...rec, away: [{
@@ -466,7 +476,7 @@ describe('<name>.sez.letsmeet.lol', () => {
     // the header that arrives with it.
     const cookie = await signIn(app, KEN);
     const html = await (await app.request('/', { headers: { host: 'ken.sez.letsmeet.lol', cookie } })).text();
-    expect(html).toContain('>edit</a>');
+    expect(html).toContain('fv-edit');
     expect(html).toContain('href="https://letsmeet.lol/availability"');
   });
 });
@@ -483,11 +493,15 @@ describe('the zone-label script', () => {
     const events: string[] = [];
     new Function('document', 'window', ZONE_LABEL_SCRIPT)(
       { querySelectorAll: () => els },
-      { addEventListener: (e: string) => events.push(e) },
+      {
+        addEventListener: (e: string) => events.push(e),
+        requestAnimationFrame: (f: () => void) => f(),
+      },
     );
     // Wide box: one horizontal line. One column: down the column. The third fits neither
     // on one line, and wraps horizontally in two.
     expect(els.map((e) => e.className)).toEqual(['zlabel h one', 'zlabel v one', 'zlabel h past']);
-    expect(events).toEqual(['resize']);
+    // The first pass is a frame away, and both later passes are listeners, not polling.
+    expect(events).toEqual(['load', 'resize']);
   });
 });

@@ -28,6 +28,15 @@ export interface LabelFit {
   truncate?: boolean;
 }
 
+/**
+ * The friend view's label metrics — 10px/12px with 2-3px of padding, per `.week .zlabel` in
+ * app.css — against the default above, which is the editor's larger label. Named here so the
+ * page's inline script and the tests read the same numbers. Deliberately NOT referenced from
+ * inside `fitLabel`: that body travels to the browser as text, and a module reference would
+ * not travel with it.
+ */
+export const FRIEND_LABEL_FONT = { charWidth: 5, lineHeight: 12, pad: 3 } as const;
+
 export function fitLabel(
   text: string, w: number, h: number,
   font: LabelFont = { charWidth: 6, lineHeight: 14, pad: 5 },

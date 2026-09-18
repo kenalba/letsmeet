@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildWeekView, mondayOf, localToday, weekTitle, dateRangeLabel, hourLabel, weekChoice, awayLater,
-  monthDayLabel, plusDays, weekOffsetOf, weekNoteZones, HOURS, MIN_LABEL_ROWS, type WeekView,
+  monthDayLabel, plusDays, weekOffsetOf, weekNoteZones, labelZones, HOURS, MIN_LABEL_ROWS,
+  type WeekView,
 } from '../../src/core/weekView.js';
 
 const TZ = 'America/New_York';
@@ -225,5 +226,27 @@ describe('weekNoteZones', () => {
     expect(weekNoteZones({ ...base, away: [
       { start: '2026-09-10', end: '2026-09-25', note: 'sabbatical' },
     ] }, week)).toEqual([{ c0: 0, c1: 6, h0: 7, h1: 23, note: 'sabbatical', past: false }]);
+  });
+});
+
+describe('labelZones', () => {
+  const week = { monday: '2026-09-14', today: '2026-09-16' };
+  it('orders overlapping zones biggest-first, so the smaller one paints on top', () => {
+    // A weekend away with a wedding inside it: the wedding is the label that has to win.
+    expect(labelZones({ ...base, away: [
+      { start: '2026-09-19', end: '2026-09-19', startTime: '14:00', endTime: '18:00', note: 'wedding' },
+      { start: '2026-09-19', end: '2026-09-20', note: 'vacation' },
+    ] }, week)).toEqual([
+      { c0: 5, c1: 6, h0: 7, h1: 23, note: 'vacation', past: false },
+      { c0: 5, c1: 5, h0: 14, h1: 17, note: 'wedding', past: false },
+    ]);
+  });
+  it('drops a zone under three rows and keeps the one that reaches it', () => {
+    const away = (endTime: string) => [{
+      start: '2026-09-17', end: '2026-09-17', startTime: '19:00', endTime, note: 'dentist',
+    }];
+    expect(labelZones({ ...base, away: away('21:00') }, week)).toEqual([]);
+    expect(labelZones({ ...base, away: away('22:00') }, week))
+      .toEqual([{ c0: 3, c1: 3, h0: 19, h1: 21, note: 'dentist', past: false }]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fitLabel } from '../../src/core/labelFit.js';
+import { fitLabel, FRIEND_LABEL_FONT } from '../../src/core/labelFit.js';
 
 /**
  * The default font is the editor label's: 11px/14px Departure-ish at about 6px a character,
@@ -43,9 +43,8 @@ describe('fitLabel', () => {
     }
   });
   it('takes the friend view\'s smaller metrics', () => {
-    const font = { charWidth: 5, lineHeight: 12, pad: 3 };
-    expect(fitLabel('conference', 60, 40, font)).toEqual({ orient: 'h', lines: 1 });
-    expect(fitLabel('conference', 24, 90, font)).toEqual({ orient: 'v', lines: 1 });
+    expect(fitLabel('conference', 60, 40, FRIEND_LABEL_FONT)).toEqual({ orient: 'h', lines: 1 });
+    expect(fitLabel('conference', 24, 90, FRIEND_LABEL_FONT)).toEqual({ orient: 'v', lines: 1 });
   });
   it('is written so a browser can be handed its own source', () => {
     // Task 7 inlines fitLabel.toString() in a nonce-tagged script: a backtick would end the
@@ -53,5 +52,7 @@ describe('fitLabel', () => {
     const src = fitLabel.toString();
     expect(src).not.toContain('`');
     expect(src).not.toContain('</script');
+    // The font travels as JSON beside that source, so nothing in the body may name it.
+    expect(src).not.toContain('FRIEND_LABEL_FONT');
   });
 });

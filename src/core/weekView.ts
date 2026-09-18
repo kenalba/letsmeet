@@ -197,3 +197,21 @@ export function weekNoteZones(
   }
   return out;
 }
+
+/** A zone tall enough to carry its note: under `MIN_LABEL_ROWS` rows there is no room. */
+export const isLabelable = (z: NoteZone) => z.h1 - z.h0 + 1 >= MIN_LABEL_ROWS;
+
+/**
+ * The zones a page actually draws a label in: labelable, biggest first. Away entries may
+ * overlap — an all-day "vacation" across the weekend with a "wedding" at 2pm on the Saturday
+ * — and both grids paint in order, so the smaller one has to come last to end up on top of
+ * the one it sits inside. Area, then the top row, then the left column: ties are broken so
+ * the order is the same on every render.
+ */
+export function labelZones(
+  rec: AvailabilityInput, week: { monday: string; today: string },
+): NoteZone[] {
+  const area = (z: NoteZone) => (z.h1 - z.h0 + 1) * (z.c1 - z.c0 + 1);
+  return weekNoteZones(rec, week).filter(isLabelable)
+    .sort((a, b) => area(b) - area(a) || a.h0 - b.h0 || a.c0 - b.c0);
+}

@@ -1,8 +1,7 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import {
-  buildWeekView, dateRangeLabel, hourLabel, localToday, monthDayLabel, weekNoteZones,
-  HOURS, MIN_LABEL_ROWS,
+  buildWeekView, dateRangeLabel, hourLabel, labelZones, localToday, monthDayLabel, HOURS,
   type NoteZone, type WeekCell, type WeekChoice, type WeekDay, type WeekView,
 } from '../../core/weekView.js';
 import { cn } from '../lib/cn.js';
@@ -52,9 +51,16 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
  *
  * Every cell, head and label is placed explicitly (`grid-row`/`grid-column`): a note label
  * spans its away block, and an auto-placed grid would push the cells underneath it along.
- * Row 1 is the headers, hour `h` is row `h - 5`; column 1 is the time axis, day `ci` is
- * column `ci + 2`.
  */
+/**
+ * Where a thing goes in `.week`. Row 1 is the day headers and the hours follow in order;
+ * column 1 is the time axis and the seven days follow. One definition each, so a cell and
+ * the label laid over it can never disagree about which line they are on. Both are the
+ * grid's *start* line: a span ends at the next one (`rowOf(h1) + 1`).
+ */
+const rowOf = (h: number) => h - HOURS[0] + 2;
+const colOf = (ci: number) => ci + 2;
+
 function WeekGrid({ view, zones, handle }: { view: WeekView; zones: NoteZone[]; handle: string }) {
   return (
     <div className="week" aria-label={`usual week, ${view.title}`} role="group">
@@ -64,7 +70,7 @@ function WeekGrid({ view, zones, handle }: { view: WeekView; zones: NoteZone[]; 
           key={d.date}
           className={cn('week-head', d.past && 'past', d.today && 'today')}
           data-c={ci}
-          style={{ gridRow: 1, gridColumn: ci + 2 }}
+          style={{ gridRow: 1, gridColumn: colOf(ci) }}
           title={d.awayAllDay !== null ? (d.awayAllDay || 'away') : undefined}
         >
           <b>{d.dom}</b>{d.dow}
@@ -72,11 +78,11 @@ function WeekGrid({ view, zones, handle }: { view: WeekView; zones: NoteZone[]; 
       ))}
       {HOURS.map((h, hi) => (
         <div key={h} className="week-row">
-          <div className="week-axis" style={{ gridRow: hi + 2, gridColumn: 1 }}>{hourLabel(h)}</div>
+          <div className="week-axis" style={{ gridRow: rowOf(h), gridColumn: 1 }}>{hourLabel(h)}</div>
           {view.days.map((d, ci) => {
             const c = d.cells[hi];
             const title = `${d.dow} ${d.dom} ${hourLabel(h)}${c.note ? ` · ${c.note}` : ''}`;
-            const place = { gridRow: hi + 2, gridColumn: ci + 2 };
+            const place = { gridRow: rowOf(h), gridColumn: colOf(ci) };
             return isReachable(d, c) ? (
               <a
                 key={`${d.date}-${h}`}
@@ -106,12 +112,15 @@ function WeekGrid({ view, zones, handle }: { view: WeekView; zones: NoteZone[]; 
           `data-past` carries the dimming through that rewrite, and the grid placement has no
           spaces around its slash — React writes a style value through verbatim, and the page
           tests match the rendered attribute. */}
-      {zones.map((z, i) => (
+      {zones.map((z) => (
         <div
-          key={`zone-${i}`}
+          key={`${z.note}-${z.c0}-${z.h0}`}
           className={cn('zlabel', z.c1 > z.c0 ? 'h' : 'v', z.past && 'past')}
           data-past={z.past ? '1' : ''}
-          style={{ gridRow: `${z.h0 - 5}/${z.h1 - 4}`, gridColumn: `${z.c0 + 2}/${z.c1 + 3}` }}
+          style={{
+            gridRow: `${rowOf(z.h0)}/${rowOf(z.h1) + 1}`,
+            gridColumn: `${colOf(z.c0)}/${colOf(z.c1) + 1}`,
+          }}
         >{z.note}</div>
       ))}
     </div>
@@ -146,10 +155,10 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
     ? buildWeekView(rec, data.now, week === 'next' ? 1 : 0) : null;
   const later = rec && !unreadable && !stale
     ? buildWeekView(rec, data.now, 0).later : [];
-  // Filtered here rather than in the grid so the classifier ships only when there is
-  // something for it to classify: a zone too short to label is no zone at all.
-  const zones = rec && view
-    ? weekNoteZones(rec, view).filter((z) => z.h1 - z.h0 + 1 >= MIN_LABEL_ROWS) : [];
+  // `labelZones` drops the ones too short to carry a note and orders the rest biggest-first,
+  // so an entry inside another paints on top of it. Resolved here rather than in the grid so
+  // the classifier ships only when there is something for it to classify.
+  const zones = rec && view ? labelZones(rec, view) : [];
   const reachable = !!view && view.days.some((d) => d.cells.some((c) => isReachable(d, c)));
   const awayLaterCaption = later.length > 0 ? (
     <p className="week-caption text-sm text-muted-foreground">
@@ -168,6 +177,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
       <a
         href={`webcal://${base.replace(/^https?:\/\//, '')}${path}/availability.ics`}
         className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+        title="subscribe in your calendar (webcal)"
       >subscribe</a>
       <button
         type="button"
@@ -286,7 +296,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
           </Card>
         )}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
-        {view && zones.length > 0 && (
+        {zones.length > 0 && (
           <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: ZONE_LABEL_SCRIPT }} />
         )}
       </div>
