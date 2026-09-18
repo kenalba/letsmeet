@@ -60,7 +60,14 @@ describe('/availability', () => {
     expect(html).toContain('out of town');
     expect(html).toContain('usually free tuesdays 7pm to 10pm.');
     expect(html).toContain('data-copy-url="http://localhost:8787/u/me.test/availability.ics"');
-    expect(html).toContain('>copy feed link</button>');
+    expect(html).toContain('>copy link</button>');
+    expect(html).toContain('>download .ics</a>');
+    expect(html).toContain('>subscribe</a>');
+    expect(html).toContain('class="feed-actions"');
+    // The island owns the card now: no fixed heading, and no post button anywhere.
+    expect(html).not.toContain('usual week');
+    expect(html).not.toContain('post availability');
+    expect(html).not.toContain('copy feed link');
   });
   it('shows "good through" as the date the viewer picked, read in the record\'s zone', async () => {
     const { app, repo } = setup();
