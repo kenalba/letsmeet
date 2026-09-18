@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { AwayEntry } from '../../src/atproto/records.js';
-import { compactAway, expandAway, paintAway, toggleAllDay } from '../../src/core/awayDays.js';
+import {
+  compactAway, expandAway, paintAway, pruneAway, toggleAllDay,
+} from '../../src/core/awayDays.js';
 import { normalizeAvailability } from '../../src/core/availability.js';
 
 // The mock's fixture in the record's half-hour shape: a timed saturday, an all-day
@@ -175,5 +177,17 @@ describe('toggleAllDay and paintAway', () => {
       start: '2026-09-19', end: '2026-09-19', startTime: '11:00', endTime: '12:00', note: 'dentist',
     }], ...WEEK1);
     expect(paintAway(days, ['2026-09-19'], ['13:00'], true).get('2026-09-19')!.note).toBe('dentist');
+  });
+});
+
+describe('pruneAway', () => {
+  // The away list starts at today, so an entry already over can never be removed by hand.
+  // A post drops it instead, which is what keeps a long-lived record under the lexicon's cap.
+  it('drops an entry already over, keeping one that ends today and one still to come', () => {
+    const today = '2026-09-23';
+    const over: AwayEntry = { start: '2026-09-19', end: '2026-09-19', startTime: '11:00', endTime: '15:00' };
+    const ending: AwayEntry = { start: '2026-09-21', end: today, note: 'conference' };
+    const later: AwayEntry = { start: '2026-10-03', end: '2026-10-05', note: 'wedding' };
+    expect(pruneAway([over, ending, later], today)).toEqual([ending, later]);
   });
 });

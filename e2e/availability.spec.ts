@@ -49,8 +49,8 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // Claim a name of our own (one per project, so the four runs never contend for it).
   const name = `e2e-${test.info().project.name.replace(/[^a-z0-9-]/gi, '')}`;
   await page.fill('#availability-root input[name=alias]', name);
-  await expect(page.locator('#availability-root .address-line'))
-    .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
+  // Timezone is what the grid is drawn in; the browser is pinned to UTC in the config.
+  await page.fill('#availability-root input[list=tz-list]', 'UTC');
 
   // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,
   // so its 7am cell is number 102. Sunday is the last day of a Monday-first week, so it is
@@ -125,10 +125,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
   await expect(page.locator('#availability-root .away-list .jump')).toContainText('11am–3pm');
 
-  // Timezone is what the grid was drawn in; the browser is pinned to UTC in the config.
-  await page.fill('#availability-root input[list=tz-list]', 'UTC');
-  await page.click('#availability-root button.save');
-  await expect(page.locator('#availability-root .status')).toHaveText('availability posted.');
+  // No post button: the status line posts two seconds after the last change.
+  await expect(page.locator('#availability-root button.save')).toHaveCount(0);
+  await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787`);
 

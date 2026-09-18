@@ -14,7 +14,7 @@ import {
   templateIntervalsToWeekly, weeklyOverDates, weeklyToTemplateIntervals, TEMPLATE_START,
 } from '../../core/availability.js';
 import {
-  compactAway, expandAway, paintAway, toggleAllDay, type AwayDays,
+  compactAway, expandAway, paintAway, pruneAway, toggleAllDay, type AwayDays,
 } from '../../core/awayDays.js';
 import { materializeSlots } from '../../core/slots.js';
 import {
@@ -23,10 +23,6 @@ import {
 import { WeekPicker, type Page } from './weekPicker.js';
 import { UserError } from '../../core/errors.js';
 import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
-// Only the class-string generator, never the <Button> component: <Button> stamps
-// data-slot="button", which would land inside #availability-root and start matching the
-// same `[data-slot]` selector the grid cells use.
-import { buttonVariants } from '../ui/button.js';
 import { cn } from '../lib/cn.js';
 
 interface AvailabilityData {
@@ -43,6 +39,8 @@ interface AvailabilityData {
 
 /** How long a finger rests on a cell before it marks instead of scrolling — as in grid.tsx. */
 const HOLD_MS = 350;
+/** How long after the last change the record is posted. */
+const SAVE_MS = 2000;
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 /** `this week`, `next week`, `in 3 weeks` — the pager's name for a dated page. */
@@ -206,8 +204,6 @@ function Editor({ data }: { data: AvailabilityData }) {
     return m;
   }, [hours]);
 
-  const [status, setStatus] = useState<string | null>(null);
-
   // Marks live as weekly blocks; the grid is a view of them in the current zone. Changing
   // the zone keeps the wall-clock blocks (a Tuesday 7pm stays a Tuesday 7pm).
   const [weekly, setWeekly] = useState<WeeklyBlock[]>(data.weekly);
@@ -235,9 +231,9 @@ function Editor({ data }: { data: AvailabilityData }) {
       const marked = templateIntervalsToWeekly(paintToIntervals(p, slots, 'available'), zone);
       setWeekly(normalizeAvailability(
         { timezone: zone, weekly: [...offGrid, ...marked], away: [] }).weekly);
-      setStatus(null);
+      setError(null);
     } catch (err) {
-      setStatus(err instanceof UserError ? err.message : 'could not mark that.');
+      setError(err instanceof UserError ? err.message : 'could not mark that.');
     }
   };
 
@@ -299,6 +295,7 @@ function Editor({ data }: { data: AvailabilityData }) {
   const saveChip = () => {
     if (!chip || !chipEntry) { setChip(null); return; }
     setAway((prev) => withNote(prev, chipEntry, chip.note.trim()));
+    queueSave();
     setChip(null);
   };
   const chipBox = useRef<HTMLDivElement>(null);
@@ -332,6 +329,12 @@ function Editor({ data }: { data: AvailabilityData }) {
   // Entries already over are not the record any more: nothing can be done about them, and
   // the list is a list of things to edit.
   const upcoming = away.filter((a) => a.end >= today);
+  // A stroke can merge the entry being edited into a range with a different key, and the
+  // row then leaves the list mid-edit. The draft goes with it: kept, it would re-mount the
+  // field with a stale note the moment a later stroke recreated that key.
+  useEffect(() => {
+    if (editing !== null && !upcoming.some((a) => entryKey(a) === editing)) setEditing(null);
+  }, [editing, away, today]);
   const [note, setNote] = useState(data.note);
   const [validUntil, setValidUntil] = useState(data.validUntil);
   const [alias, setAlias] = useState(data.alias);
@@ -341,12 +344,101 @@ function Editor({ data }: { data: AvailabilityData }) {
   // says why, and the line below the grid falls back to "no address yet" rather than
   // reading out a host that could never be claimed.
   const address = alias ? (aliasOk ? `${alias}.${data.sezSuffix}` : null) : data.addressFallback;
-  const [saving, setSaving] = useState(false);
-  // What the server already has. The button lights up only when the editor differs from it —
-  // an editor with no record to open stands at "nothing marked", which is not worth posting.
+  // ---- autosave: about two seconds after the last change, one post at a time
+  // What the server already has: a post that would send this again sends nothing.
   const [savedAt, setSavedAt] = useState(
     snapshot(data.weekly, data.away, data.note, data.validUntil, data.timezone ?? HERE, data.aliasSaved));
-  const dirty = savedAt !== snapshot(weekly, away, note, validUntil, zone, alias);
+  const [pending, setPending] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Whether there is anything up there at all: an editor opened on an empty record has
+  // nothing posted, and should not claim it has.
+  const [posted, setPosted] = useState(
+    data.weekly.length > 0 || data.away.length > 0 || !!data.note || !!data.validUntil
+    || !!data.aliasSaved);
+  const timer = useRef<number | null>(null);
+  const inFlight = useRef(false);
+  const requeue = useRef(false);
+  // A name that breaks the rule is no name to post: `normalizeSezName` refuses one, and a
+  // refused post is the whole record refused — a half-typed address must not hold a grid
+  // stroke back. A post carries the name the server already has until the field holds one
+  // it could keep; the hint under the field is what says why. An empty field is a release,
+  // which is a name the rule allows.
+  const postAlias = aliasOk ? alias : aliasSaved;
+  /**
+   * The live record, read by a post that fires after the render which changed it — a
+   * closure would still be holding the values from the render that scheduled it. `today` is
+   * in here too, because it is the zone's and the zone is one of the things that changes.
+   */
+  const latest = useRef({ zone, weekly, away, note, validUntil, alias: postAlias, today });
+  latest.current = { zone, weekly, away, note, validUntil, alias: postAlias, today };
+
+  /** Every change funnels through here. A stroke in progress schedules nothing: `endStroke` does. */
+  const queueSave = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      // A stroke in progress defers it rather than posting half a rectangle: `endStroke`
+      // queues one the moment it ends, and asking again keeps a stroke whose pointer-up
+      // never arrived from stranding the change.
+      if (drag.current !== null) { queueSave(); return; }
+      void post();
+    }, SAVE_MS);
+    setPending(true);
+    setError(null);
+  };
+  /** `retry`, and a text field losing focus: post now rather than in two seconds. */
+  const saveNow = () => {
+    if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; }
+    void post();
+  };
+  /** A blur that follows a change. A blur that follows nothing posts nothing. */
+  const flush = () => { if (pending) saveNow(); };
+
+  const post = async () => {
+    // One in flight at a time; a change made during a post schedules the next one.
+    if (inFlight.current) { requeue.current = true; return; }
+    const body = latest.current;
+    // Entries already over are dropped as the post is built, never before it: the list on
+    // screen starts at today, so nothing can reach a past entry by hand, and the record
+    // would otherwise grow toward the lexicon's cap on how many it may hold.
+    const kept = pruneAway(body.away, body.today);
+    const sent = snapshot(body.weekly, kept, body.note, body.validUntil, body.zone, body.alias);
+    if (sent === savedAt) { setPending(false); return; }
+    inFlight.current = true;
+    setPending(false);
+    setPosting(true);
+    try {
+      const res = await fetch('/availability', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          timezone: body.zone, weekly: body.weekly, away: kept, note: body.note,
+          alias: body.alias,
+          // A date the viewer picked, good until the end of that day where they are —
+          // end-of-day UTC would expire an American record the evening before.
+          validUntil: body.validUntil ? endOfLocalDay(body.validUntil, body.zone) : undefined,
+        }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) { setError(out.error ?? 'could not post.'); return; }
+      setError(null);
+      setAliasSaved(body.alias);
+      setSavedAt(sent);
+      setPosted(true);
+    } catch {
+      setError('could not reach the server.');
+    } finally {
+      inFlight.current = false;
+      setPosting(false);
+      if (requeue.current) { requeue.current = false; queueSave(); }
+    }
+  };
+
+  const statusText = error ? error
+    : posting ? 'posting…'
+      : pending ? 'not posted yet · posting in 2s'
+        : posted ? 'posted.' : 'nothing posted yet.';
 
   // ---- the stroke, as in grid.tsx
   const drag = useRef<{
@@ -384,7 +476,10 @@ function Editor({ data }: { data: AvailabilityData }) {
     cancelPress();
     const d = drag.current;
     drag.current = null;
-    if (!d || !d.days || d.op !== 'add') return;
+    // A released pointer that never became a stroke changed nothing, and posts nothing.
+    if (!d) return;
+    queueSave();
+    if (!d.days || d.op !== 'add') return;
     // One hour, tapped with a finger: no chip. It would hang over the next two rows of a
     // column being tapped down, and a phone has neither an Escape key nor a pointer to
     // rest outside — the list's `+ note` is the way into that hour's note instead. The
@@ -437,10 +532,12 @@ function Editor({ data }: { data: AvailabilityData }) {
     // Past days are inert: a rectangle dragged across one paints the rest of it.
     const dates2 = [...new Set(at.map((x) => x.date))].filter((date) => date >= today);
     const halfHours = [...new Set(at.map((x) => x.hm))];
-    const next = compactAway(
-      d.entries!, d.from!, d.to!, paintAway(d.days!, dates2, halfHours, d.op === 'add'));
-    d.wrote = next;
-    setAway(next);
+    const day = paintAway(d.days!, dates2, halfHours, d.op === 'add');
+    // The base is whatever the queue holds, not the list the stroke started from: the
+    // week's coverage is replaced wholesale out of `d.days`, so within a stroke this is the
+    // same record either way, and a note saved between two moves survives the next one.
+    // `d.wrote` is written from inside the updater — the freshest list, for the chip.
+    setAway((prev) => (d.wrote = compactAway(prev, d.from!, d.to!, day)));
   };
   /**
    * A stroke starts. On the usual week it paints free hours, as it always has. On a dated
@@ -464,6 +561,7 @@ function Editor({ data }: { data: AvailabilityData }) {
     if (days.get(at.date)?.away === 'all') {
       const day = toggleAllDay(days, at.date);
       setAway((prev) => compactAway(prev, dates![0], dates![6], day));
+      queueSave();
       return false;
     }
     drag.current = {
@@ -485,6 +583,7 @@ function Editor({ data }: { data: AvailabilityData }) {
     // elsewhere in the list must not be undone by a header tap.
     const week = (list: AwayEntry[]) => compactAway(list, dates![0], dates![6], toggleAllDay(days, date));
     setAway(week);
+    queueSave();
     // A fresh all-day column has something to say; clearing one has not. The chip reads its
     // entry off this render's list — the only thing it wants is the day just marked, which
     // both lists agree on.
@@ -524,33 +623,6 @@ function Editor({ data }: { data: AvailabilityData }) {
     const hit = el instanceof Element ? el.closest<HTMLElement>('.cell[data-slot]') : null;
     const hourCell = hit?.dataset.slot ? cellByKey.get(hit.dataset.slot) : undefined;
     if (hourCell) paintTo(hourCell);
-  };
-
-  const submit = async () => {
-    setSaving(true);
-    setStatus(null);
-    try {
-      const res = await fetch('/availability', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          timezone: zone, weekly, away, note, alias,
-          // A date the viewer picked, good until the end of that day where they are —
-          // end-of-day UTC would expire an American record the evening before.
-          validUntil: validUntil ? endOfLocalDay(validUntil, zone) : undefined,
-        }),
-      });
-      const out = (await res.json().catch(() => ({}))) as
-        { ok?: boolean; written?: boolean; error?: string };
-      if (!res.ok) { setStatus(out.error ?? 'could not save.'); return; }
-      setAliasSaved(alias);
-      setSavedAt(snapshot(weekly, away, note, validUntil, zone, alias));
-      setStatus(out.written ? 'availability posted.' : 'nothing changed.');
-    } catch {
-      setStatus('could not reach the server.');
-    } finally {
-      setSaving(false);
-    }
   };
 
   const cell = (c: HourCell, label: string, isAway: boolean) => {
@@ -727,6 +799,7 @@ function Editor({ data }: { data: AvailabilityData }) {
                   onBlur={() => {
                     setEditing(null);
                     setAway((prev) => withNote(prev, a, draft.trim()));
+                    queueSave();
                   }}
                 />
               ) : (
@@ -740,7 +813,11 @@ function Editor({ data }: { data: AvailabilityData }) {
                 type="button"
                 className="x"
                 aria-label="remove"
-                onClick={() => { setChip(null); setAway((prev) => withoutEntry(prev, a)); }}
+                onClick={() => {
+                  setChip(null);
+                  setAway((prev) => withoutEntry(prev, a));
+                  queueSave();
+                }}
               >remove</button>
             </li>
           ))}
@@ -760,13 +837,19 @@ function Editor({ data }: { data: AvailabilityData }) {
             onChange={(e) => {
               const v = e.target.value;
               setZoneText(v);
-              if (knownZone(v)) setZone(v);
+              if (knownZone(v)) { setZone(v); queueSave(); }
             }}
+            onBlur={flush}
           />
           <datalist id="tz-list">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
         </label>
         <label>good through
-          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+          <input
+            type="date"
+            value={validUntil}
+            onChange={(e) => { setValidUntil(e.target.value); queueSave(); }}
+            onBlur={flush}
+          />
         </label>
         <label className="full">note for friends
           <input
@@ -774,7 +857,8 @@ function Editor({ data }: { data: AvailabilityData }) {
             maxLength={300}
             placeholder="text me first, weeknights are flexible"
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => { setNote(e.target.value); queueSave(); }}
+            onBlur={flush}
           />
         </label>
         <label className="full">your address
@@ -788,7 +872,13 @@ function Editor({ data }: { data: AvailabilityData }) {
               autoCapitalize="none"
               autoCorrect="off"
               placeholder="pick a name"
-              onChange={(e) => setAlias(e.target.value.trim().toLowerCase())}
+              onChange={(e) => {
+                const v = e.target.value.trim().toLowerCase();
+                setAlias(v);
+                // A name that breaks the rule has nothing to post: the hint below says why.
+                if (v === '' || isValidSezName(v)) queueSave();
+              }}
+              onBlur={flush}
             />
             <span className="suffix">.{data.sezSuffix}</span>
           </span>
@@ -799,16 +889,12 @@ function Editor({ data }: { data: AvailabilityData }) {
       )}
       {!aliasOk && <p className="hint">{SEZ_NAME_RULE}</p>}
       <p className="note">this record is public, like your polls. anyone with your handle can read it.</p>
-      {/* Sticky at the bottom of the viewport while the editor is on screen: the page is
-          long, and a change made at the top must not hide the one button that saves it. */}
-      <div className="save-bar">
-        <button
-          type="button"
-          className={cn(buttonVariants({ variant: 'default' }), 'save')}
-          disabled={saving || !dirty || !aliasOk}
-          onClick={submit}
-        >post availability</button>
-        {status && <p className="status" role="status">{status}</p>}
+      {/* Sticky at the bottom of the viewport while the editor is on screen: this line is
+          the only thing that says whether what is on the grid is up there too. */}
+      <div className={cn('status', (pending || posting) && 'busy')} role="status">
+        <span className="dot" />
+        <span>{statusText}</span>
+        {error && <button type="button" className="retry" onClick={saveNow}>retry</button>}
       </div>
     </div>
   );

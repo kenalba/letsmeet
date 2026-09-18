@@ -577,17 +577,22 @@
     @media (hover: hover) {
       .cell[data-slot]:hover { outline: 2px solid var(--foreground); outline-offset: -2px; }
     }
-    /* The post button rides the bottom of the viewport while the editor is on screen. */
-    .save-bar {
-      position: sticky; bottom: 0; z-index: 1;
-      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-      margin-top: 12px; padding: 10px 0;
-      background: var(--card); border-top: 1px solid var(--border);
+    /* The status line rides the bottom of the viewport while the editor is on screen. */
+    .status {
+      position: sticky; bottom: 0; z-index: 3;
+      display: flex; align-items: center; gap: 10px;
+      margin: 12px 0 0; padding: 8px 0;
+      background: var(--background); border-top: 1px solid var(--border);
+      color: var(--muted-foreground);
     }
-    .save-bar .status { margin: 0; }
-    /* The shared `button.save { margin-top: 12px }` rule above still matches inside the
-       bar; the bar carries the margin now, so the button sits flush within it. */
-    .save-bar .save { margin-top: 0; }
+    .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex: 0 0 auto; }
+    .status.busy .dot { background: var(--lol); animation: blink 900ms steps(2, start) infinite; }
+    @media (prefers-reduced-motion: reduce) { .status.busy .dot { animation: none; } }
+    .status .retry {
+      font-family: var(--font-pixel); font-size: 11px; background: none; border: 0; padding: 0;
+      color: var(--primary-ink); text-decoration: underline; text-underline-offset: 3px;
+      -webkit-font-smoothing: none;
+    }
 
     /* Exactly seven columns, always: they share the width rather than scrolling sideways,
        which is also what lets the sticky day header stick to the page. `position: relative`

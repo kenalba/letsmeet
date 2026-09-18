@@ -171,3 +171,14 @@ export function paintAway(
   }
   return next;
 }
+
+/**
+ * `entries` without the ones already over. The editor's away list starts at today, so an
+ * entry in the past can never be removed by hand — a post drops it instead, which is what
+ * keeps a long-lived record under the lexicon's cap on how many away entries it may hold.
+ * Pruning belongs to a post: nothing here runs on its own, so an editor left open never
+ * quietly rewrites the record under the viewer. `today` is an ISO date in the record's zone.
+ */
+export function pruneAway(entries: AwayEntry[], today: string): AwayEntry[] {
+  return entries.filter((a) => a.end >= today);
+}
