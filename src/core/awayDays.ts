@@ -40,7 +40,11 @@ const toMin = (t: string): number => {
 const toHm = (min: number): string =>
   `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
-/** The half-hour starts one window covers. An end at or before the start runs to midnight. */
+/**
+ * The half-hour starts one window covers. An end at or before the start runs to midnight:
+ * an overnight window never reaches here, because sanitizeForeignRecord splits one into an
+ * evening and a morning on read, so the cap is a defensive bound rather than a policy.
+ */
 function windowHalfHours(startTime: string, endTime: string): string[] {
   const s = toMin(startTime);
   const e0 = toMin(endTime);
@@ -107,6 +111,9 @@ function outside(a: AwayEntry, from: string, to: string): AwayEntry[] {
  * entry's window, and the result is sorted the way `normalizeAvailability` writes it — by
  * date, then by the window's start — so an edit that changes nothing produces an identical
  * record and the save path's no-op skip still holds.
+ *
+ * The result may contain the caller's own `AwayEntry` objects, for entries that lie wholly
+ * outside `[from, to]` — treat it as read-only.
  */
 export function compactAway(
   entries: AwayEntry[], from: string, to: string, days: AwayDays,

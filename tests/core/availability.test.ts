@@ -238,6 +238,25 @@ describe('sanitizeForeignRecord', () => {
     ]);
     expect(out.timezone).toBe(TZ);
   });
+  it('splits an away window that runs past midnight into the evening and the morning', () => {
+    const overnight = {
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-10-07', end: '2026-10-08', startTime: '22:00', endTime: '06:00', note: 'red eye' }],
+    } as unknown as Parameters<typeof sanitizeForeignRecord>[0];
+    // The day map only ever sees windows inside one date, so the small hours have to be
+    // their own entry or a write-back would lose them.
+    expect(sanitizeForeignRecord(overnight).away).toEqual([
+      { start: '2026-10-07', end: '2026-10-08', startTime: '22:00', endTime: '00:00', note: 'red eye' },
+      { start: '2026-10-08', end: '2026-10-09', startTime: '00:00', endTime: '06:00', note: 'red eye' },
+    ]);
+  });
+  it('leaves a window that ends at midnight alone, since that is the end of the day', () => {
+    const midnight = {
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-10-07', end: '2026-10-07', startTime: '23:00', endTime: '00:00' }],
+    } as unknown as Parameters<typeof sanitizeForeignRecord>[0];
+    expect(sanitizeForeignRecord(midnight).away).toEqual(midnight.away);
+  });
   it('leaves a record this app wrote exactly as it is', () => {
     const ours = normalizeAvailability({
       timezone: TZ, weekly: [{ day: 2, start: '19:00', end: '22:00' }],

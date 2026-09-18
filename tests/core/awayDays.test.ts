@@ -133,6 +133,14 @@ describe('compactAway', () => {
       { start: '2026-09-16', end: '2026-09-16', startTime: '09:00', endTime: '10:00' },
     ]);
   });
+  it('drops every entry inside the edited range when the day map is empty', () => {
+    const entries: AwayEntry[] = [
+      { start: '2026-09-14', end: '2026-09-20', note: 'gone' },
+      { start: '2026-09-19', end: '2026-09-19', startTime: '11:00', endTime: '15:00' },
+      { start: '2026-09-23', end: '2026-09-24', note: 'conference' },
+    ];
+    expect(compactAway(entries, ...WEEK1, new Map())).toEqual([entries[2]]);
+  });
   it('sorts by date and then by the window start, as the record is written', () => {
     const days = paintAway(expandAway(FIXTURE, ...WEEK1), ['2026-09-20'], ['08:00'], true);
     expect(compactAway(FIXTURE, ...WEEK1, days).map((a) => [a.start, a.startTime ?? ''])).toEqual([

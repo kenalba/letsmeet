@@ -151,6 +151,10 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
  * unusable `timezone` is the one thing that cannot be dropped — callers check
  * `isKnownZone` and say they cannot read the record.
  */
+/** ISO date + one day, for splitting an away window that rolls past midnight. */
+const nextDate = (d: string): string =>
+  DateTime.fromISO(d, { zone: 'utc' }).plus({ days: 1 }).toISODate()!;
+
 export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
   const weekly = rec.weekly.filter((b) =>
     Number.isInteger(b.day) && b.day >= 0 && b.day <= 6 && HHMM.test(b.start) && HHMM.test(b.end));
@@ -159,10 +163,29 @@ export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
     if (!YMD.test(a.start) || !YMD.test(a.end) || a.end < a.start) continue;
     const timed = a.startTime !== undefined && a.endTime !== undefined
       && HHMM.test(a.startTime) && HHMM.test(a.endTime);
-    if (timed) { away.push(a); continue; }
+    if (timed) {
+      // An end that sorts before its start rolls past midnight. Midnight itself is the end
+      // of the day, which every reader here already handles; anything earlier is a window
+      // this app's own writer cannot produce, and the day map would drop its small-hours
+      // half on write-back. Split it at the boundary instead: the evening, then the morning
+      // after.
+      if (a.endTime! < a.startTime! && a.endTime !== '00:00') {
+        const note = a.note !== undefined ? { note: a.note } : {};
+        away.push({ start: a.start, end: a.end, startTime: a.startTime!, endTime: '00:00', ...note });
+        away.push({
+          start: nextDate(a.start), end: nextDate(a.end),
+          startTime: '00:00', endTime: a.endTime!, ...note,
+        });
+        continue;
+      }
+      away.push(a);
+      continue;
+    }
     const { startTime: _s, endTime: _e, ...allDay } = a;
     away.push(allDay);
   }
+  // Sorted the way normalizeAvailability writes it, so a split entry lands in its place.
+  away.sort((x, y) => x.start.localeCompare(y.start) || (x.startTime ?? '').localeCompare(y.startTime ?? ''));
   const out = { ...rec, weekly, away };
   // The lexicon caps its length and nothing else; a name this app cannot route is no name.
   if (out.alias !== undefined && !isValidSezName(out.alias)) delete out.alias;
