@@ -3156,6 +3156,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ### Task 13: Autosave, and a status line instead of a post button
 
+> **Amendment (2026-09-18, decided by the human after the plan was written):** the away list shows only entries ending today or later, so a past entry can never be removed by hand. To keep the record from growing toward the lexicon's 100-entry cap, the island prunes past entries when it builds a post: add a pure `pruneAway(entries: AwayEntry[], today: string): AwayEntry[]` to `src/core/awayDays.ts` that drops entries whose `end` is before `today` (ISO date in the record's zone), with a test (one past, one ending today, one future → only the past one goes), and call it in the autosave path right before the body is assembled so the pruned record is what is posted and compared. Pruning happens only as part of a user-initiated post, never on its own.
+
 Every change posts about two seconds after the last one — never mid-stroke, and one post at a time. The sticky bottom line says where that stands, and carries the error and a `retry` when it fails.
 
 **Files:**
