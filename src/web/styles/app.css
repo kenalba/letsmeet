@@ -568,7 +568,10 @@
     .address-field { display: inline-flex; align-items: baseline; gap: 2px; }
     .address-field input { width: 14ch; }
     .address-field .suffix { font-size: 13px; color: var(--muted-foreground); }
-    .away { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+    /* `ul.away`, not `.away`: the dated page's away cells and the legend's away swatch
+       carry the same class inside this block, and a bare selector here wins on document
+       order — the margin would knock every away cell off the hour axis. */
+    ul.away { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
     .away li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
     .away .when { font-weight: 600; font-variant-numeric: tabular-nums; }
     .away .note { color: var(--muted-foreground); }

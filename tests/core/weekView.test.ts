@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildWeekView, mondayOf, localToday, weekTitle, dateRangeLabel, hourLabel, weekChoice, awayLater,
-  monthDayLabel, plusDays, weekOffsetOf, weekNoteZones, labelZones, HOURS, MIN_LABEL_ROWS,
+  addMonths, buildWeekView, mondayOf, domOf, localToday, monthTitle, weekTitle, dateRangeLabel,
+  hourLabel, weekChoice, awayLater, monthDayLabel, plusDays, weekOffsetOf, weekNoteZones,
+  labelZones, HOURS, MIN_LABEL_ROWS,
   type WeekView,
 } from '../../src/core/weekView.js';
 
@@ -168,6 +169,31 @@ describe('plusDays / weekOffsetOf', () => {
     // Seven weeks out, across the date a northern-hemisphere DST change falls on.
     expect(weekOffsetOf('2026-11-08', '2026-09-14')).toBe(7);
     expect(weekOffsetOf('2026-09-13', '2026-09-14')).toBe(-1);
+  });
+});
+
+describe('addMonths / monthTitle / domOf', () => {
+  it('walks whole months from a first, both ways', () => {
+    expect(addMonths('2026-09-01', 0)).toBe('2026-09-01');
+    expect(addMonths('2026-09-01', 1)).toBe('2026-10-01');
+    expect(addMonths('2026-09-01', -1)).toBe('2026-08-01');
+    expect(addMonths('2026-09-01', 4)).toBe('2027-01-01');
+  });
+  it('rolls the year at either end of december', () => {
+    expect(addMonths('2026-12-01', 1)).toBe('2027-01-01');
+    expect(addMonths('2026-01-01', -1)).toBe('2025-12-01');
+  });
+  it('lands on the first, so a long month cannot overflow the next one', () => {
+    // The picker only ever passes a first, but jan 31 + 1 month is the classic date-math
+    // trap: naive arithmetic gives mar 3, which would skip february entirely.
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-01');
+    expect(addMonths('2026-08-31', -6)).toBe('2026-02-01');
+  });
+  it('titles a month the way the rest of the grid chrome speaks, and reads a day of the month', () => {
+    expect(monthTitle('2026-09-01')).toBe('september 2026');
+    expect(monthTitle('2027-01-01')).toBe('january 2027');
+    expect(domOf('2026-09-01')).toBe(1);
+    expect(domOf('2026-09-30')).toBe(30);
   });
 });
 

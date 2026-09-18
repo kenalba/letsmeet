@@ -65,6 +65,25 @@ export const MIN_LABEL_ROWS = 3;
 export function monthDayLabel(date: string): string {
   return iso(date).toFormat('LLL d').toLowerCase();
 }
+
+/** 'september 2026', for the week picker's month header. Lowercase, like every other label. */
+export function monthTitle(first: string): string {
+  return iso(first).toFormat('LLLL yyyy').toLowerCase();
+}
+
+/** The day of the month: what a dated column's header and the picker's cells print. */
+export function domOf(date: string): number {
+  return iso(date).day;
+}
+
+/**
+ * A first-of-month ISO date, n months along — the week picker's month arrows. It lands on
+ * the first rather than keeping the day, so no caller can fall through a short month (jan
+ * 31 plus a month is february, not march).
+ */
+export function addMonths(first: string, n: number): string {
+  return iso(first).set({ day: 1 }).plus({ months: n }).toISODate()!;
+}
 const minutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 /** Today's date where the record's clocks are. */
@@ -141,7 +160,7 @@ export function buildWeekView(rec: AvailabilityInput, now: Date, offset: 0 | 1):
     });
     if (cells.some((c) => c.state === 'away')) hasAway = true;
     days.push({
-      date, dow: DOW[weekday], dom: iso(date).day,
+      date, dow: DOW[weekday], dom: domOf(date),
       past: date < today, today: date === today,
       awayAllDay: allDay ? (allDay.note ?? '') : null,
       cells,

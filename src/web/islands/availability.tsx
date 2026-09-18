@@ -1,5 +1,5 @@
 import {
-  useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
   type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,9 +17,8 @@ import {
   compactAway, expandAway, paintAway, toggleAllDay, type AwayDays,
 } from '../../core/awayDays.js';
 import { materializeSlots } from '../../core/slots.js';
-import {
-  dateRangeLabel, localToday, mondayOf, monthDayLabel, plusDays, weekOffsetOf,
-} from '../../core/weekView.js';
+import { dateRangeLabel, domOf, localToday, mondayOf, plusDays } from '../../core/weekView.js';
+import { WeekPicker, type Page } from './weekPicker.js';
 import { UserError } from '../../core/errors.js';
 import { isValidSezName, SEZ_NAME_RULE } from '../../core/sezName.js';
 // Only the class-string generator, never the <Button> component: <Button> stamps
@@ -44,101 +43,8 @@ interface AvailabilityData {
 const HOLD_MS = 350;
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-/** The columns' order, and the picker's header row. */
-const DOW_MON = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-const MONTHS = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
-];
-
-/** Where the grid is pointed: the usual week, or a week offset from this Monday. */
-type Page = 'usual' | number;
-
-/** A first-of-month ISO date, n months along. */
-function addMonths(first: string, n: number): string {
-  const d = new Date(`${first}T12:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + n, 1);
-  return d.toISOString().slice(0, 10);
-}
-const monthTitle = (first: string) => `${MONTHS[Number(first.slice(5, 7)) - 1]} ${first.slice(0, 4)}`;
-const domOf = (date: string) => Number(date.slice(8, 10));
 /** `this week`, `next week`, `in 3 weeks` — the pager's name for a dated page. */
 const pageName = (off: number) => (off === 0 ? 'this week' : off === 1 ? 'next week' : `in ${off} weeks`);
-
-/**
- * A small calendar whose rows are the choice: click a row to show that week. Weeks already
- * over are disabled, today is underlined, a day with away carries an orange dot, and the
- * usual week sits above the calendar. Escape or a click outside closes it.
- */
-function WeekPicker({ page, today, thisMonday, hasAway, onPick, onClose }: {
-  page: Page;
-  today: string;
-  thisMonday: string;
-  hasAway: (date: string) => boolean;
-  onPick: (p: Page) => void;
-  onClose: () => void;
-}) {
-  const [month, setMonth] = useState(
-    () => `${(page === 'usual' ? today : plusDays(thisMonday, page * 7)).slice(0, 8)}01`);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    const click = (e: MouseEvent) => {
-      if (e.target instanceof Node && !box.current?.contains(e.target)) onClose();
-    };
-    window.addEventListener('keydown', key);
-    // A tick late: the click that opened the picker must not also close it.
-    const t = window.setTimeout(() => window.addEventListener('click', click), 0);
-    return () => {
-      window.removeEventListener('keydown', key);
-      window.clearTimeout(t);
-      window.removeEventListener('click', click);
-    };
-  }, [onClose]);
-  const weeks: string[] = [];
-  const last = plusDays(addMonths(month, 1), -1);
-  for (let m = mondayOf(month); m <= last; m = plusDays(m, 7)) weeks.push(m);
-  return (
-    <div className="weekpick" role="dialog" aria-label="pick a week" ref={box}>
-      <button
-        type="button"
-        className={cn('usual', page === 'usual' && 'current')}
-        onClick={() => onPick('usual')}
-      >&gt; usual week</button>
-      <div className="mh">
-        <button type="button" aria-label="previous month" onClick={() => setMonth(addMonths(month, -1))}>‹</button>
-        <span>{monthTitle(month)}</span>
-        <button type="button" aria-label="next month" onClick={() => setMonth(addMonths(month, 1))}>›</button>
-      </div>
-      <div className="dows">{DOW_MON.map((d) => <span key={d}>{d.slice(0, 2)}</span>)}</div>
-      {weeks.map((mon) => {
-        const off = weekOffsetOf(mon, thisMonday);
-        return (
-          <button
-            key={mon}
-            type="button"
-            className={cn('wk', off === page && 'current')}
-            disabled={off < 0}
-            aria-label={`week of ${monthDayLabel(mon)}`}
-            onClick={() => onPick(off)}
-          >
-            {Array.from({ length: 7 }, (_, i) => plusDays(mon, i)).map((d) => (
-              <span
-                key={d}
-                className={cn(
-                  d.slice(0, 7) !== month.slice(0, 7) && 'out',
-                  d === today && 'today',
-                  hasAway(d) && 'away',
-                )}
-              >{domOf(d)}</span>
-            ))}
-          </button>
-        );
-      })}
-      <div className="foot">a row is a week. dots are away days.</div>
-    </div>
-  );
-}
 
 /** Every zone this browser knows, for the timezone field's datalist. Empty where it can't say. */
 const ZONES: string[] = (() => {
@@ -193,11 +99,13 @@ function Editor({ data }: { data: AvailabilityData }) {
   const [now] = useState(() => new Date());
   const today = useMemo(() => localToday(now, zone), [now, zone]);
   const thisMonday = useMemo(() => mondayOf(today), [today]);
-  const dated = page !== 'usual';
+  /** The week offset on screen, or null on the usual week: the one page/date narrowing. */
+  const off = page === 'usual' ? null : page;
+  const dated = off !== null;
   /** The seven dates the page shows, or null on the usual week (which has no dates). */
-  const dates = useMemo(() => (page === 'usual'
+  const dates = useMemo(() => (off === null
     ? null
-    : Array.from({ length: 7 }, (_, i) => plusDays(thisMonday, page * 7 + i))), [page, thisMonday]);
+    : Array.from({ length: 7 }, (_, i) => plusDays(thisMonday, off * 7 + i))), [off, thisMonday]);
   // A dated page is the same grid over real dates: same 7am-to-midnight window, same
   // half-hour slots, so the hour rows and the stroke geometry are the template's.
   const slots = useMemo(() => (dates
@@ -284,6 +192,9 @@ function Editor({ data }: { data: AvailabilityData }) {
   };
   /** The picker's orange dots. */
   const hasAway = (date: string) => away.some((a) => a.start <= date && date <= a.end);
+  // Stable: it is the picker's outside-click effect's only dependency, so an unstable one
+  // would tear the listeners down and re-arm them — grace tick and all — on every render.
+  const closePicker = useCallback(() => setPickerOpen(false), []);
   /** A page change: dismiss what belonged to the old page. */
   const switchPage = (next: Page) => {
     if (next === page) return;
@@ -451,8 +362,8 @@ function Editor({ data }: { data: AvailabilityData }) {
             type="button"
             className="arrow"
             aria-label="previous week"
-            disabled={!dated}
-            onClick={() => switchPage(page === 0 ? 'usual' : (page as number) - 1)}
+            disabled={off === null}
+            onClick={() => switchPage(off !== null && off > 0 ? off - 1 : 'usual')}
           >‹</button>
           {/* Always two lines — a name over a date range, or over "repeats every week" — so
               the pager's height never moves when the page changes. */}
@@ -462,16 +373,16 @@ function Editor({ data }: { data: AvailabilityData }) {
             aria-haspopup="dialog"
             aria-expanded={pickerOpen}
             title="pick a week"
-            onClick={() => setPickerOpen(!pickerOpen)}
+            onClick={() => setPickerOpen((o) => !o)}
           >
-            <span className="name">{dated ? pageName(page as number) : 'usual week'}</span>
+            <span className="name">{off === null ? 'usual week' : pageName(off)}</span>
             <small>{dates ? dateRangeLabel(dates[0], dates[6]) : 'repeats every week'}</small>
           </button>
           <button
             type="button"
             className="arrow"
             aria-label="next week"
-            onClick={() => switchPage(dated ? (page as number) + 1 : 0)}
+            onClick={() => switchPage(off === null ? 0 : off + 1)}
           >›</button>
         </div>
         {pickerOpen && (
@@ -481,7 +392,7 @@ function Editor({ data }: { data: AvailabilityData }) {
             thisMonday={thisMonday}
             hasAway={hasAway}
             onPick={(p) => { switchPage(p); setPickerOpen(false); }}
-            onClose={() => setPickerOpen(false)}
+            onClose={closePicker}
           />
         )}
       </div>
