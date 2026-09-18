@@ -55,7 +55,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // Leave the field before marking: its blur flushes an autosave, and Firefox keeps a datalist
   // popup open on a focused input. Neither should be in flight when the first stroke lands.
   await page.locator('#availability-root input[list=tz-list]').blur();
-  await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
+  await expect(page.locator('#availability-status-root .status')).toHaveText('posted.', { timeout: 15_000 });
 
   // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,
   // so its 7am cell is number 102. Sunday is the last day of a Monday-first week, so it is
@@ -133,7 +133,7 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
 
   // No post button: the status line posts two seconds after the last change.
   await expect(page.locator('#availability-root button.save')).toHaveCount(0);
-  await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
+  await expect(page.locator('#availability-status-root .status')).toHaveText('posted.', { timeout: 15_000 });
   await expect(page.locator('#availability-root .address-line')).toHaveCount(0);
   await expect(page.locator('#availability-root input[name=alias]')).toHaveCount(0);
   await expect(page.getByText('friends can see this at', { exact: false })).toHaveCount(0);

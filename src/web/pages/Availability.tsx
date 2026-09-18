@@ -77,7 +77,7 @@ export function AvailabilityPage(data: AvailabilityPageData) {
         {/* The island owns this card: the pager at the top says which page the grid is on,
             and the hint under it changes with the page. `bleed` lets it reach the screen
             edges at phone width (app.css). */}
-        <Card className="bleed">
+        <Card className="bleed pb-0">
           <CardContent className="grid gap-4">
             <script
               id="availability-data"
@@ -106,6 +106,7 @@ export function AvailabilityPage(data: AvailabilityPageData) {
               </div>
             )}
           </CardContent>
+          <div id="availability-status-root" />
         </Card>
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>

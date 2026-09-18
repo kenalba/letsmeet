@@ -3,6 +3,7 @@ import {
   type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { DateTime } from 'luxon';
 import type { AwayEntry, WeeklyBlock } from '../../atproto/records.js';
 import {
@@ -937,19 +938,19 @@ function Editor({ data }: { data: AvailabilityData }) {
         <p className="hint">not a timezone this browser knows. still using {zone}.</p>
       )}
       <p className="note">this record is public, like your polls. anyone with your handle can read it.</p>
-      {/* Sticky at the bottom of the viewport while the editor is on screen: this line is
-          the only thing that says whether what is on the grid is up there too. */}
-      <div className={cn('status', (pending || posting) && 'busy')} role="status">
+      {/* Keep the live save state in the card footer, after the sharing actions. */}
+      {statusMount && createPortal(<div className={cn('status', (pending || posting) && 'busy')} role="status">
         <span className="dot" />
         <span>{statusText}</span>
         {error && <button type="button" className="retry" onClick={saveNow}>retry</button>}
-      </div>
+      </div>, statusMount)}
     </div>
   );
 }
 
 const dataEl = document.getElementById('availability-data');
 const mount = document.getElementById('availability-root');
+const statusMount = document.getElementById('availability-status-root');
 if (dataEl?.textContent && mount) {
   createRoot(mount).render(<Editor data={JSON.parse(dataEl.textContent) as AvailabilityData} />);
 }
