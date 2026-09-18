@@ -419,6 +419,9 @@
     }
     /* Each column's cells are one block, so the deal can animate them under a still head. */
     .cells { display: flex; flex-direction: column; }
+    /* The axis column's head is a spacer, and the axis carries its own background: taking
+       --card there would paint a lighter patch over the darker column in dark mode. */
+    .col.axis .col-head { background: inherit; }
     .dow { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
     .dom { font-size: 11px; color: var(--muted-foreground); line-height: 1; white-space: nowrap; }
     .axis-label {
@@ -601,7 +604,7 @@
        which is also what lets the sticky day header stick to the page. `position: relative`
        is the frame the zone labels are placed in. */
     .grid { overflow: visible; position: relative; }
-    .col { flex: 1 1 0; min-width: 0; }
+    .col { flex: 1 1 0; min-width: 0; --i: 0; }
     /* The chip is positioned against this, not against the scrolling grid. */
     .gridwrap { position: relative; }
     /* Two lines of head on every page, so paging does not move the grid: the date number
@@ -612,13 +615,17 @@
       -webkit-font-smoothing: none;
     }
     /* A dated page says so in orange, and nothing else: no fills, no second grid. */
-    .grid.dated .col-head { border-bottom: 2px solid var(--away); }
+    .grid.dated .col-head { border-bottom: 2px solid var(--away); cursor: pointer; }
     .grid.dated .col-head.today .dow {
       text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--away);
     }
-    .grid.dated .col-head { cursor: pointer; }
-    .grid.dated .col.past .cell, .grid.dated .col.past .col-head { opacity: 0.42; }
-    .grid.dated .col.past .cell { cursor: default; }
+    /* A past day dims by what the head says, not by the head: the head is sticky and opaque,
+       and opacity on it would turn its background translucent and let the cells scroll
+       through the band. */
+    .grid.dated .col.past .cell { opacity: 0.42; cursor: default; }
+    .grid.dated .col.past .col-head .dow,
+    .grid.dated .col.past .col-head .dom,
+    .grid.dated .col.past .col-head .num { opacity: 0.42; }
     /* Away wins over free, and over the half-hour gradients above (same specificity, later
        in the sheet): a cell that is both is simply away. */
     .grid .cell.away, .grid.canvas .cell.away { background: var(--away); border-color: var(--away); }
@@ -647,9 +654,12 @@
       transition: color 200ms ease, border-color 200ms ease;
     }
     .pager .label .name { overflow: hidden; text-overflow: ellipsis; }
+    /* Back to the body face (the label itself is set in the pixel font) and muted, which
+       the dated state below overrides with the away ink. `--font-sans` is Tailwind's own
+       theme token — the stack `body` is already set in. */
     .pager .label small {
-      font-family: var(--font-body, inherit); font-size: 11px; line-height: 14px;
-      overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--font-sans); font-size: 11px; line-height: 14px;
+      color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis;
     }
     .pager.dated .label { color: var(--away-ink); border-color: var(--away); }
     .pager.dated .label small { color: var(--away-ink); opacity: 0.8; }
@@ -697,7 +707,7 @@
 
     /* The note chip: appears under the cells just marked away. */
     .note-chip {
-      position: absolute; z-index: 4; display: flex; align-items: center; gap: 8px;
+      position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px;
       padding: 6px 8px; max-width: calc(100% - 8px);
       background: var(--card); border: 1px solid var(--away); box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
       animation: chip-in 160ms ease both;
@@ -755,6 +765,11 @@
      colour is a token, so dark mode follows. */
   .week {
     display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); gap: 3px;
+    /* Row 1 is the header band and rows 2+ are the hours. The heads span every row (see
+       HEAD_SPAN in PublicAvailability.tsx — a sticky grid item can only move inside its own
+       grid area), so nothing lives in row 1 alone any more and its track has to be stated:
+       34px of content (`b` at 14px/1.2 over `.dow` at 11px/1.2 = 30px) plus 6px of padding. */
+    grid-template-rows: 36px; grid-auto-rows: 13px;
     font-variant-numeric: tabular-nums;
   }
   /* Sticky, over a solid card: the hours scroll under the day names rather than through
@@ -764,11 +779,14 @@
      a note label would otherwise ride over the header row it scrolls past. The corner
      sticks with it, or the hour labels slide through the row's first column. */
   .week-head {
-    position: sticky; top: 0; z-index: 2; background: var(--card);
+    position: sticky; top: 0; z-index: 2; background: var(--card); align-self: start;
     text-align: center; font-size: 11px; line-height: 1.2; color: var(--muted-foreground);
-    padding: 2px 0 4px; min-width: 0;
+    padding: 2px 0 4px; min-width: 0; height: 36px;
   }
-  .week-corner { position: sticky; top: 0; z-index: 2; background: var(--card); }
+  .week-corner {
+    position: sticky; top: 0; z-index: 2; background: var(--card);
+    align-self: start; height: 36px;
+  }
   .week-head b { display: block; font-size: 14px; font-weight: 500; color: var(--foreground); }
   .week-head.today b { text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 4px; }
   .week-axis {
@@ -780,7 +798,8 @@
   .week-cell.early { background: linear-gradient(to bottom, var(--primary) 50%, var(--muted) 50%); }
   .week-cell.late { background: linear-gradient(to bottom, var(--muted) 50%, var(--primary) 50%); }
   .week-cell.away, .week-legend i.away { background: var(--away); }
-  .week-head.past, .week-cell.past { opacity: 0.42; }
+  .week-cell.past { opacity: 0.42; }
+  .week-head.past b, .week-head.past .dow { opacity: 0.42; }
   a.week-cell { cursor: pointer; }
   /* Each hour is a wrapper that takes no box of its own, so the cells still lay out in the
      grid — and so hovering any cell in the row is hovering the row. */

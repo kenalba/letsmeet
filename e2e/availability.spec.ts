@@ -78,6 +78,33 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await expect(page.locator('.week-cell.free')).toHaveCount(2);
   await expect(page.getByText('away later:')).toBeVisible();
+  // The day headers stay on screen while the hours scroll under them. Only worth checking
+  // where the grid is taller than the viewport, which is the phone: `.week-head` is a grid
+  // item, so it can only stick inside its own grid area — it spans every row for that
+  // reason (HEAD_SPAN in PublicAvailability.tsx), and this is the guard on it. The Pixel 7's
+  // 839px of viewport is taller than the whole page, so shorten it first: without room to
+  // scroll there is nothing for `top: 0` to do.
+  if (test.info().project.use.hasTouch) {
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: size.width, height: 400 });
+    await page.evaluate(() => window.scrollTo(0, 300));
+    expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(300);
+    // Read the rects in the page: `locator.boundingBox()` scrolls its element into view
+    // first, which would undo the very scroll this is measuring.
+    const rects = await page.evaluate(() => {
+      const box = (sel: string) => {
+        const { top, height } = document.querySelector(sel)!.getBoundingClientRect();
+        return { top, height };
+      };
+      return { monday: box('.week-head[data-c="0"]'), firstHour: box('.week-cell[data-c="0"]') };
+    });
+    expect(rects.monday.top, 'monday stays on screen').toBeGreaterThanOrEqual(0);
+    expect(rects.monday.top, 'monday stays at the top of it').toBeLessThan(60);
+    expect(rects.firstHour.top, '7am has scrolled under the head')
+      .toBeLessThan(rects.monday.top + rects.monday.height);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.setViewportSize(size);
+  }
   await page.click('.week-nav a[href="?week=next"]');
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await page.click('.week-nav a[href="?week=later"]');

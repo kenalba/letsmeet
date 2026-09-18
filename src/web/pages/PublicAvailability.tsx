@@ -60,20 +60,31 @@ function freshness(rec: AvailabilityRecord, now: Date): string {
  */
 const rowOf = (h: number) => h - HOURS[0] + 2;
 const colOf = (ci: number) => ci + 2;
+/**
+ * The day headers and the corner span every row, not just row 1. A grid item's containing
+ * block is its own grid area, and a `position: sticky` box can only move inside that block:
+ * an item that fits row 1 exactly has nowhere to stick to. Spanning the whole grid gives the
+ * head the run of its column, `align-self: start` keeps it at the top of it, and `.week`'s
+ * first row track carries the height the header would otherwise have set (see app.css).
+ */
+const HEAD_SPAN = `1/${rowOf(HOURS[HOURS.length - 1]) + 1}`;
 
 function WeekGrid({ view, zones, handle }: { view: WeekView; zones: NoteZone[]; handle: string }) {
   return (
     <div className="week" aria-label={`usual week, ${view.title}`} role="group">
-      <div className="week-corner" style={{ gridRow: 1, gridColumn: 1 }} />
+      <div className="week-corner" style={{ gridRow: HEAD_SPAN, gridColumn: 1 }} />
       {view.days.map((d, ci) => (
         <div
           key={d.date}
           className={cn('week-head', d.past && 'past', d.today && 'today')}
           data-c={ci}
-          style={{ gridRow: 1, gridColumn: colOf(ci) }}
+          style={{ gridRow: HEAD_SPAN, gridColumn: colOf(ci) }}
           title={d.awayAllDay !== null ? (d.awayAllDay || 'away') : undefined}
         >
-          <b>{d.dom}</b>{d.dow}
+          {/* The weekday rides in a span of its own so a past day can be dimmed by its
+              contents: `opacity` on the head itself would make the sticky background
+              translucent and let the cells scroll through it. */}
+          <b>{d.dom}</b><span className="dow">{d.dow}</span>
         </div>
       ))}
       {HOURS.map((h, hi) => (

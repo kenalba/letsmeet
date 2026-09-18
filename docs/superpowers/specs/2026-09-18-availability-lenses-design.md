@@ -41,7 +41,7 @@ Everything autosaves. The post button goes.
 | Old cookies | Sessions minted before the domain cookie (2026-09-17) are host-only and never reach `<name>.sez.letsmeet.lol`, so their owners see no edit button. On the next apex request such a session is re-issued with `Domain` and marked, so nobody has to sign in again. |
 | Feed actions | The links row becomes a row of three matching pixel buttons, left-aligned as a group: `> download .ics`, `> subscribe`, `> copy link`. The first two stay anchors (`href` to the `.ics` and the `webcal:` address) styled with `.btn-pixel`; the third is a real `<button>`. Same on both pages; the editor keeps its "friends can see this at <address>" line above the row. No `·` separators. Fits one line at phone width. |
 | Reach-out caption | The friend view's line under the grid reads `click a free hour to ping on bluesky.` (was "to post at them", which sat oddly above a first-person note). The post text itself is unchanged. |
-| Mobile | At phone width every card on the editor and friend view bleeds to the screen edges (no side borders or padding; text keeps a 16px inset); day headers are sticky on all three grids (poll, editor, friend view); timezone and good-through share a row with the note full width. |
+| Mobile | At phone width every card on the editor and friend view bleeds to the screen edges (no side borders or padding; text keeps a 16px inset); day headers are sticky on the editor and friend-view grids; the poll grid keeps its horizontal scroller and no sticky header; timezone and good-through share a row with the note full width. |
 
 ## Where it lives
 

@@ -275,11 +275,15 @@ describe('the week grid', () => {
   });
   it('places every cell and label explicitly, so a label overlaps rather than displaces', () => {
     const html = render();
-    // Row 1 is the day headers; hour h is row h - 5. Column 1 is the axis.
-    expect(html).toContain('style="grid-row:1;grid-column:2"');
+    // Row 1 is the day headers; hour h is row h - 5. Column 1 is the axis. The corner and
+    // the heads span every row rather than sitting in row 1 alone: a sticky grid item can
+    // only move inside its own grid area, so a head that fitted row 1 exactly could not
+    // stick at all. `align-self: start` in app.css keeps them in the first row track.
+    expect(html).toContain('style="grid-row:1/19;grid-column:2"');
     expect(html).toContain('style="grid-row:18;grid-column:8"');
+    expect(html.match(/grid-row:1\/19;grid-column:\d+"/g)?.length).toBe(1 + DAYS);
     expect(html.match(/grid-row:\d+;grid-column:\d+"/g)?.length)
-      .toBe(1 + DAYS + HOURS.length * (1 + DAYS));
+      .toBe(HOURS.length * (1 + DAYS));
   });
   it('labels nothing shorter than three rows', () => {
     const html = render({ record: { ...rec, away: [{
