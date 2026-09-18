@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS participant (
   poll_rkey TEXT NOT NULL, did TEXT NOT NULL, handle TEXT, PRIMARY KEY (poll_rkey, did));
 CREATE TABLE IF NOT EXISTS web_session (
   sid TEXT PRIMARY KEY, did TEXT NOT NULL, handle TEXT,
-  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+  cookie_v INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS web_session_did ON web_session (did);
 CREATE TABLE IF NOT EXISTS availability_cache (
   did TEXT PRIMARY KEY, uri TEXT, cid TEXT, record_json TEXT,
@@ -44,6 +45,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS sez_name_did_claimed ON sez_name (did) WHERE c
  */
 const ADDED_COLUMNS: Array<{ table: string; column: string; ddl: string }> = [
   { table: 'participant', column: 'handle', ddl: 'ALTER TABLE participant ADD COLUMN handle TEXT' },
+  // Which cookie shape this session was handed: 0 is the host-only cookie from before
+  // 2026-09-17, 1 the `Domain=` one every sez host receives. See web/session.ts.
+  { table: 'web_session', column: 'cookie_v', ddl: 'ALTER TABLE web_session ADD COLUMN cookie_v INTEGER NOT NULL DEFAULT 0' },
 ];
 
 export type { Database };

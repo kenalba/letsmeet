@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { Hono } from 'hono';
 import { authRoutes } from '../../src/web/routes/auth.js';
 import { cookieDomainFor, sessionEnvFor } from '../../src/web/session.js';
+import { isPublicHost, readSession } from '../../src/web/session.js';
 import { openDb } from '../../src/db/db.js';
 import { getWebSession } from '../../src/db/webSessions.js';
 import type { AuthClient } from '../../src/atproto/oauthClient.js';
@@ -230,5 +232,64 @@ describe('returnTo round trip', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/');
     expect(res.headers.get('set-cookie')).toContain('sid=');
+  });
+});
+
+describe('sessions minted before the domain cookie', () => {
+  /** A one-route app that does what every real route does: read the session. */
+  const probe = (e: ReturnType<typeof env>) => {
+    const app = new Hono();
+    app.get('/probe', async (c) =>
+      c.json({ did: (await readSession(c, e, Date.now()))?.did ?? null }));
+    return app;
+  };
+
+  it('re-issues the cookie with Domain once, on the apex only', async () => {
+    const e = env();
+    const signedIn = await authRoutes(stub, e).request('/oauth/callback?code=abc&state=xyz');
+    const cookie = cookieOf(signedIn);
+    // Pretend this row predates the Domain attribute.
+    e.db.prepare('UPDATE web_session SET cookie_v = 0').run();
+    const app = probe(e);
+
+    // The alias host issues nothing: a cookie set there would be scoped to it.
+    const alias = await app.request('/probe', { headers: { cookie, host: 'ken.sez.poll.example' } });
+    expect(alias.headers.getSetCookie()).toEqual([]);
+    expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 0 });
+
+    const apex = await app.request('/probe', { headers: { cookie, host: 'poll.example' } });
+    const set = apex.headers.getSetCookie();
+    expect(set.some((s) => s.startsWith('sid=') && !s.startsWith('sid=;') && s.includes('Domain=poll.example'))).toBe(true);
+    // The host-only cookie the browser still holds is cleared in the same response.
+    expect(set.some((s) => s.startsWith('sid=;') && !s.includes('Domain='))).toBe(true);
+    expect((await apex.json() as { did: string }).did).toBe('did:plc:host');
+    expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 1 });
+
+    // Marked: the next apex request issues nothing.
+    expect((await app.request('/probe', { headers: { cookie, host: 'poll.example' } }))
+      .headers.getSetCookie()).toEqual([]);
+  });
+
+  it('issues nothing where no Domain is possible (local dev)', async () => {
+    const e = env('http://localhost:8787');
+    const cookie = cookieOf(await authRoutes(stub, e).request('/oauth/callback?code=abc&state=xyz'));
+    e.db.prepare('UPDATE web_session SET cookie_v = 0').run();
+    const res = await probe(e).request('/probe', { headers: { cookie, host: 'localhost:8787' } });
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect((await res.json() as { did: string }).did).toBe('did:plc:host');
+  });
+
+  it('a fresh sign-in is already marked, whatever host it happened on', async () => {
+    const e = env();
+    await authRoutes(stub, e).request('/oauth/callback?code=abc&state=xyz');
+    expect(e.db.prepare('SELECT cookie_v FROM web_session').get()).toEqual({ cookie_v: 1 });
+  });
+
+  it('isPublicHost reads the apex through case, a trailing dot and a port', () => {
+    expect(isPublicHost('poll.example', 'poll.example')).toBe(true);
+    expect(isPublicHost('POLL.example.', 'poll.example')).toBe(true);
+    expect(isPublicHost('poll.example:443', 'poll.example')).toBe(true);
+    expect(isPublicHost('ken.sez.poll.example', 'poll.example')).toBe(false);
+    expect(isPublicHost(undefined, 'poll.example')).toBe(false);
   });
 });
