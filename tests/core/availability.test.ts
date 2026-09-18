@@ -151,6 +151,17 @@ describe('template week', () => {
       [{ day: 6, start: '22:00', end: '00:00' }], ['2026-09-19'], 'UTC',
     )).toEqual([{ start: '2026-09-19T22:00:00.000Z', end: '2026-09-20T00:00:00.000Z' }]);
   });
+  it('shifts with DST: the same wall clock lands an hour earlier in UTC after spring forward', () => {
+    // New York clocks jump forward on Sunday 2026-03-08, so Saturday the 7th is still EST
+    // (UTC-5) and the Sunday evening block is EDT (UTC-4) — one hour apart in offset.
+    expect(weeklyOverDates(
+      [{ day: 6, start: '19:00', end: '22:00' }, { day: 0, start: '19:00', end: '22:00' }],
+      ['2026-03-07', '2026-03-08'], TZ,
+    )).toEqual([
+      { start: '2026-03-08T00:00:00.000Z', end: '2026-03-08T03:00:00.000Z' },
+      { start: '2026-03-08T23:00:00.000Z', end: '2026-03-09T02:00:00.000Z' },
+    ]);
+  });
   it('round-trips weekly blocks through template intervals', () => {
     const weekly = [{ day: 2, start: '19:00', end: '22:00' }, { day: 5, start: '22:00', end: '00:00' }];
     const ivs = weeklyToTemplateIntervals(weekly, TZ);

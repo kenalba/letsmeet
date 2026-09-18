@@ -276,7 +276,7 @@ export function templateSlots(timezone: string): Interval[] {
  * date's own weekday is the block's. The template week is seven dates like any other, so the
  * editor's usual page and its dated pages both come from here — and reading the weekday off
  * the date, rather than indexing the list by it, is what makes the two one function. Local
- * wall clock in, UTC out, DST handled per date by luxon.
+ * wall clock in, UTC out, DST and past-midnight ends handled per date by `localRange`.
  */
 export function weeklyOverDates(
   weekly: WeeklyBlock[], dates: string[], timezone: string,
@@ -286,10 +286,7 @@ export function weeklyOverDates(
     const weekday = DateTime.fromISO(date, { zone: timezone }).weekday % 7; // luxon: 7 = Sunday
     for (const b of weekly) {
       if (b.day !== weekday) continue;
-      const start = DateTime.fromISO(`${date}T${b.start}`, { zone: timezone });
-      let end = DateTime.fromISO(`${date}T${b.end}`, { zone: timezone });
-      if (end <= start) end = end.plus({ days: 1 }); // past midnight
-      ivs.push({ start: start.toUTC().toISO()!, end: end.toUTC().toISO()! });
+      ivs.push(localRange(date, b.start, b.end, timezone)); // rolls a past-midnight end itself
     }
   }
   return ivs.length ? mergeIntervals(ivs) : [];
