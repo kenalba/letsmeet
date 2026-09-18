@@ -157,8 +157,14 @@ export function buildAvailabilityIcs(
       `UID:away-${ymd(a.start)}-${ymd(a.end)}-${window ? `${window.start.replace(':', '')}-${window.end.replace(':', '')}` : 'allday'}@${opts.uidHost}`,
       `DTSTAMP:${stamp}`);
     if (window) {
+      // As localWindow reads it, an end at or before the start is the end of the day (or a
+      // window that rolls past midnight), so the occurrence ends on the following date —
+      // the same treatment the weekly branch above gives a block that runs past midnight.
+      // A DTEND before its DTSTART is not a valid VEVENT. The RRULE below is unaffected:
+      // UNTIL bounds the series by the last occurrence's start, not its end.
+      const endDate = window.end <= window.start ? plusDays(a.start, 1) : ymd(a.start);
       L.push(`DTSTART;TZID=${tz}:${ymd(a.start)}T${hm(window.start)}`,
-        `DTEND;TZID=${tz}:${ymd(a.start)}T${hm(window.end)}`);
+        `DTEND;TZID=${tz}:${endDate}T${hm(window.end)}`);
       if (a.end !== a.start) {
         // RFC 5545 §3.3.10: UNTIL must be UTC when DTSTART carries a TZID, and it bounds
         // the series by the last occurrence's *start*. A local `T235959` is neither, and a
