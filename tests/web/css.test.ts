@@ -138,4 +138,45 @@ describe('built app.css', () => {
     // 24px a row and its labels drift off the rows they name.
     expect(css).toMatch(/[^{}]*\.axis-label\+\.axis-label\{margin-top:-1px\}/);
   });
+  it('defines the away tokens in every theme block and paints away solid on both grids', () => {
+    const light = tokens(/:root\{([^}]*)\}/.exec(css)![1]);
+    const dark = tokens(DARK_PINNED_TOKENS.exec(css)![1]);
+    for (const t of ['--away', '--away-ink', '--away-label']) {
+      expect([t, !!light[t]]).toEqual([t, true]);
+      expect([t, !!dark[t]]).toEqual([t, true]);
+    }
+    // Orange is away everywhere: the friend view's gray hatch is gone.
+    expect(css).toMatch(/\.week-cell\.away[^{]*\{[^}]*background:var\(--away\)/);
+    expect(css).toMatch(/\.cell\.away[^{]*\{[^}]*background:var\(--away\)/);
+    expect(css).not.toContain('repeating-linear-gradient(135deg');
+  });
+
+  it('sticks the day headers and bleeds the cards at phone width', () => {
+    expect(css).toMatch(/\.col-head\{[^}]*position:sticky/);
+    expect(css).toMatch(/\.week-head\{[^}]*position:sticky/);
+    // The editor grid drops the horizontal scroller, which is what lets its header stick:
+    // a horizontal scroll container is a vertical scrollport too, and a sticky child of a
+    // scrollport that never scrolls never moves.
+    expect(css).toMatch(/#availability-root \.grid\{[^}]*overflow(-x)?:visible/);
+    expect(css).toContain('@media (max-width:480px)');
+    expect(css).toMatch(/\.bleed\{[^}]*-16px/);
+  });
+
+  it('deals the columns on a page change and holds still under reduced motion', () => {
+    expect(css).toContain('@keyframes deal');
+    expect(css).toMatch(/\.col\.deal \.cells\{[^}]*animation/);
+    const reduce = /@media \(prefers-reduced-motion:reduce\)\{([\s\S]*?)\}\}/g;
+    const blocks = [...css.matchAll(reduce)].map((m) => m[1]).join('\n');
+    expect(blocks).toContain('.col.deal .cells');
+    expect(blocks).toContain('animation:none');
+  });
+
+  it('ships the pager, the picker, the chip and the zone label', () => {
+    expect(css).toMatch(/\.pager\.dated \.label\{[^}]*var\(--away/);
+    expect(css).toMatch(/\.weekpick\{[^}]*position:absolute/);
+    expect(css).toMatch(/\.note-chip\{[^}]*position:absolute/);
+    expect(css).toMatch(/\.zlabel\{[^}]*pointer-events:none/);
+    expect(css).toMatch(/\.zlabel\.v\{[^}]*writing-mode:vertical-rl/);
+    expect(css).toMatch(/\.zlabel\.one\{[^}]*text-overflow:ellipsis/);
+  });
 });

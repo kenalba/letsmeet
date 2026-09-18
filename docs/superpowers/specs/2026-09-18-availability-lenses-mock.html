@@ -1,0 +1,810 @@
+<title>Availability Lenses</title>
+<style>
+@font-face {
+  font-family: "Departure Mono";
+  src: url("data:font/woff2;base64,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") format("woff2");
+  font-display: swap;
+}
+:root {
+  --font-pixel: "Departure Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.25);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0.001 106.424);
+  --muted-foreground: oklch(0.553 0.013 58.071);
+  --border: oklch(0.923 0.003 48.717);
+  --primary: oklch(0.567 0.111 159.68);
+  --primary-ink: oklch(0.5 0.105 159.68);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --lol: #c4610a;
+  --lol-bright: #ffa133;
+  --away: var(--lol);
+  --away-ink: #8a4306;
+  --away-wash: color-mix(in oklab, var(--lol) 11%, var(--card));
+  --away-label: #fff;
+  --frame: oklch(0.147 0.004 49.25);
+  --page: oklch(0.985 0.002 60);
+  --stage: oklch(0.955 0.004 60);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: oklch(0.147 0.004 49.25);
+    --foreground: oklch(0.985 0.001 106.423);
+    --card: oklch(0.216 0.006 56.043);
+    --muted: oklch(0.268 0.007 34.298);
+    --muted-foreground: oklch(0.709 0.01 56.259);
+    --border: oklch(1 0 0 / 10%);
+    --primary: oklch(0.702 0.121 159.68);
+    --primary-ink: oklch(0.702 0.121 159.68);
+    --primary-foreground: oklch(0.216 0.006 56.043);
+    --away: var(--lol-bright);
+    --away-ink: var(--lol-bright);
+    --away-wash: color-mix(in oklab, var(--lol-bright) 14%, var(--card));
+    --away-label: oklch(0.147 0.004 49.25);
+    --frame: oklch(0.3 0.006 56);
+    --page: oklch(0.13 0.004 49);
+    --stage: oklch(0.17 0.005 49);
+  }
+}
+:root[data-theme="dark"] {
+  --background: oklch(0.147 0.004 49.25);
+  --foreground: oklch(0.985 0.001 106.423);
+  --card: oklch(0.216 0.006 56.043);
+  --muted: oklch(0.268 0.007 34.298);
+  --muted-foreground: oklch(0.709 0.01 56.259);
+  --border: oklch(1 0 0 / 10%);
+  --primary: oklch(0.702 0.121 159.68);
+  --primary-ink: oklch(0.702 0.121 159.68);
+  --primary-foreground: oklch(0.216 0.006 56.043);
+  --away: var(--lol-bright);
+  --away-ink: var(--lol-bright);
+  --away-wash: color-mix(in oklab, var(--lol-bright) 14%, var(--card));
+  --away-label: oklch(0.147 0.004 49.25);
+  --frame: oklch(0.3 0.006 56);
+  --page: oklch(0.13 0.004 49);
+  --stage: oklch(0.17 0.005 49);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--foreground); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.pixel { font-family: var(--font-pixel); -webkit-font-smoothing: none; font-weight: 400; letter-spacing: 0; }
+
+/* ---------- studio chrome around the mock ---------- */
+.studio { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .studio { grid-template-columns: minmax(0, 1fr) 300px; align-items: start; } }
+.studio h1 { font-size: 22px; line-height: 33px; margin: 0; text-wrap: balance; }
+.studio h1 .lol { color: var(--lol); }
+.lede { color: var(--muted-foreground); margin: 4px 0 0; max-width: 60ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--border); background: var(--card); }
+.seg button { font: inherit; font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 2px 10px; background: transparent; color: var(--foreground); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.notes { display: grid; gap: 14px; font-size: 13px; }
+.notes h2 { font-size: 11px; line-height: 22px; margin: 0; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.08em; }
+.notes ol { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+.notes li::marker { color: var(--lol); font-family: var(--font-pixel); }
+.notes .key { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; border: 1px solid var(--border); margin-right: 4px; }
+.notes .key.free { background: var(--primary); border-color: var(--primary); }
+.notes .key.away { background: repeating-linear-gradient(135deg, var(--away) 0 3px, transparent 3px 5px); }
+.stage { background: var(--stage); border-radius: 12px; padding: 22px; display: flex; justify-content: center; }
+.frame { width: 390px; max-width: 100%; height: 720px; overflow: auto; overscroll-behavior: contain; background: var(--background); border: 6px solid var(--frame); border-radius: 22px; transition: width 220ms ease; }
+.frame.wide { width: 760px; }
+
+/* ---------- the app page inside the frame ---------- */
+.app { min-height: 100%; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+.brand { font-size: 22px; line-height: 33px; color: var(--foreground); }
+.brand .lol { color: var(--lol); }
+.topbar .spacer { margin-left: auto; }
+.btn { font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 6px 12px 6px 10px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.btn::before { content: ">"; color: var(--lol); }
+.btn.primary { border-color: var(--primary); color: var(--primary-ink); }
+.btn.icon { padding: 6px; width: 36px; justify-content: center; }
+.btn.icon::before { content: none; }
+.btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+main { padding: 24px 16px 40px; display: grid; gap: 20px; }
+main h1 { font-size: 22px; line-height: 33px; margin: 0; }
+.sub { color: var(--muted-foreground); margin: 0; font-size: 13px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; display: grid; gap: 14px; }
+.card h2 { font-size: 16px; margin: 0; }
+.card .hint { color: var(--muted-foreground); font-size: 13px; margin: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row.between { justify-content: space-between; }
+label.f { display: grid; gap: 4px; font-size: 13px; }
+label.f input, label.f select { font: inherit; font-size: 14px; padding: 7px 10px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); border-radius: 6px; min-width: 0; width: 100%; }
+label.f input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fields .full { grid-column: 1 / -1; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted-foreground); }
+.links a { color: var(--primary-ink); text-decoration: underline; text-underline-offset: 4px; }
+.links .btn { margin-left: auto; }
+.footer { margin-top: auto; border-top: 1px solid var(--border); padding: 18px 16px; font-family: var(--font-pixel); font-size: 11px; line-height: 22px; color: var(--muted-foreground); }
+.footer .lol { color: var(--lol); }
+
+/* on a phone the week card bleeds to the edges: the grid gets every pixel, text keeps an inset */
+.frame:not(.wide) .card { margin: 0 -16px; padding-left: 0; padding-right: 0; border-left: 0; border-right: 0; border-radius: 0; }
+.frame:not(.wide) .card > :not(.gridwrap) { padding-left: 16px; padding-right: 16px; }
+.frame:not(.wide) .weekcard .col.axis { padding-left: 6px; }
+.frame:not(.wide) .weekcard .col { max-width: none; }
+
+/* pager: one control, the usual week is page zero. two lines always, so the height never moves */
+.pager-wrap { position: relative; }
+.pager { display: flex; align-items: stretch; max-width: 360px; }
+.pager button { font-family: var(--font-pixel); font-size: 16px; line-height: 22px; padding: 4px 12px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); cursor: pointer; }
+.pager button:disabled { opacity: 0.3; cursor: default; }
+.pager button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pager .label { flex: 1; min-width: 0; display: grid; gap: 0; padding: 4px 10px; border-left: 0; border-right: 0; text-align: center; white-space: nowrap; overflow: hidden; transition: color 200ms ease, border-color 200ms ease; }
+.pager .label .name { font-family: var(--font-pixel); font-size: 16px; line-height: 22px; overflow: hidden; text-overflow: ellipsis; }
+.pager .label small { font-family: var(--font-body); font-size: 11px; line-height: 14px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+.pager.dated .label { color: var(--away-ink); border-color: var(--away); }
+.pager.dated .label small { color: var(--away-ink); opacity: 0.8; }
+.pager.dated .arrow { border-color: var(--away); color: var(--away-ink); }
+/* week picker: a small calendar whose rows are the choice */
+.weekpick { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: 300px; max-width: 100%; background: var(--card); border: 1px solid var(--border); box-shadow: 0 10px 28px rgb(0 0 0 / 16%); padding: 10px; display: grid; gap: 6px; }
+.weekpick .usual { font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 2px 8px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); cursor: pointer; text-align: left; }
+.weekpick .usual.current { border-color: var(--foreground); }
+.weekpick .mh { display: flex; align-items: center; justify-content: space-between; font-family: var(--font-pixel); font-size: 11px; line-height: 22px; }
+.weekpick .mh button { font: inherit; font-family: var(--font-pixel); border: 0; background: none; color: var(--foreground); cursor: pointer; padding: 0 8px; font-size: 16px; }
+.weekpick .dows, .weekpick .wk { display: grid; grid-template-columns: repeat(7, 1fr); }
+.weekpick .dows span { font-size: 10px; color: var(--muted-foreground); text-align: center; }
+.weekpick .wk { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--foreground); border-radius: 4px; }
+.weekpick .wk span { position: relative; text-align: center; line-height: 24px; }
+.weekpick .wk span.out { color: var(--muted-foreground); opacity: 0.55; }
+.weekpick .wk span.today { text-decoration: underline; text-underline-offset: 3px; }
+.weekpick .wk span.away::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; background: var(--away); border-radius: 50%; }
+.weekpick .wk:hover:not(:disabled), .weekpick .wk:focus-visible { background: var(--muted); outline: none; }
+.weekpick .wk.current { box-shadow: inset 0 0 0 2px var(--away); }
+.weekpick .wk:disabled { opacity: 0.3; cursor: default; }
+.weekpick .foot { font-size: 11px; color: var(--muted-foreground); }
+
+/* the grid */
+.gridwrap { position: relative; }
+.grid { position: relative; display: flex; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 2px; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.col { display: flex; flex-direction: column; flex: 1 0 44px; max-width: 96px; --i: 0; }
+.col.axis { flex: 0 0 auto; position: sticky; left: 0; z-index: 2; background: var(--card); }
+.col-head { position: sticky; top: 0; z-index: 1; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 1px; padding-bottom: 5px; background: var(--card); border-bottom: 1px solid var(--border); transition: background 260ms ease; transition-delay: calc(var(--i) * 25ms); }
+.axis .col-head { align-items: flex-end; }
+.col-head .num { font-family: var(--font-pixel); font-size: 11px; line-height: 16px; height: 16px; color: var(--foreground); opacity: 1; transform: translateY(0); transition: opacity 220ms ease, transform 220ms ease; transition-delay: calc(var(--i) * 25ms + 120ms); }
+.col-head .dow { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.grid.usual .col-head .num { opacity: 0; transform: translateY(-6px); transition-delay: calc(var(--i) * 25ms); }
+.grid.dated .col-head { border-bottom: 2px solid var(--away); }
+.col-head { transition: border-color 260ms ease; transition-delay: calc(var(--i) * 25ms); }
+.grid.dated .col-head.today .dow { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--away); }
+.axis-label { height: 24px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cell { position: relative; height: 24px; border: 1px solid var(--border); margin-top: -1px; background: var(--card); cursor: pointer; transition: background 120ms ease; }
+.col + .col .cell { margin-left: -1px; }
+.cell.free { background: var(--primary); border-color: var(--primary-ink); }
+.cell.away { background: repeating-linear-gradient(135deg, var(--away) 0 3px, var(--card) 3px 6px); border-color: var(--away); }
+.cell.free.away { background: repeating-linear-gradient(135deg, var(--away) 0 3px, color-mix(in oklab, var(--primary) 45%, var(--card)) 3px 6px); }
+.grid.dated .col.past .cell, .grid.dated .col.past .col-head { opacity: 0.42; }
+.grid.dated .col.past .cell { cursor: default; }
+.grid.dated .col-head { cursor: pointer; }
+.grid.usual .col-head { cursor: default; }
+@media (hover: hover) {
+  .cell:hover { outline: 2px solid var(--foreground); outline-offset: -2px; z-index: 1; }
+  .grid.dated .col.past .cell:hover { outline: none; }
+}
+/* zone labels: an entry's note lives inside its own away rectangle, never in the header */
+.zlabel { position: absolute; z-index: 1; pointer-events: none; overflow: hidden; padding: 3px 5px; font-size: 11px; line-height: 14px; color: var(--away-ink); text-shadow: 0 0 3px var(--card), 0 0 3px var(--card); }
+body.solid .zlabel { color: var(--away-label); text-shadow: none; }
+.zlabel.v { writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; text-overflow: ellipsis; }
+.zlabel.h { overflow-wrap: anywhere; }
+.zlabel.past { opacity: 0.42; }
+.week .zlabel { font-size: 10px; line-height: 12px; padding: 2px 3px; }
+/* the deal: columns re-deal themselves left to right on a lens change */
+@keyframes deal { 0% { opacity: 1; transform: translateY(0); } 42% { opacity: 0; transform: translateY(-4px); } 58% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: translateY(0); } }
+.col.deal .cells { animation: deal 320ms ease both; animation-delay: calc(var(--i) * 25ms); }
+@media (prefers-reduced-motion: reduce) {
+  .col.deal .cells { animation: none; }
+  .col-head, .col-head .num { transition: none; }
+  .frame { transition: none; }
+}
+.caption { color: var(--muted-foreground); font-size: 13px; margin: 0; min-height: 20px; }
+.caption b { color: var(--foreground); font-weight: 600; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted-foreground); }
+.legend i { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--border); }
+.legend i.free { background: var(--primary); border-color: var(--primary-ink); }
+.legend i.away { background: repeating-linear-gradient(135deg, var(--away) 0 3px, var(--card) 3px 6px); border-color: var(--away); }
+
+/* away list */
+.away-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.away-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.away-list a { color: var(--foreground); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--away); cursor: pointer; }
+.away-list .when { font-variant-numeric: tabular-nums; }
+.away-list .note { color: var(--muted-foreground); font: inherit; font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer; }
+.away-list .note.add { text-decoration: underline dashed; text-underline-offset: 4px; }
+.away-list .note:hover { color: var(--foreground); }
+.away-list input.note-edit { font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); width: 12ch; }
+.awaybox { display: grid; gap: 8px; }
+/* the note chip: appears under cells you just marked away in a dated week */
+.note-chip { position: absolute; z-index: 4; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--card); border: 1px solid var(--away); box-shadow: 0 6px 18px rgb(0 0 0 / 14%); max-width: calc(100% - 8px); }
+.note-chip .when { font-family: var(--font-pixel); font-size: 11px; line-height: 22px; color: var(--away-ink); white-space: nowrap; }
+.note-chip input { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); width: 15ch; min-width: 0; }
+.note-chip input:focus-visible { outline: 2px solid var(--away); outline-offset: 1px; }
+.note-chip .ok { font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 2px 8px; border: 1px solid var(--away); background: var(--away); color: #fff; cursor: pointer; }
+@keyframes chip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.note-chip { animation: chip-in 160ms ease both; }
+@media (prefers-reduced-motion: reduce) { .note-chip { animation: none; } }
+.awaybox h3 { font-size: 11px; line-height: 22px; margin: 0; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--font-body); }
+.away-list .x { margin-left: auto; font-family: var(--font-pixel); font-size: 11px; color: var(--muted-foreground); background: none; border: 0; cursor: pointer; }
+.away-list .x:hover { color: var(--foreground); }
+.empty { color: var(--muted-foreground); font-size: 13px; margin: 0; }
+
+/* sticky status */
+.status { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--background); border-top: 1px solid var(--border); font-family: var(--font-pixel); font-size: 11px; line-height: 22px; color: var(--muted-foreground); }
+.status .dot { width: 8px; height: 8px; background: var(--primary); border-radius: 50%; }
+.status.busy .dot { background: var(--lol); animation: blink 900ms steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .status.busy .dot { animation: none; } }
+
+/* friend view */
+.fv-head { display: flex; align-items: flex-start; gap: 10px; }
+.fv-head .btn { margin-left: auto; }
+.week { position: relative; display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); gap: 3px; }
+.week-corner { }
+.week-head { text-align: center; font-size: 11px; line-height: 1.15; padding-bottom: 4px; }
+.week-head b { display: block; font-size: 13px; font-family: var(--font-pixel); }
+.week-head.past { opacity: 0.42; }
+.week-head.today b { text-decoration: underline; text-underline-offset: 3px; }
+.week-axis { font-size: 10px; color: var(--muted-foreground); text-align: right; padding-right: 6px; line-height: 13px; font-variant-numeric: tabular-nums; }
+.week-cell { height: 13px; border-radius: 2px; background: var(--muted); }
+.week-cell.free { background: var(--primary); }
+.week-cell.away { background: repeating-linear-gradient(135deg, var(--away) 0 3px, var(--muted) 3px 5px); }
+.week-cell.past { opacity: 0.42; }
+.week-nav { margin-left: auto; font-size: 13px; display: flex; gap: 12px; }
+.week-nav a { color: var(--primary-ink); text-decoration: underline; text-underline-offset: 4px; }
+.week-nav span { color: var(--muted-foreground); }
+.hidden { display: none !important; }
+/* solid away: one hue, no stripes (default). the hatch stays a toggle for comparison */
+body.solid .cell.away, body.solid .cell.free.away { background: var(--away); border-color: var(--away); }
+body.solid .week-cell.away { background: var(--away); }
+body.solid .legend i.away, body.solid .notes .key.away { background: var(--away); border-color: var(--away); }
+
+</style>
+
+<div class="studio">
+  <div>
+    <h1 class="pixel">availability lenses <span class="lol">· mock</span></h1>
+    <p class="lede">One grid, two lenses. The usual week has no dates, so marks there are free. Pick a week and marks there are away. It's live: drag on cells, tap a day header in a dated week, click an away entry to jump to it.</p>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="page">
+        <button type="button" data-page="editor" aria-pressed="true">editor</button>
+        <button type="button" data-page="friend" aria-pressed="false">friend view</button>
+      </div>
+      <div class="seg" role="group" aria-label="width">
+        <button type="button" data-width="phone" aria-pressed="true">phone</button>
+        <button type="button" data-width="desktop" aria-pressed="false">desktop</button>
+      </div>
+      <div class="seg" role="group" aria-label="away fill">
+        <button type="button" data-fill="solid" aria-pressed="true">solid</button>
+        <button type="button" data-fill="hatch" aria-pressed="false">hatch</button>
+      </div>
+    </div>
+    <div class="stage" style="margin-top:14px">
+      <div class="frame" id="frame">
+        <div class="app">
+          <div class="topbar">
+            <span class="brand pixel">letsmeet<span class="lol">.lol</span></span>
+            <span class="spacer"></span>
+            <button type="button" class="btn icon" aria-label="theme">◐</button>
+          </div>
+
+          <!-- ================= editor ================= -->
+          <main id="page-editor">
+            <div>
+              <h1 class="pixel">your availability</h1>
+              <p class="sub" id="sentence"></p>
+            </div>
+
+            <section class="card weekcard">
+              <div class="pager-wrap">
+                <div class="pager" id="pager">
+                  <button type="button" class="arrow" id="pg-prev" aria-label="previous week" disabled>‹</button>
+                  <button type="button" class="label" id="pg-label" aria-haspopup="dialog" title="pick a week"><span class="name">usual week</span><small>repeats every week</small></button>
+                  <button type="button" class="arrow" id="pg-next" aria-label="next week">›</button>
+                </div>
+              </div>
+              <p class="hint" id="card-hint">mark when you're usually free. this is a public record in your own repo, like your polls.</p>
+              <div class="gridwrap">
+                <div class="grid usual" id="grid"></div>
+              </div>
+              <p class="caption" id="caption"></p>
+              <div class="legend" id="legend"><span><i class="free"></i>usually free</span><span><i class="away"></i>away</span></div>
+              <div class="awaybox">
+                <h3>away</h3>
+                <ul class="away-list" id="away-list"></ul>
+                <p class="empty hidden" id="away-empty">nothing yet. page to a week, then drag hours or tap a day.</p>
+              </div>
+            </section>
+
+            <section class="card">
+              <h2 class="pixel" style="font-size:22px;line-height:33px">details</h2>
+              <div class="fields">
+                <label class="f">timezone<input type="text" value="America/New_York"></label>
+                <label class="f">good through<input type="date"></label>
+                <label class="f full">note for friends<input type="text" value="i have some flexibility during the work week, as well."></label>
+              </div>
+              <p class="hint">this record is public, like your polls. anyone with your handle can read it.</p>
+            </section>
+
+            <div class="links">
+              <span>friends can see this at <a href="#">ken.sez.letsmeet.lol</a> · <a href="#">subscribe (webcal)</a></span>
+              <button type="button" class="btn" id="copy-editor">copy link</button>
+            </div>
+          </main>
+
+          <!-- ================= friend view ================= -->
+          <main id="page-friend" class="hidden">
+            <div class="fv-head">
+              <div>
+                <h1 class="pixel">ken.wzrdz.cool</h1>
+                <p class="sub">times in America/New_York</p>
+              </div>
+              <a class="btn primary" href="#">edit</a>
+            </div>
+            <section class="card weekcard">
+              <div class="row">
+                <h2 id="fv-title">sep 14 – 20</h2>
+                <div class="week-nav" id="fv-nav"></div>
+              </div>
+              <div id="fv-body">
+                <div class="week" id="fv-week" role="group" aria-label="this week"></div>
+                <div class="legend" style="margin-top:14px"><span><i class="free"></i>free</span><span><i class="away"></i>away</span></div>
+                <p class="caption" style="margin-top:14px">click a free hour to ping on bluesky.</p>
+              </div>
+              <div id="fv-far" class="hidden" style="display:grid;gap:10px">
+                <p class="caption">a usual week only says so much that far ahead.</p>
+                <div><a class="btn primary" href="#">make a poll with ken.wzrdz.cool</a></div>
+                <p class="caption">pick some dates, they mark what works.</p>
+              </div>
+              <p class="caption" id="fv-sentence"></p>
+              <p class="caption">i have some flexibility during the work week, as well.</p>
+              <p class="caption" id="fv-later"></p>
+              <div class="links">
+                <span><a href="#">download .ics</a> · <a href="#">subscribe (webcal)</a></span>
+                <button type="button" class="btn" id="copy-friend">copy link</button>
+              </div>
+            </section>
+          </main>
+
+          <div class="status" id="status"><span class="dot"></span><span id="status-text">posted.</span></div>
+          <div class="footer">made on atproto by <span class="lol">></span> ken &nbsp; <span class="lol">></span> source</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="notes">
+    <div>
+      <h2>what's in the mock</h2>
+      <ol>
+        <li><b>One pager.</b> The usual week is page zero; › pages into this week, next week and on. The label is always two lines, so nothing jumps. Tap it for a week picker: a small calendar whose rows are the weeks, with orange dots on away days. A dated page turns the label and the sticky header's rule orange, nothing filled.</li>
+        <li><b>The deal.</b> On a lens change the columns re-deal left to right, and the date numbers drop into the header. Off under reduced motion.</li>
+        <li><b>Ink follows the lens.</b> <span class="key free"></span>free in the usual week, <span class="key away"></span>away in a dated week, solid orange by default (the hatch toggle above is there to compare; stripes are the one non-color cue for red-green colorblind readers). Drag a rectangle; it becomes one away entry, Mon to Wed between 9 and 5 style.</li>
+        <li><b>Tap a day header</b> in a dated week for all-day away. An all-day column is locked: any tap clears the whole day. A note lives inside its own orange zone, down a single day or across a span, clipped to the zone; headers stay number and weekday. Zones under three hours carry no label. Anything before 7am or after 11pm has no cell, which is the one thing the form could say and the grid can't; I'd accept that.</li>
+        <li><b>Notes on the grid.</b> Marking away drops a chip under the cells: the range and a note field. Enter or "add" saves; Escape or the next mark dismisses. The away list under the grid is the record: click an entry to jump to its week, edit its note, remove. The date form is gone.</li>
+        <li><b>Autosave.</b> Two seconds after you stop, the status line at the bottom posts. No post button.</li>
+        <li><b>Friend view</b> tab: the same orange away, an <span class="pixel" style="font-size:11px">> edit</span> button on your own page, copy link right-aligned.</li>
+        <li><b>Proposed change surfaced by the mock:</b> the usual week runs Monday to Sunday like the friend view, so the columns keep their identity across lenses.</li>
+      </ol>
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+  // ----- fixture: today is thu 2026-09-17; weeks are monday-first -----
+  const TODAY = '2026-09-17';
+  const HOURS = Array.from({ length: 17 }, (_, i) => i + 7);       // 7am … 11pm
+  const DOW = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const MON = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  const THIS_MONDAY = '2026-09-14';
+
+  // usual week: set of "d-h" with d 0=mon … 6=sun (hour resolution for the mock)
+  const weekly = new Set();
+  const mark = (d, from, to) => { for (let h = from; h < to; h++) weekly.add(`${d}-${h}`); };
+  mark(0, 17, 23); mark(1, 17, 19); mark(2, 17, 19); mark(3, 17, 21); mark(4, 15, 17); mark(4, 20, 23); mark(5, 11, 23); mark(6, 11, 23);
+
+  // away: per-date map: 'all' | Set(hours). Compacted into ranges for the list.
+  const away = new Map();
+  const notes = new Map();  // date -> note (carried on compaction)
+  const setRange = (s, e, v, note) => { for (const d of dates(s, e)) { away.set(d, v === 'all' ? 'all' : new Set(v)); if (note) notes.set(d, note); } };
+
+  // ----- date helpers (UTC-noon arithmetic, no zones in the mock) -----
+  const toD = (s) => new Date(s + 'T12:00:00Z');
+  const fmtISO = (d) => d.toISOString().slice(0, 10);
+  const addDays = (s, n) => { const d = toD(s); d.setUTCDate(d.getUTCDate() + n); return fmtISO(d); };
+  function* dates(s, e) { for (let d = s; d <= e; d = addDays(d, 1)) yield d; }
+  const mondayOf = (s) => { const d = toD(s); const off = (d.getUTCDay() + 6) % 7; return addDays(s, -off); };
+  const weekOffsetOf = (s) => Math.round((toD(mondayOf(s)) - toD(THIS_MONDAY)) / 864e5 / 7);
+  const md = (s) => { const d = toD(s); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}`; };
+  const dayNum = (s) => toD(s).getUTCDate();
+  const rangeLabel = (a, b) => { const A = toD(a), B = toD(b); return A.getUTCMonth() === B.getUTCMonth() ? `${MON[A.getUTCMonth()]} ${A.getUTCDate()} – ${B.getUTCDate()}` : `${md(a)} – ${md(b)}`; };
+  const hourLabel = (h) => h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
+  const hourWord = (h) => h === 12 ? 'noon' : h === 0 ? 'midnight' : h < 12 ? `${h}am` : `${h - 12}pm`;
+
+  // fixture away entries (after the helpers they use)
+  setRange('2026-09-19', '2026-09-19', [11, 12, 13, 14]);
+  setRange('2026-09-23', '2026-09-24', 'all', 'conference');
+  setRange('2026-10-03', '2026-10-05', 'all', 'wedding');
+
+  // ----- state -----
+  let lens = 'usual';          // 'usual' | integer week offset
+  let page = 'editor';
+
+  const grid = document.getElementById('grid');
+  const caption = document.getElementById('caption');
+  const pager = document.getElementById('pager');
+  const pgLabel = document.getElementById('pg-label');
+  const cardHint = document.getElementById('card-hint');
+  const status = document.getElementById('status');
+  const statusText = document.getElementById('status-text');
+  const legend = document.getElementById('legend');
+
+  const weekDates = (off) => Array.from({ length: 7 }, (_, i) => addDays(THIS_MONDAY, off * 7 + i));
+  const isAway = (date, h) => { const v = away.get(date); return v === 'all' || (v instanceof Set && v.has(h)); };
+  const isFree = (dow, h) => weekly.has(`${dow}-${h}`);
+
+  function cellClass(c, h) {
+    if (lens === 'usual') return isFree(c, h) ? 'cell free' : 'cell';
+    const date = weekDates(lens)[c];
+    let cls = 'cell';
+    if (isFree(c, h)) cls += ' free';
+    if (isAway(date, h)) cls += ' away';
+    return cls;
+  }
+
+  function buildGrid() {
+    grid.className = 'grid ' + (lens === 'usual' ? 'usual' : 'dated');
+    grid.innerHTML = '';
+    const axis = document.createElement('div');
+    axis.className = 'col axis';
+    axis.innerHTML = '<div class="col-head"></div><div class="cells">' + HOURS.map(h => `<div class="axis-label">${hourLabel(h)}</div>`).join('') + '</div>';
+    grid.appendChild(axis);
+    const wd = lens === 'usual' ? null : weekDates(lens);
+    for (let c = 0; c < 7; c++) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      col.style.setProperty('--i', c + 1);
+      col.dataset.c = c;
+      const date = wd ? wd[c] : null;
+      if (date && date < TODAY) col.classList.add('past');
+      col.innerHTML = `<div class="col-head${date === TODAY ? ' today' : ''}" data-c="${c}"><span class="num">${date ? dayNum(date) : ''}</span><span class="dow">${DOW[c]}</span></div><div class="cells">` +
+        HOURS.map(h => `<div class="${cellClass(c, h)}" data-c="${c}" data-h="${h}"></div>`).join('') + '</div>';
+      grid.appendChild(col);
+    }
+    paintChrome();
+    placeLabels(grid, editorCell, 3);
+  }
+
+  function refreshCells() {
+    grid.querySelectorAll('.cell').forEach(el => { el.className = cellClass(+el.dataset.c, +el.dataset.h); });
+    paintChrome();
+    placeLabels(grid, editorCell, 3);
+  }
+
+  // ----- zone labels -----
+  const editorCell = (c, h) => grid.querySelector(`.col[data-c="${c}"] .cell[data-h="${h}"]`);
+  function zones(wd) {
+    const out = [];
+    for (const e of entries()) {
+      if (!e.note || e.end < wd[0] || e.start > wd[6]) continue;
+      const c0 = wd.findIndex(d => d >= e.start), c1 = 6 - [...wd].reverse().findIndex(d => d <= e.end);
+      const wins = e.windows || [[HOURS[0], HOURS[HOURS.length - 1] + 1]];
+      for (const [a, b] of wins) { const h0 = Math.max(a, HOURS[0]), h1 = Math.min(b - 1, HOURS[HOURS.length - 1]); if (h1 >= h0) out.push({ c0, c1, h0, h1, note: e.note, past: wd[c1] < TODAY }); }
+    }
+    return out;
+  }
+  function placeLabels(container, findCell, minRows, off) {
+    container.querySelectorAll('.zlabel').forEach(el => el.remove());
+    const o = off === undefined ? lens : off;
+    if (o === 'usual') return;
+    const wd = weekDates(o), R = container.getBoundingClientRect();
+    for (const z of zones(wd)) {
+      if (z.h1 - z.h0 + 1 < minRows) continue;
+      const a = findCell(z.c0, z.h0), b = findCell(z.c1, z.h1); if (!a || !b) continue;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      const el = document.createElement('div');
+      el.className = 'zlabel ' + (z.c1 > z.c0 ? 'h' : 'v') + (z.past ? ' past' : '');
+      el.textContent = z.note;
+      el.style.left = `${ra.left - R.left + container.scrollLeft}px`; el.style.top = `${ra.top - R.top + container.scrollTop}px`;
+      el.style.width = `${rb.right - ra.left}px`; el.style.height = `${rb.bottom - ra.top}px`;
+      container.appendChild(el);
+    }
+  }
+  window.addEventListener('resize', () => { placeLabels(grid, editorCell, 3); renderFriend(); });
+
+  function paintChrome() {
+    pager.classList.toggle('dated', lens !== 'usual');
+    document.getElementById('pg-prev').disabled = lens === 'usual';
+    const name = pgLabel.querySelector('.name'), sub = pgLabel.querySelector('small');
+    if (lens === 'usual') {
+      name.textContent = 'usual week'; sub.textContent = 'repeats every week';
+      cardHint.textContent = "mark when you're usually free. this is a public record in your own repo, like your polls.";
+      caption.innerHTML = describeWeekly();
+      legend.classList.add('hidden');
+    } else {
+      const wd = weekDates(lens);
+      name.textContent = lens === 0 ? 'this week' : lens === 1 ? 'next week' : `in ${lens} weeks`;
+      sub.textContent = rangeLabel(wd[0], wd[6]);
+      cardHint.textContent = 'free hours come from your usual week. drag hours to mark away. tap a day for all day.';
+      caption.innerHTML = 'what friends see this week. <b>marks here are away</b>, and stick to the date.';
+      legend.classList.remove('hidden');
+    }
+    renderAwayList();
+    document.getElementById('sentence').innerHTML = describeWeekly();
+    if (pick) buildPick();
+    renderFriend();
+  }
+
+  // ----- the deal -----
+  function switchLens(next) {
+    if (next === lens) return;
+    dismissChip();
+    const wasUsual = lens === 'usual';
+    lens = next;
+    const nowUsual = lens === 'usual';
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || (wasUsual === nowUsual && !wasUsual && false)) { buildGrid(); return; }
+    grid.className = 'grid ' + (nowUsual ? 'usual' : 'dated');
+    const wd = nowUsual ? null : weekDates(lens);
+    grid.querySelectorAll('.zlabel').forEach(el => el.remove());
+    setTimeout(() => placeLabels(grid, editorCell, 3), 7 * 25 + 140 + 120);
+    grid.querySelectorAll('.col[data-c]').forEach(col => {
+      const c = +col.dataset.c, date = wd ? wd[c] : null;
+      col.classList.remove('deal'); void col.offsetWidth; col.classList.add('deal');
+      const head = col.querySelector('.col-head');
+      head.classList.toggle('today', date === TODAY);
+      head.querySelector('.num').textContent = date ? dayNum(date) : head.querySelector('.num').textContent;
+      setTimeout(() => {
+        col.classList.toggle('past', !!date && date < TODAY);
+        col.querySelectorAll('.cell').forEach(el => { el.className = cellClass(c, +el.dataset.h); });
+      }, (c + 1) * 25 + 140);
+      col.addEventListener('animationend', () => col.classList.remove('deal'), { once: true });
+    });
+    paintChrome();
+  }
+
+  // ----- painting -----
+  let drag = null;   // { c0, h0, op, base }
+  const cellAt = (x, y) => document.elementFromPoint(x, y)?.closest('.cell[data-c]');
+  const editable = (c) => lens === 'usual' || weekDates(lens)[c] >= TODAY;
+
+  // ----- the note chip -----
+  const wrap = document.querySelector('.gridwrap');
+  function dismissChip() { document.querySelector('.note-chip')?.remove(); }
+  function offerNote(date, anchorEl, focus) {
+    dismissChip();
+    const en = entries().find(e => e.start <= date && date <= e.end);
+    if (!en) return;
+    const when = (en.start === en.end ? md(en.start) : rangeLabel(en.start, en.end)) + (en.windows ? ' ' + en.windows.map(([a, b]) => `${hourWord(a)}–${hourWord(b)}`).join(', ') : ' all day');
+    const chip = document.createElement('div');
+    chip.className = 'note-chip';
+    chip.innerHTML = `<span class="when">away ${when}</span><input type="text" placeholder="add a note" maxlength="80" aria-label="note"><button type="button" class="ok">add</button>`;
+    const inp = chip.querySelector('input'); inp.value = en.note;
+    const save = () => { const v = inp.value.trim(); for (const d of dates(en.start, en.end)) v ? notes.set(d, v) : notes.delete(d); dismissChip(); refreshCells(); touched(); };
+    chip.querySelector('.ok').addEventListener('click', save);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') dismissChip(); });
+    wrap.appendChild(chip);
+    const r = anchorEl.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+    chip.style.top = `${r.bottom - w.top + 6}px`;
+    chip.style.left = `${Math.max(4, Math.min(r.left - w.left, w.width - chip.offsetWidth - 4))}px`;
+    if (focus) inp.focus();
+  }
+
+  function applyRect(c1, h1) {
+    const { c0, h0, op, base } = drag;
+    const [ca, cb] = [Math.min(c0, c1), Math.max(c0, c1)];
+    const [ha, hb] = [Math.min(h0, h1), Math.max(h0, h1)];
+    if (lens === 'usual') {
+      weekly.clear(); base.forEach(k => weekly.add(k));
+      for (let c = ca; c <= cb; c++) for (let h = ha; h <= hb; h++) { const k = `${c}-${h}`; op ? weekly.add(k) : weekly.delete(k); }
+    } else {
+      away.clear(); base.forEach((v, k) => away.set(k, v === 'all' ? 'all' : new Set(v)));
+      const wd = weekDates(lens);
+      for (let c = ca; c <= cb; c++) {
+        const date = wd[c];
+        if (date < TODAY) continue;
+        let v = away.get(date);
+        if (v === 'all') continue;                 // locked; header or tap clears it
+        if (!(v instanceof Set)) { v = new Set(); }
+        for (let h = ha; h <= hb; h++) op ? v.add(h) : v.delete(h);
+        if (v.size) away.set(date, v); else away.delete(date);
+      }
+    }
+    refreshCells();
+  }
+
+  grid.addEventListener('pointerdown', (e) => {
+    const cell = e.target.closest('.cell[data-c]');
+    if (!cell) return;
+    const c = +cell.dataset.c, h = +cell.dataset.h;
+    if (!editable(c)) return;
+    e.preventDefault();
+    if (lens !== 'usual') {
+      const date = weekDates(lens)[c];
+      if (away.get(date) === 'all') { away.delete(date); refreshCells(); touched(); return; }
+    }
+    dismissChip();
+    const op = lens === 'usual' ? !isFree(c, h) : !isAway(weekDates(lens)[c], h);
+    const base = lens === 'usual' ? new Set(weekly) : new Map([...away].map(([k, v]) => [k, v === 'all' ? 'all' : new Set(v)]));
+    drag = { c0: c, h0: h, op, base, mouse: e.pointerType !== 'touch', last: cell };
+    applyRect(c, h);
+    setBusy('marking…');
+  });
+  window.addEventListener('pointermove', (e) => { if (!drag) return; const cell = cellAt(e.clientX, e.clientY); if (cell) { drag.last = cell; applyRect(+cell.dataset.c, +cell.dataset.h); } });
+  window.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const d = drag; drag = null; touched();
+    if (lens !== 'usual' && d.op) {
+      const c = +d.last.dataset.c, date = weekDates(lens)[c];
+      const bottom = d.last.closest('.col').querySelector(`.cell[data-h="${Math.max(d.h0, +d.last.dataset.h)}"]`) || d.last;
+      offerNote(date, bottom, d.mouse);
+    }
+  });
+  window.addEventListener('pointercancel', () => { if (!drag) return; drag = null; touched(); });
+  grid.addEventListener('touchmove', (e) => { if (drag) e.preventDefault(); }, { passive: false });
+
+  grid.addEventListener('click', (e) => {
+    const head = e.target.closest('.col-head[data-c]');
+    if (!head || lens === 'usual') return;
+    const date = weekDates(lens)[+head.dataset.c];
+    if (date < TODAY) return;
+    dismissChip();
+    if (away.has(date)) { away.delete(date); notes.delete(date); refreshCells(); touched(); return; }
+    away.set(date, 'all'); refreshCells(); touched();
+    offerNote(date, head, e.pointerType !== 'touch' && !matchMedia('(pointer: coarse)').matches);
+  });
+
+  // ----- autosave -----
+  let timer = null;
+  function setBusy(text) { status.classList.add('busy'); statusText.textContent = text; }
+  function touched() {
+    setBusy('not posted yet · posting in 2s');
+    clearTimeout(timer);
+    timer = setTimeout(() => { setBusy('posting…'); timer = setTimeout(() => { status.classList.remove('busy'); statusText.textContent = 'posted just now.'; }, 600); }, 2000);
+  }
+
+  // ----- away list, compacted from the per-date map -----
+  function entries() {
+    const ds = [...away.keys()].sort();
+    const out = [];
+    const sig = (d) => { const v = away.get(d); return v === 'all' ? 'all' : [...v].sort((a, b) => a - b).join(','); };
+    let i = 0;
+    while (i < ds.length) {
+      let j = i;
+      while (j + 1 < ds.length && ds[j + 1] === addDays(ds[j], 1) && sig(ds[j + 1]) === sig(ds[i]) && (notes.get(ds[j + 1]) || '') === (notes.get(ds[i]) || '')) j++;
+      const v = away.get(ds[i]);
+      const windows = v === 'all' ? null : runs([...v].sort((a, b) => a - b));
+      out.push({ start: ds[i], end: ds[j], windows, note: notes.get(ds[i]) || '' });
+      i = j + 1;
+    }
+    return out;
+  }
+  function runs(hs) { const r = []; for (const h of hs) { const last = r[r.length - 1]; if (last && last[1] === h) last[1] = h + 1; else r.push([h, h + 1]); } return r; }
+
+  function renderAwayList() {
+    const ul = document.getElementById('away-list');
+    const es = entries().filter(e => e.end >= TODAY);
+    document.getElementById('away-empty').classList.toggle('hidden', es.length > 0);
+    ul.innerHTML = es.map((e, i) => {
+      const when = e.start === e.end ? md(e.start) : rangeLabel(e.start, e.end);
+      const win = e.windows ? ' ' + e.windows.map(([a, b]) => `${hourWord(a)}–${hourWord(b)}`).join(', ') : '';
+      const note = e.note ? `<button type="button" class="note" data-note="${i}" title="edit note">· ${e.note}</button>` : `<button type="button" class="note add" data-note="${i}">+ note</button>`;
+      return `<li><a data-jump="${e.start}"><span class="when">${when}</span>${win}</a>${note}<button type="button" class="x" data-remove="${i}" aria-label="remove">remove</button></li>`;
+    }).join('');
+  }
+  document.getElementById('away-list').addEventListener('click', (e) => {
+    const j = e.target.closest('[data-jump]');
+    if (j) { switchLens(weekOffsetOf(j.dataset.jump)); grid.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
+    const n = e.target.closest('[data-note]');
+    if (n) {
+      const en = entries().filter(x => x.end >= TODAY)[+n.dataset.note];
+      const inp = document.createElement('input'); inp.className = 'note-edit'; inp.value = en.note; inp.placeholder = 'wedding'; inp.maxLength = 80;
+      n.replaceWith(inp); inp.focus(); inp.select();
+      const done = () => { const v = inp.value.trim(); for (const d of dates(en.start, en.end)) v ? notes.set(d, v) : notes.delete(d); refreshCells(); touched(); };
+      inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') inp.blur(); if (ev.key === 'Escape') { inp.value = en.note; inp.blur(); } });
+      inp.addEventListener('blur', done, { once: true });
+      return;
+    }
+    const r = e.target.closest('[data-remove]');
+    if (r) { const en = entries().filter(x => x.end >= TODAY)[+r.dataset.remove]; for (const d of dates(en.start, en.end)) { away.delete(d); notes.delete(d); } refreshCells(); touched(); }
+  });
+  // ----- week picker -----
+  let pick = null, pickMonth = null;   // pickMonth: 'YYYY-MM-01'
+  const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const firstOfMonth = (d) => d.slice(0, 8) + '01';
+  const addMonths = (d, n) => { const x = toD(d); x.setUTCDate(1); x.setUTCMonth(x.getUTCMonth() + n); return fmtISO(x); };
+  function openPick() { if (pick) return closePick(); pick = document.createElement('div'); pick.className = 'weekpick'; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-label', 'pick a week'); pickMonth = firstOfMonth(lens === 'usual' ? TODAY : weekDates(lens)[0]); pager.parentElement.appendChild(pick); buildPick(); pgLabel.setAttribute('aria-expanded', 'true'); }
+  function closePick() { pick?.remove(); pick = null; pgLabel.setAttribute('aria-expanded', 'false'); }
+  function buildPick() {
+    const m = toD(pickMonth), y = m.getUTCFullYear(), mo = m.getUTCMonth();
+    let html = `<button type="button" class="usual${lens === 'usual' ? ' current' : ''}" data-pick="usual">> usual week</button>`;
+    html += `<div class="mh"><button type="button" data-month="-1" aria-label="previous month">‹</button><span>${MONTHS[mo]} ${y}</span><button type="button" data-month="1" aria-label="next month">›</button></div>`;
+    html += '<div class="dows">' + DOW.map(d => `<span>${d[0]}${d[1]}</span>`).join('') + '</div>';
+    const last = addDays(addMonths(pickMonth, 1), -1);
+    for (let mon = mondayOf(pickMonth); mon <= last; mon = addDays(mon, 7)) {
+      const off = weekOffsetOf(mon);
+      html += `<button type="button" class="wk${off === lens ? ' current' : ''}" data-pick="${off}"${off < 0 ? ' disabled' : ''} aria-label="week of ${md(mon)}">` +
+        weekDates(off).map(d => `<span class="${toD(d).getUTCMonth() !== mo ? 'out ' : ''}${d === TODAY ? 'today ' : ''}${away.has(d) ? 'away' : ''}">${dayNum(d)}</span>`).join('') + '</button>';
+    }
+    html += '<div class="foot">a row is a week. dots are away days.</div>';
+    pick.innerHTML = html;
+  }
+  pgLabel.addEventListener('click', openPick);
+  document.addEventListener('click', (e) => {
+    if (!pick) return;
+    const t = e.target;
+    if (t.closest('#pg-label')) return;
+    if (!t.closest('.weekpick')) return closePick();
+    const mb = t.closest('[data-month]'); if (mb) { pickMonth = addMonths(pickMonth, +mb.dataset.month); buildPick(); return; }
+    const pb = t.closest('[data-pick]'); if (pb && !pb.disabled) { closePick(); switchLens(pb.dataset.pick === 'usual' ? 'usual' : +pb.dataset.pick); }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePick(); });
+  document.getElementById('pg-prev').addEventListener('click', () => switchLens(lens === 'usual' ? 'usual' : lens === 0 ? 'usual' : lens - 1));
+  document.getElementById('pg-next').addEventListener('click', () => switchLens(lens === 'usual' ? 0 : lens + 1));
+
+  // ----- sentence -----
+  function describeWeekly() {
+    const byDay = DOW.map((_, d) => runs(HOURS.filter(h => isFree(d, h))).map(([a, b]) => `${hourWord(a)} to ${hourWord(b)}`).join(' and '));
+    if (byDay.every(s => !s)) return 'nothing marked yet.';
+    const groups = [];
+    byDay.forEach((s, d) => { if (!s) return; const g = groups.find(g => g.s === s); g ? g.days.push(d) : groups.push({ s, days: [d] }); });
+    const name = (days) => { const k = days.join(''); if (k === '01234') return 'weekdays'; if (k === '56') return 'weekends'; return days.map(d => DOW[d] === 'mon' ? 'mondays' : DOW[d] + (DOW[d].endsWith('s') ? '' : 'day') + 's').join(' and ').replace(/tueday/g, 'tuesday').replace(/wedday/g, 'wednesday').replace(/thuday/g, 'thursday').replace(/friday/g, 'friday').replace(/satday/g, 'saturday').replace(/sunday/g, 'sunday'); };
+    return 'usually free ' + groups.map(g => `${name(g.days)} ${g.s}`).join(', ') + '. · updated today';
+  }
+
+  // ----- friend view -----
+  let fvOff = 0;   // 0 this week, 1 next week, 2 further out
+  function renderFriend() {
+    const nav = document.getElementById('fv-nav');
+    const far = fvOff === 2;
+    document.getElementById('fv-body').classList.toggle('hidden', far);
+    document.getElementById('fv-far').classList.toggle('hidden', !far);
+    nav.innerHTML = fvOff === 0 ? '<span>← this week</span><a href="#" data-fv="1">next week →</a>'
+      : fvOff === 1 ? '<a href="#" data-fv="0">← this week</a><a href="#" data-fv="2">further out →</a>'
+      : '<a href="#" data-fv="1">← next week</a>';
+    if (far) { document.getElementById('fv-title').textContent = 'further out'; return; }
+    const wd = weekDates(fvOff);
+    document.getElementById('fv-title').textContent = rangeLabel(wd[0], wd[6]);
+    const w = document.getElementById('fv-week');
+    let html = '<div class="week-corner"></div>' + wd.map((d, c) => `<div class="week-head${d < TODAY ? ' past' : ''}${d === TODAY ? ' today' : ''}"><b>${dayNum(d)}</b>${DOW[c]}</div>`).join('');
+    for (const h of HOURS) {
+      html += `<div class="week-axis">${hourLabel(h)}</div>` + wd.map((d, c) => `<div class="week-cell${isAway(d, h) ? ' away' : isFree(c, h) ? ' free' : ''}${d < TODAY ? ' past' : ''}" data-c="${c}" data-h="${h}"></div>`).join('');
+    }
+    w.innerHTML = html;
+    if (!w.closest('main').classList.contains('hidden')) placeLabels(w, (c, h) => w.querySelector(`.week-cell[data-c="${c}"][data-h="${h}"]`), 4, fvOff);
+    document.getElementById('fv-sentence').innerHTML = describeWeekly();
+    const later = entries().filter(e => e.start > weekDates(1)[6]).map(e => (e.start === e.end ? md(e.start) : rangeLabel(e.start, e.end)) + (e.note ? ' · ' + e.note : ''));
+    document.getElementById('fv-later').textContent = later.length ? 'away later: ' + later.join(', ') : '';
+  }
+  document.getElementById('fv-nav').addEventListener('click', (e) => { const a = e.target.closest('[data-fv]'); if (!a) return; e.preventDefault(); fvOff = +a.dataset.fv; renderFriend(); });
+
+  // ----- studio controls -----
+  document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {
+    page = b.dataset.page;
+    document.querySelectorAll('[data-page]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    document.getElementById('page-editor').classList.toggle('hidden', page !== 'editor');
+    document.getElementById('page-friend').classList.toggle('hidden', page !== 'friend');
+    status.classList.toggle('hidden', page !== 'editor');
+    document.getElementById('frame').scrollTop = 0;
+    setTimeout(() => { placeLabels(grid, editorCell, 3); renderFriend(); }, 30);
+  }));
+  document.querySelectorAll('[data-width]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-width]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    document.getElementById('frame').classList.toggle('wide', b.dataset.width === 'desktop');
+    setTimeout(() => { placeLabels(grid, editorCell, 3); renderFriend(); }, 260);
+  }));
+  document.body.classList.add('solid');
+  document.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-fill]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    document.body.classList.toggle('solid', b.dataset.fill === 'solid');
+  }));
+  ['copy-editor', 'copy-friend'].forEach(id => document.getElementById(id).addEventListener('click', (e) => { e.target.textContent = 'copied.'; setTimeout(() => e.target.textContent = 'copy link', 1500); }));
+
+  buildGrid();
+})();
+</script>

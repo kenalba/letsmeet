@@ -5,7 +5,7 @@ import { buttonVariants } from '../ui/button.js';
 import { useNonce } from '../nonce.js';
 import { scriptJson } from '../scriptJson.js';
 import { COPY_LINK_SCRIPT } from './copyLink.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.js';
+import { Card, CardContent } from '../ui/card.js';
 import { Layout, pageTitle } from './Layout.js';
 
 /**
@@ -75,13 +75,10 @@ export function AvailabilityPage(data: AvailabilityPageData) {
             {`your address ${data.sez.lost}.${data.sez.suffix} is someone else's now. pick another below and save.`}
           </p>
         )}
-        <Card>
-          <CardHeader>
-            <CardTitle>usual week</CardTitle>
-            <CardDescription>
-              mark when you're generally free. this is a public record in your own repo, like your polls.
-            </CardDescription>
-          </CardHeader>
+        {/* The island owns this card: the pager at the top says which page the grid is on,
+            and the hint under it changes with the page. `bleed` lets it reach the screen
+            edges at phone width (app.css). */}
+        <Card className="bleed">
           <CardContent>
             <script
               id="availability-data"
@@ -93,23 +90,31 @@ export function AvailabilityPage(data: AvailabilityPageData) {
           </CardContent>
         </Card>
         {publicPath && (
-          <p className="hint feed-links text-sm text-muted-foreground">
-            friends can see this at{' '}
-            <a href={publicPath} className="text-primary underline underline-offset-4">
-              {base.replace(/^https?:\/\//, '')}{publicPath}
-            </a>
-            {' '}·{' '}
-            <a href={webcal!} className="text-primary underline underline-offset-4">
-              subscribe in your calendar (webcal)
-            </a>
-            {' '}·{' '}
-            <button
-              type="button"
-              data-copy-url={`${base}${publicPath}/availability.ics`}
-              hidden
-              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-            >copy feed link</button>
-          </p>
+          <div className="grid gap-2">
+            <p className="hint text-sm text-muted-foreground">
+              friends can see this at{' '}
+              <a href={publicPath} className="text-primary underline underline-offset-4">
+                {base.replace(/^https?:\/\//, '')}{publicPath}
+              </a>
+            </p>
+            <div className="feed-actions">
+              <a
+                href={`${base}${publicPath}/availability.ics`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >download .ics</a>
+              <a
+                href={webcal!}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+                title="subscribe in your calendar (webcal)"
+              >subscribe</a>
+              <button
+                type="button"
+                data-copy-url={`${base}${publicPath}/availability.ics`}
+                hidden
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >copy link</button>
+            </div>
+          </div>
         )}
         <script nonce={useNonce()} dangerouslySetInnerHTML={{ __html: COPY_LINK_SCRIPT }} />
       </div>

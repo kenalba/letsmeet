@@ -2,7 +2,8 @@ import type { Context } from 'hono';
 import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
 import type { Database } from '../db/db.js';
 import {
-  createWebSession, deleteWebSession, getWebSession, SESSION_TTL_MS, type WebSession,
+  createWebSession, deleteWebSession, getWebSession, markCookieIssued, SESSION_TTL_MS,
+  type WebSession,
 } from '../db/webSessions.js';
 
 export interface SessionEnv {
@@ -51,30 +52,68 @@ export async function getNamedCookie(c: Context, secret: string, name: string): 
   return sep > 0 && raw.slice(0, sep) === name ? raw.slice(sep + 1) : null;
 }
 
+/** The attributes every session cookie carries, whichever shape it is. */
+const cookieOpts = (env: SessionEnv) => ({
+  httpOnly: true, sameSite: 'Lax' as const, path: '/', secure: env.secure,
+  maxAge: Math.floor(SESSION_TTL_MS / 1000),
+});
+
 /** Mint a session row for `did` and hand the browser its id. */
 export async function startSession(
   c: Context, env: SessionEnv, did: string, handle: string | null, nowMs: number,
 ): Promise<void> {
   const sid = createWebSession(env.db, did, handle, nowMs);
-  const opts = {
-    httpOnly: true, sameSite: 'Lax' as const, path: '/', secure: env.secure,
-    maxAge: Math.floor(SESSION_TTL_MS / 1000),
-  };
   if (env.domain) {
     // A cookie set before the Domain attribute existed is host-only, and a browser holding
     // one would send both on the apex. Clear it in the same response; the browser matches
     // the clear to the host-only cookie and the set to the domain one.
     deleteCookie(c, COOKIE, { path: '/' });
-    await setNamedCookie(c, env.cookieSecret, COOKIE, sid, { ...opts, domain: env.domain });
+    await setNamedCookie(c, env.cookieSecret, COOKIE, sid, { ...cookieOpts(env), domain: env.domain });
   } else {
-    await setNamedCookie(c, env.cookieSecret, COOKIE, sid, opts);
+    await setNamedCookie(c, env.cookieSecret, COOKIE, sid, cookieOpts(env));
   }
 }
 
-/** The live session behind the request's cookie, or null — expired and revoked both read as null. */
+/**
+ * The request is on the apex itself, whatever case, trailing dot or port the Host carries.
+ * The counterpart of `isAliasHost` (`src/web/routes/availability.ts`): between them they
+ * name the two kinds of host this app is ever served on.
+ */
+export function isApexHost(host: string | undefined, domain: string): boolean {
+  return (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '') === domain;
+}
+
+/**
+ * A session minted before the domain cookie (2026-09-17) is host-only: it never reaches
+ * `<name>.sez.<site>`, so its owner sees no edit button on their own alias page and nothing
+ * tells them why. Re-issue it with `Domain` the next time they are on the apex and mark the
+ * row, so nobody has to sign in again. Only on the apex — a Set-Cookie from the alias host
+ * would be scoped to that host, and the alias serves nothing a session acts on. A failed
+ * write is logged and dropped: the next request tries again.
+ */
+async function reissueCookie(c: Context, env: SessionEnv, sid: string): Promise<void> {
+  if (!env.domain || !isApexHost(c.req.header('host'), env.domain)) return;
+  deleteCookie(c, COOKIE, { path: '/' });
+  await setNamedCookie(c, env.cookieSecret, COOKIE, sid, { ...cookieOpts(env), domain: env.domain });
+  try {
+    markCookieIssued(env.db, sid);
+  } catch (err) {
+    console.warn('session cookie re-issue not recorded:', err);
+  }
+}
+
+/**
+ * The live session behind the request's cookie, or null — expired and revoked both read as
+ * null. Not a pure read: on the apex, a session minted before the domain cookie is migrated
+ * here, once, which adds a `Set-Cookie` pair to the response and writes one row. Callers
+ * that cache or short-circuit around this need to know it has that side effect.
+ */
 export async function readSession(c: Context, env: SessionEnv, nowMs: number): Promise<WebSession | null> {
   const sid = await getNamedCookie(c, env.cookieSecret, COOKIE);
-  return sid ? getWebSession(env.db, sid, nowMs) : null;
+  if (!sid) return null;
+  const who = getWebSession(env.db, sid, nowMs);
+  if (who && who.cookieV === 0) await reissueCookie(c, env, sid);
+  return who;
 }
 
 /** Revoke the row (a copied cookie is now dead too) and clear the cookie. */

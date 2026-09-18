@@ -102,6 +102,13 @@
   --lol: #c4610a;
   --lol-bright: #ffa133;
 
+  /* Away is orange everywhere — the block on both grids, and the chrome that says a page is
+     dated. --away-ink is the away colour as *text* on the page (the light fill is too pale
+     against white for 11px type); --away-label is text drawn on a solid away block. */
+  --away: var(--lol);
+  --away-ink: #8a4306;
+  --away-label: #fff;
+
   /* "if need be" hatch: the amber family, so the two paint states read as two hues rather
      than two greens. --grid-hatch-a is the stripe, -b the gap. */
   --grid-hatch-a: #ffd39a;
@@ -148,6 +155,9 @@
        a dark --card, so dark mode gets its own values that still land between --card and
        the solid "available" green in perceived lightness (verified via a luminance probe). */
     --lol: #ffa133;
+    --away: var(--lol-bright);
+    --away-ink: var(--lol-bright);
+    --away-label: oklch(0.147 0.004 49.25);
     --grid-hatch-a: oklch(0.55 0.12 60);
     --grid-hatch-b: oklch(0.40 0.09 60);
   }
@@ -187,6 +197,9 @@
      a dark --card, so dark mode gets its own values that still land between --card and
      the solid "available" green in perceived lightness (verified via a luminance probe). */
   --lol: #ffa133;
+  --away: var(--lol-bright);
+  --away-ink: var(--lol-bright);
+  --away-label: oklch(0.147 0.004 49.25);
   --grid-hatch-a: oklch(0.55 0.12 60);
   --grid-hatch-b: oklch(0.40 0.09 60);
 }
@@ -384,15 +397,31 @@
        borders, so the first date column keeps its own left edge. */
     .col:not(.axis) + .col { margin-left: -1px; }
     /* The time axis stays put while the days scroll under it (a phone's grid is wider than
-       its screen): opaque, and above the cells, so nothing shows through. */
+       its screen): opaque, and above the cells, so nothing shows through. Above the day
+       heads too (`.col-head` below is z-index 3, and the axis column's own head is nested
+       inside this stacking context rather than beside them) — otherwise a date column
+       scrolled left would draw its header over the axis it is sliding under. */
     .col.axis {
       flex: 0 0 auto; max-width: none;
-      position: sticky; left: 0; z-index: 2; background: var(--background);
+      position: sticky; left: 0; z-index: 4; background: var(--background);
     }
+    /* The day headers stay put while the page scrolls under them, wherever the grid is not
+       its own scroll container: `overflow-x: auto` on `.grid` above makes overflow-y compute
+       to `auto` as well, and a sticky child of a scrollport that never scrolls vertically
+       never moves. The availability editor drops the horizontal scroller (it always draws
+       exactly seven columns) and gets a real sticky header; the poll grid, which can be
+       twenty dates wide, would need a separate header band scrolled in step. The background
+       is what the cells scroll under: without it they would show through the head. */
     .col-head {
+      position: sticky; top: 0; z-index: 3; background: var(--card);
       height: 34px; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-end; gap: 2px; padding-bottom: 5px;
     }
+    /* Each column's cells are one block, so the deal can animate them under a still head. */
+    .cells { display: flex; flex-direction: column; }
+    /* The axis column's head is a spacer, and the axis carries its own background: taking
+       --card there would paint a lighter patch over the darker column in dark mode. */
+    .col.axis .col-head { background: inherit; }
     .dow { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
     .dom { font-size: 11px; color: var(--muted-foreground); line-height: 1; white-space: nowrap; }
     .axis-label {
@@ -531,23 +560,14 @@
 }
 
 @layer island {
-  /* The editor's own furniture: the read-back sentence under the grid, the away list, and
-     the date/time fields that add to it. Everything else it draws is the grid's. */
+  /* The editor's own furniture: the read-back sentence under the grid, the away list that
+     is the record, and the detail fields below it. Everything else it draws is the grid's. */
   #availability-root {
     .sentence { margin: 12px 0 18px; font-size: 12px; color: var(--primary); }
     .address-line { margin: -12px 0 18px; font-size: 12px; color: var(--muted-foreground); }
     .address-field { display: inline-flex; align-items: baseline; gap: 2px; }
     .address-field input { width: 14ch; }
     .address-field .suffix { font-size: 13px; color: var(--muted-foreground); }
-    .away { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
-    .away li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-    .away .when { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .away .note { color: var(--muted-foreground); }
-    .away-form {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 8px; align-items: end; margin-bottom: 18px;
-    }
-    .away-form label, .away-form input { margin: 0; }
     /* Hour cells over a half-hour record: an hour with only one half marked is drawn half
        full (top: the :00 half, bottom: the :30 half), so a saved 5:30pm still reads as
        5:30pm until that hour is touched. */
@@ -557,19 +577,183 @@
     @media (hover: hover) {
       .cell[data-slot]:hover { outline: 2px solid var(--foreground); outline-offset: -2px; }
     }
-    .away .unposted { font-size: 12px; color: var(--muted-foreground); }
-    .away-hint { margin: 0 0 10px; }
-    /* The post button rides the bottom of the viewport while the editor is on screen. */
-    .save-bar {
-      position: sticky; bottom: 0; z-index: 1;
-      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-      margin-top: 12px; padding: 10px 0;
-      background: var(--card); border-top: 1px solid var(--border);
+    /* The status line rides the bottom of the viewport while the editor is on screen. */
+    .status {
+      position: sticky; bottom: 0; z-index: 3;
+      display: flex; align-items: center; gap: 10px;
+      margin: 12px 0 0; padding: 8px 0;
+      background: var(--background); border-top: 1px solid var(--border);
+      color: var(--muted-foreground);
     }
-    .save-bar .status { margin: 0; }
-    /* The shared `button.save { margin-top: 12px }` rule above still matches inside the
-       bar; the bar carries the margin now, so the button sits flush within it. */
-    .save-bar .save { margin-top: 0; }
+    .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex: 0 0 auto; }
+    .status.busy .dot { background: var(--lol); animation: blink 900ms steps(2, start) infinite; }
+    @media (prefers-reduced-motion: reduce) { .status.busy .dot { animation: none; } }
+    .status .retry {
+      font-family: var(--font-pixel); font-size: 11px; background: none; border: 0; padding: 0;
+      color: var(--primary-ink); text-decoration: underline; text-underline-offset: 3px;
+      -webkit-font-smoothing: none;
+    }
+
+    /* Exactly seven columns, always: they share the width rather than scrolling sideways,
+       which is also what lets the sticky day header stick to the page. `position: relative`
+       is the frame the zone labels are placed in. */
+    .grid { overflow: visible; position: relative; }
+    .col { flex: 1 1 0; min-width: 0; --i: 0; }
+    /* The chip is positioned against this, not against the scrolling grid. */
+    .gridwrap { position: relative; }
+    /* Two lines of head on every page, so paging does not move the grid: the date number
+       is empty on the usual week and keeps its row. */
+    .col-head { height: 44px; }
+    .col-head .num {
+      font-family: var(--font-pixel); font-size: 11px; line-height: 16px; height: 16px;
+      -webkit-font-smoothing: none;
+    }
+    /* A dated page says so in orange, and nothing else: no fills, no second grid. */
+    .grid.dated .col-head { border-bottom: 2px solid var(--away); cursor: pointer; }
+    .grid.dated .col-head.today .dow {
+      text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--away);
+    }
+    /* A past day dims by what the head says, not by the head: the head is sticky and opaque,
+       and opacity on it would turn its background translucent and let the cells scroll
+       through the band. */
+    .grid.dated .col.past .cell { opacity: 0.42; cursor: default; }
+    /* The head is inert on a past day too: no pointer over a tap that does nothing. */
+    .grid.dated .col.past .col-head { cursor: default; }
+    .grid.dated .col.past .col-head .dow,
+    .grid.dated .col.past .col-head .dom,
+    .grid.dated .col.past .col-head .num { opacity: 0.42; }
+    /* Away wins over free, and over the half-hour gradients above (same specificity, later
+       in the sheet): a cell that is both is simply away. */
+    .grid .cell.away, .grid.canvas .cell.away { background: var(--away); border-color: var(--away); }
+
+    /* The deal (keyframes at the top of the layer block below): the island sets `--i` per
+       column, so each one starts 25ms after the one to its left. */
+    .col.deal .cells { animation: deal 320ms ease both; animation-delay: calc(var(--i) * 25ms); }
+    .col.deal .num { animation: num-drop 220ms ease both; animation-delay: calc(var(--i) * 25ms + 120ms); }
+    @media (prefers-reduced-motion: reduce) {
+      .col.deal .cells, .col.deal .num { animation: none; }
+    }
+
+    /* One pager: `‹ usual week ›`. Two lines always, so its height never moves. */
+    .pager-wrap { position: relative; }
+    .pager { display: flex; align-items: stretch; max-width: 360px; }
+    .pager button {
+      font-family: var(--font-pixel); font-size: 16px; line-height: 22px; padding: 4px 12px;
+      border: 1px solid var(--border); background: var(--background); color: var(--foreground);
+      -webkit-font-smoothing: none;
+    }
+    .pager button:disabled { opacity: 0.3; cursor: default; }
+    .pager button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .pager .label {
+      flex: 1; min-width: 0; display: grid; padding: 4px 10px;
+      border-left: 0; border-right: 0; text-align: center; white-space: nowrap; overflow: hidden;
+      transition: color 200ms ease, border-color 200ms ease;
+    }
+    .pager .label .name { overflow: hidden; text-overflow: ellipsis; }
+    /* Back to the body face (the label itself is set in the pixel font) and muted, which
+       the dated state below overrides with the away ink. `--font-sans` is Tailwind's own
+       theme token — the stack `body` is already set in. */
+    .pager .label small {
+      font-family: var(--font-sans); font-size: 11px; line-height: 14px;
+      color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis;
+    }
+    .pager.dated .label { color: var(--away-ink); border-color: var(--away); }
+    .pager.dated .label small { color: var(--away-ink); opacity: 0.8; }
+    .pager.dated .arrow { border-color: var(--away); color: var(--away-ink); }
+    @media (prefers-reduced-motion: reduce) { .pager .label { transition: none; } }
+
+    /* The week picker: a small calendar whose rows are the choice. */
+    .weekpick {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 6;
+      width: 300px; max-width: 100%; padding: 10px; display: grid; gap: 6px;
+      background: var(--popover); color: var(--popover-foreground);
+      border: 1px solid var(--border); box-shadow: 0 10px 28px rgb(0 0 0 / 16%);
+    }
+    .weekpick .usual {
+      font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 2px 8px;
+      border: 1px solid var(--border); background: var(--background); color: var(--foreground);
+      text-align: left; -webkit-font-smoothing: none;
+    }
+    .weekpick .usual.current { border-color: var(--foreground); }
+    .weekpick .mh {
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: var(--font-pixel); font-size: 11px; line-height: 22px;
+    }
+    .weekpick .mh button {
+      font-family: var(--font-pixel); font-size: 16px; border: 0; background: none;
+      color: var(--foreground); padding: 0 8px;
+    }
+    .weekpick .dows, .weekpick .wk { display: grid; grid-template-columns: repeat(7, 1fr); }
+    .weekpick .dows span { font-size: 10px; color: var(--muted-foreground); text-align: center; }
+    .weekpick .wk {
+      border: 0; background: none; padding: 0; font: inherit; font-size: 12px;
+      font-variant-numeric: tabular-nums; color: var(--foreground); border-radius: 4px;
+    }
+    .weekpick .wk span { position: relative; text-align: center; line-height: 24px; }
+    .weekpick .wk span.out { color: var(--muted-foreground); opacity: 0.55; }
+    .weekpick .wk span.today { text-decoration: underline; text-underline-offset: 3px; }
+    .weekpick .wk span.away::after {
+      content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px;
+      margin-left: -2px; background: var(--away); border-radius: 50%;
+    }
+    .weekpick .wk:hover:not(:disabled), .weekpick .wk:focus-visible { background: var(--muted); outline: none; }
+    .weekpick .wk.current { box-shadow: inset 0 0 0 2px var(--away); }
+    .weekpick .wk:disabled { opacity: 0.3; cursor: default; }
+    .weekpick .foot { font-size: 11px; color: var(--muted-foreground); }
+
+    /* The note chip: appears under the cells just marked away. Above the cells (it comes
+       after the grid in the markup) but below the sticky day heads, which are z-index 3 in
+       this same stacking context — its `top` is frozen at the moment it is offered, so a
+       scroll slides it up the grid and it must pass under the header band, not over it. */
+    .note-chip {
+      position: absolute; z-index: 2; display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; max-width: calc(100% - 8px);
+      background: var(--card); border: 1px solid var(--away); box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
+      animation: chip-in 160ms ease both;
+    }
+    @media (prefers-reduced-motion: reduce) { .note-chip { animation: none; } }
+    .note-chip .when {
+      font-family: var(--font-pixel); font-size: 11px; line-height: 22px;
+      color: var(--away-ink); white-space: nowrap; -webkit-font-smoothing: none;
+    }
+    .note-chip input { width: 15ch; min-width: 0; margin-top: 0; padding: 3px 6px; }
+    .note-chip input:focus-visible { outline: 2px solid var(--away); outline-offset: 1px; }
+    .note-chip .ok {
+      font-family: var(--font-pixel); font-size: 11px; line-height: 22px; padding: 2px 8px;
+      border: 1px solid var(--away); background: var(--away); color: var(--away-label);
+      -webkit-font-smoothing: none;
+    }
+
+    /* The away list is the record: jump to a week, edit its note, remove it. */
+    .awaybox { display: grid; gap: 8px; margin: 14px 0 18px; }
+    .awaybox h3 {
+      font-size: 11px; line-height: 22px; margin: 0; color: var(--muted-foreground);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .away-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .away-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+    .away-list .jump {
+      background: none; border: 0; padding: 0; font: inherit; color: var(--foreground);
+      text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--away);
+    }
+    .away-list .when { font-variant-numeric: tabular-nums; }
+    .away-list .note {
+      color: var(--muted-foreground); font: inherit; font-size: 13px;
+      background: none; border: 0; padding: 0;
+    }
+    .away-list .note.add { text-decoration: underline dashed; text-underline-offset: 4px; }
+    .away-list .note:hover { color: var(--foreground); }
+    .away-list input.note-edit { width: 12ch; margin-top: 0; padding: 2px 6px; font-size: 13px; }
+    .away-list .x {
+      margin-left: auto; font-family: var(--font-pixel); font-size: 11px;
+      color: var(--muted-foreground); background: none; border: 0; -webkit-font-smoothing: none;
+    }
+    .away-list .x:hover { color: var(--foreground); }
+
+    /* Details: timezone and good-through share a row, the note takes the width. */
+    .details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .details label { margin: 0; }
+    .details .full { grid-column: 1 / -1; }
   }
 }
 
@@ -580,17 +764,29 @@
      colour is a token, so dark mode follows. */
   .week {
     display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); gap: 3px;
+    /* Row 1 is the header band and rows 2+ are the hours. The heads span every row (see
+       HEAD_SPAN in PublicAvailability.tsx — a sticky grid item can only move inside its own
+       grid area), so nothing lives in row 1 alone any more and its track has to be stated:
+       34px of content (`b` at 14px/1.2 over `.dow` at 11px/1.2 = 30px) plus 6px of padding. */
+    grid-template-rows: 36px; grid-auto-rows: 13px;
     font-variant-numeric: tabular-nums;
   }
+  /* Sticky, over a solid card: the hours scroll under the day names rather than through
+     them. (The note that used to ride here in a <small> is drawn inside its away block
+     now — see `.zlabel` at the end of this file.) Above `.zlabel`'s z-index, which is the
+     only other thing in this grid that has one and comes after the heads in the markup:
+     a note label would otherwise ride over the header row it scrolls past. The corner
+     sticks with it, or the hour labels slide through the row's first column. */
   .week-head {
+    position: sticky; top: 0; z-index: 2; background: var(--card); align-self: start;
     text-align: center; font-size: 11px; line-height: 1.2; color: var(--muted-foreground);
-    padding-bottom: 4px; min-width: 0;
+    padding: 2px 0 4px; min-width: 0; height: 36px;
+  }
+  .week-corner {
+    position: sticky; top: 0; z-index: 2; background: var(--card);
+    align-self: start; height: 36px;
   }
   .week-head b { display: block; font-size: 14px; font-weight: 500; color: var(--foreground); }
-  .week-head small {
-    display: block; font-size: 10px; margin-top: 2px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
   .week-head.today b { text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 4px; }
   .week-axis {
     font-size: 10px; line-height: 1; color: var(--muted-foreground); text-align: right;
@@ -600,10 +796,9 @@
   .week-cell.free { background: var(--primary); }
   .week-cell.early { background: linear-gradient(to bottom, var(--primary) 50%, var(--muted) 50%); }
   .week-cell.late { background: linear-gradient(to bottom, var(--muted) 50%, var(--primary) 50%); }
-  .week-cell.away, .week-legend i.away {
-    background: repeating-linear-gradient(135deg, var(--muted) 0 3px, var(--border) 3px 5px);
-  }
-  .week-head.past, .week-cell.past { opacity: 0.42; }
+  .week-cell.away, .week-legend i.away { background: var(--away); }
+  .week-cell.past { opacity: 0.42; }
+  .week-head.past b, .week-head.past .dow { opacity: 0.42; }
   a.week-cell { cursor: pointer; }
   /* Each hour is a wrapper that takes no box of its own, so the cells still lay out in the
      grid — and so hovering any cell in the row is hovering the row. */
@@ -635,4 +830,76 @@
   .week-legend i.free { background: var(--primary); }
   .week-prompt { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 28px 12px; }
   .week-prompt p { margin: 0; }
+}
+
+@layer island {
+  /* Keyframes cannot live inside a style rule (CSS nesting forbids it), so the three the
+     editor uses are declared here, at the layer's top level, beside everything else that is
+     shared by both grids. The deal: on a page change the columns cross-fade left to right,
+     25ms apart, and the date numbers drop in behind them. */
+  @keyframes deal {
+    0% { opacity: 1; transform: translateY(0); }
+    42% { opacity: 0; transform: translateY(-4px); }
+    58% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes num-drop {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes chip-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* A note drawn inside its own away block. On the friend view it is a grid item spanning
+     the block (placed by the server); in the editor it is absolutely positioned inside
+     `.grid` from the cells' own rects (the island supplies that `position`, so this rule
+     stays usable as a grid item). Either way it never affects layout, never takes a
+     pointer, and is clipped to the block rather than wrapping outside it. `fitLabel`
+     (core/labelFit.ts) picks the orientation and whether it wraps.
+
+     The box is the whole block, deliberately: `ZONE_LABEL_SCRIPT` measures it with
+     `getBoundingClientRect()` and hands the numbers to `fitLabel`, so a box shrunk to its
+     text would have the label choosing its orientation from its own size. Away entries may
+     nest (an all-day "vacation" with a "wedding" inside it) and `labelZones` sorts the
+     larger first so the smaller paints on top of it — where the two sets of glyphs meet,
+     the one on top knocks the other out with a halo in the away colour. A halo rather than
+     a background box because the box is block-sized: an opaque one would fill the grid's
+     3px gaps and hide the hover outline of every cell under it. The away colour is exactly
+     what the block is painted, so the halo is invisible everywhere else. */
+  .zlabel {
+    z-index: 1; pointer-events: none; overflow: hidden; min-width: 0;
+    padding: 3px 5px; font-size: 11px; line-height: 14px; color: var(--away-label);
+    text-shadow:
+      1px 0 0 var(--away), -1px 0 0 var(--away), 0 1px 0 var(--away), 0 -1px 0 var(--away),
+      1px 1px 0 var(--away), -1px 1px 0 var(--away), 1px -1px 0 var(--away), -1px -1px 0 var(--away);
+  }
+  .zlabel.h { overflow-wrap: normal; }
+  .zlabel.v { writing-mode: vertical-rl; text-orientation: mixed; }
+  .zlabel.one { white-space: nowrap; text-overflow: ellipsis; }
+  .zlabel.past { opacity: 0.42; }
+  .week .zlabel { font-size: 10px; line-height: 12px; padding: 2px 3px; }
+
+  /* The heading row of the friend view, and the owner's button at the end of it. */
+  .fv-head { display: flex; align-items: flex-start; gap: 10px; }
+  .fv-edit { margin-left: auto; }
+  /* Three matching buttons, left-aligned as a group, on both availability pages. */
+  .feed-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  /* At phone width the cards on the editor and the friend view bleed to the screen edges:
+     the grid gets every pixel, text keeps a 16px inset. The negative margin is exactly
+     <main>'s own padding (`px-4` in Layout.tsx), so the card's edges meet the screen. */
+  @media (max-width: 480px) {
+    [data-slot="card"].bleed {
+      margin-left: -16px; margin-right: -16px;
+      border-left: 0; border-right: 0; border-radius: 0;
+    }
+    [data-slot="card"].bleed > [data-slot="card-header"],
+    [data-slot="card"].bleed > [data-slot="card-content"] {
+      padding-left: 16px; padding-right: 16px;
+    }
+    /* The editor's grid takes the inset back: it is the widest thing on the page. */
+    [data-slot="card"].bleed .gridwrap { margin-left: -16px; margin-right: -16px; }
+  }
 }

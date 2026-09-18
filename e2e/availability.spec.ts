@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
 
 /**
@@ -6,9 +6,13 @@ import { FIXTURE_DATE_1, pickDate, setTime, createPoll } from './helpers.js';
  * split `poll.spec.ts` uses for the poll grid: a touch project taps each cell (Playwright's
  * touchscreen has no drag primitive), a pointer project drags across both.
  */
-async function markCells(page: Page, root: string, from: number, to: number) {
-  const cells = page.locator(`${root} [data-slot]`);
+async function markCells(page: Page, cells: Locator, from: number, to: number) {
   await expect(cells.first()).toBeVisible();
+  // `boundingBox()` reports viewport-relative coordinates and does not scroll. The editor's
+  // address field sits below the grid now, so measuring straight after filling it would read
+  // cells that are off the top of the screen — and a sticky day header parked over row one
+  // would swallow the press even once they were. Start from the top of the page.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const a = (await cells.nth(from).boundingBox())!;
   const b = (await cells.nth(to).boundingBox())!;
   if (test.info().project.use.hasTouch) {
@@ -24,6 +28,16 @@ async function markCells(page: Page, root: string, from: number, to: number) {
   }
 }
 
+/**
+ * Dismiss the note chip the way the project's device can: Escape where there is a keyboard,
+ * a tap off the chip where there is not — which is the only free way out on a phone, and so
+ * the one worth asserting there.
+ */
+async function dismissChip(page: Page) {
+  if (test.info().project.use.hasTouch) await page.locator('#availability-root .hint').first().tap();
+  else await page.keyboard.press('Escape');
+}
+
 test('mark a week, go away, see it public, answer a poll pre-marked', async ({ page }) => {
   const did = `did:plc:e2eavail${test.info().project.name.replace(/[^a-z0-9]/gi, '')}`;
   await page.goto(`/dev/login?did=${did}&handle=avail.test`);
@@ -35,49 +49,143 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   // Claim a name of our own (one per project, so the four runs never contend for it).
   const name = `e2e-${test.info().project.name.replace(/[^a-z0-9-]/gi, '')}`;
   await page.fill('#availability-root input[name=alias]', name);
-  await expect(page.locator('#availability-root .address-line'))
-    .toHaveText(`your address: ${name}.sez.localhost:8787 (not saved yet)`);
+  // Timezone is what the grid is drawn in; the browser is pinned to UTC in the config. Filled
+  // before any mark, so the cell indexes below are UTC's on every project. (On tz-kolkata the
+  // alias field's blur flushes a Kolkata post first; the next post overwrites it.)
+  await page.fill('#availability-root input[list=tz-list]', 'UTC');
 
-  // Mark Sunday 7am–9am, the first two hour cells of the first column: one stroke across two
-  // hours, four half-hour blocks in the record.
-  await markCells(page, '#availability-root', 0, 1);
+  // Mark Sunday 7am–9am. The Sunday column is the last of seven, each seventeen rows deep,
+  // so its 7am cell is number 102. Sunday is the last day of a Monday-first week, so it is
+  // never in the past — which the reach-out step below needs.
+  await markCells(page, page.locator('#availability-root [data-slot]'), 6 * 17, 6 * 17 + 1);
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
   await expect(page.locator('#availability-root .sentence')).toHaveText('usually free sundays 7am to 9am.');
 
-  // Away on the fixture date, all day, with a note.
-  await page.fill('#availability-root .away-form input[type=date] >> nth=0', FIXTURE_DATE_1);
-  await page.fill('#availability-root .away-form input[type=text]', 'out of town');
-  await page.click('#availability-root button.add-away');
-  await expect(page.locator('#availability-root .away li')).toContainText('out of town');
-  // Added, not posted: the entry says so until the post button below publishes it.
-  await expect(page.locator('#availability-root .away li .unposted')).toHaveText('not posted yet');
-  await expect(page.locator('#availability-root .away-hint')).toHaveText('post availability below to publish these.');
+  // The pager: the usual week is page zero, and `›` pages into real weeks.
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
+  await expect(page.locator('#availability-root .grid.usual')).toBeVisible();
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('this week');
+  await expect(page.locator('#availability-root .grid.dated')).toBeVisible();
+  // Dates appear in the headers, and the marked Sunday still reads as free.
+  await expect(page.locator('#availability-root .col[data-c="6"] .col-head .num')).not.toBeEmpty();
+  await expect(page.locator('#availability-root .col[data-c="6"] .cell.available')).toHaveCount(2);
+  // The week picker jumps back to the usual week.
+  await page.click('#availability-root .pager .label');
+  await expect(page.locator('#availability-root .weekpick')).toBeVisible();
+  await page.click('#availability-root .weekpick .usual');
+  await expect(page.locator('#availability-root .weekpick')).toHaveCount(0);
+  await expect(page.locator('#availability-root .pager .name')).toHaveText('usual week');
 
-  // Timezone is what the grid was drawn in; the browser is pinned to UTC in the config.
-  await page.fill('#availability-root input[list=tz-list]', 'UTC');
-  await page.click('#availability-root button.save');
-  await expect(page.locator('#availability-root .status')).toHaveText('availability posted.');
-  await expect(page.locator('#availability-root .away li .unposted')).toHaveCount(0);
-  await expect(page.locator('#availability-root .away-hint')).toHaveCount(0);
+  // Marks on a dated page are away. Sunday 11am–3pm: cells 4 through 7 of the column
+  // (the first is 7am). Sunday is today or later, so it is always paintable.
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  // Named sundayCol, not sunday: the poll at the end of this spec already has a `sunday`.
+  const sundayCol = page.locator('#availability-root .col[data-c="6"]');
+  await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
+
+  // A day header tap clears a day that has any away at all, window and note and all; the
+  // next one takes all day, and the column locks: a tap anywhere in it clears the day.
+  await sundayCol.locator('.col-head').click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
+  await sundayCol.locator('.col-head').click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(17);
+  // A header tap offers a chip for the column it just marked, on every device — it hangs
+  // over the top of the column, so dismissing it is also what lets the next click land on a
+  // cell. Escape, or a tap off the chip where there is no keyboard: neither writes anything.
+  const chip = page.locator('#availability-root .note-chip');
+  await expect(chip.locator('.when')).toContainText('away');
+  await dismissChip(page);
+  await expect(chip).toHaveCount(0);
+  await sundayCol.locator('[data-slot]').first().click();
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(0);
+
+  // Painted again, so the rest of this flow has an away entry to name. The stroke is an
+  // entry on the record, not just paint: one sunday, 11am to 3pm.
+  await markCells(page, sundayCol.locator('[data-slot]'), 4, 7);
+  await expect(sundayCol.locator('.cell.away')).toHaveCount(4);
+
+  const noteEdit = page.locator('#availability-root .away-list input.note-edit');
+  if (test.info().project.use.hasTouch) {
+    // One hour tapped with a finger offers no chip — it would land over the rows being
+    // tapped next. The note for it comes from the list instead.
+    await expect(chip).toHaveCount(0);
+    await page.locator('#availability-root .away-list .note').tap();
+    await noteEdit.fill('out of town');
+    await noteEdit.press('Enter');
+  } else {
+    // A stroke drops a chip under the cells: the range it wrote, and a note field.
+    await expect(chip.locator('.when')).toContainText('away');
+    await chip.locator('input').fill('out of town');
+    await chip.locator('input').press('Enter');
+    await expect(chip).toHaveCount(0);
+  }
+
+  // The list under the grid is the record: the entry, with its window and its note.
+  await expect(page.locator('#availability-root .away-list li')).toHaveCount(1);
+  await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
+  await expect(page.locator('#availability-root .away-list .jump')).toContainText('11am–3pm');
+
+  // No post button: the status line posts two seconds after the last change.
+  await expect(page.locator('#availability-root button.save')).toHaveCount(0);
+  await expect(page.locator('#availability-root .status')).toHaveText('posted.', { timeout: 15_000 });
   await expect(page.locator('#availability-root .address-line'))
     .toHaveText(`your address: ${name}.sez.localhost:8787`);
 
   // Reload keeps it.
   await page.reload();
   await expect(page.locator('#availability-root .cell.available')).toHaveCount(2);
-  await expect(page.locator('#availability-root .away li')).toContainText('out of town');
+  await expect(page.locator('#availability-root .away-list li')).toContainText('out of town');
+
+  // The note is drawn inside its own away block, on the editor's grid too.
+  await page.click('#availability-root .pager .arrow >> nth=1');
+  await expect(page.locator('#availability-root .grid .zlabel')).toHaveText('out of town');
 
   // The public page reads the same record.
   await page.goto(`/u/${did}`);
   await expect(page.getByText('usually free sundays 7am to 9am.')).toBeVisible();
   await expect(page.getByText('out of town')).toBeVisible();
 
-  // The week grid: sunday 7am and 8am are the free cells in the week containing today; the
-  // away date is at least two weeks out, so it reads on the "away later" line. Next week is
-  // a link, and one past that is the poll prompt.
+  // The week grid: sunday 7am and 8am are the free cells in the week containing today, and
+  // the four away hours are this sunday's, in orange. Next week is a link, and one past
+  // that is the poll prompt.
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await expect(page.locator('.week-cell.free')).toHaveCount(2);
-  await expect(page.getByText('away later:')).toBeVisible();
+  // Sensitive to the clock in the one project that is not in UTC: the editor drew (and this
+  // count expects) the sunday of the browser's own week, while the record saves in UTC — so
+  // between 00:00 and 05:30 IST on a monday that sunday belongs to the week just gone, and
+  // this page would draw it on no week at all.
+  await expect(page.locator('.week-cell.away')).toHaveCount(4);
+  // The away block is orange, four hours of it, with the note drawn inside it.
+  await expect(page.locator('.week .zlabel')).toHaveText('out of town');
+  // The day headers stay on screen while the hours scroll under them. Only worth checking
+  // where the grid is taller than the viewport, which is the phone: `.week-head` is a grid
+  // item, so it can only stick inside its own grid area — it spans every row for that
+  // reason (HEAD_SPAN in PublicAvailability.tsx), and this is the guard on it. The Pixel 7's
+  // 839px of viewport is taller than the whole page, so shorten it first: without room to
+  // scroll there is nothing for `top: 0` to do.
+  if (test.info().project.use.hasTouch) {
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: size.width, height: 400 });
+    await page.evaluate(() => window.scrollTo(0, 300));
+    expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(300);
+    // Read the rects in the page: `locator.boundingBox()` scrolls its element into view
+    // first, which would undo the very scroll this is measuring.
+    const rects = await page.evaluate(() => {
+      const box = (sel: string) => {
+        const { top, height } = document.querySelector(sel)!.getBoundingClientRect();
+        return { top, height };
+      };
+      return { monday: box('.week-head[data-c="0"]'), firstHour: box('.week-cell[data-c="0"]') };
+    });
+    expect(rects.monday.top, 'monday stays on screen').toBeGreaterThanOrEqual(0);
+    expect(rects.monday.top, 'monday stays at the top of it').toBeLessThan(60);
+    expect(rects.firstHour.top, '7am has scrolled under the head')
+      .toBeLessThan(rects.monday.top + rects.monday.height);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.setViewportSize(size);
+  }
   await page.click('.week-nav a[href="?week=next"]');
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
   await page.click('.week-nav a[href="?week=later"]');
@@ -95,9 +203,9 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   expect(alias.status()).toBe(200);
   const aliasText = await alias.text();
   expect(aliasText).toContain('usually free sundays 7am to 9am.');
-  // The signed-in viewer is the owner, so the alias response offers the edit link too:
+  // The signed-in viewer is the owner, so the alias response carries the edit button too:
   // `page.request` shares the browser context's cookie jar, so the session rides along.
-  expect(aliasText).toContain('this is you');
+  expect(aliasText).toContain('fv-edit');
   expect(aliasText).toContain('href="http://localhost:8787/availability"');
   const aliasIcs = await page.request.get('/availability.ics', { headers: { host: aliasHost } });
   expect(aliasIcs.headers()['content-type']).toContain('text/calendar');
@@ -150,4 +258,27 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
     .toHaveText("marked from your availability. fix what's off, then save.");
   await expect(page.locator('#grid-root .cell.available')).toHaveCount(4);
   await expect(page.locator('button.save')).toBeEnabled();
+
+  // The mobile project only: the week card bleeds to the screen edges, and the day headers
+  // stay put while the grid scrolls past them.
+  if (test.info().project.name === 'mobile') {
+    await page.goto('/availability');
+    await expect(page.locator('#availability-root .grid')).toBeVisible();
+    // The island's card is the first card on the page (the banners above it are <p>).
+    const box = (await page.locator('[data-slot="card"]').first().boundingBox())!;
+    expect(box.x).toBeLessThanOrEqual(0.5);
+    expect(box.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 0.5);
+    // The day headers are sticky, and the grid is not its own scrollport — so scrolling the
+    // grid's top past the viewport leaves the header at the top of it.
+    expect(await page.evaluate(() => getComputedStyle(
+      document.querySelector('#availability-root .col-head')!).position)).toBe('sticky');
+    await page.evaluate(() => window.scrollBy(0, 400));
+    const offsets = await page.evaluate(() => ({
+      grid: document.querySelector('#availability-root .grid')!.getBoundingClientRect().top,
+      head: document.querySelector('#availability-root .col[data-c="0"] .col-head')!
+        .getBoundingClientRect().top,
+    }));
+    expect(offsets.grid).toBeLessThan(0);
+    expect(offsets.head).toBeGreaterThanOrEqual(-1);
+  }
 });

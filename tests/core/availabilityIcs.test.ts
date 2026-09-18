@@ -53,6 +53,26 @@ describe('buildAvailabilityIcs', () => {
     // the series before that last occurrence ever started.
     expect(late.split('\r\n')).toContain('RRULE:FREQ=DAILY;UNTIL=20261015T050000Z');
   });
+  it('ends a timed away window that stops at midnight on the next day', () => {
+    const midnight = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-10-07', end: '2026-10-07', startTime: '23:00', endTime: '00:00' }],
+    }, opts).split('\r\n');
+    // The editor's last row is the 11pm hour, so a stroke there ends at midnight. A DTEND
+    // of 20261007T000000 would sort before its own DTSTART, which is not a valid VEVENT.
+    expect(midnight).toContain('DTSTART;TZID=America/New_York:20261007T230000');
+    expect(midnight).toContain('DTEND;TZID=America/New_York:20261008T000000');
+    expect(midnight.filter((l) => l.startsWith('RRULE:FREQ=DAILY'))).toEqual([]);
+  });
+  it('repeats a midnight window daily, still bounded by its last start', () => {
+    const run = buildAvailabilityIcs({
+      ...rec, away: [{ start: '2026-10-07', end: '2026-10-09', startTime: '23:00', endTime: '00:00' }],
+    }, opts).split('\r\n');
+    expect(run).toContain('DTSTART;TZID=America/New_York:20261007T230000');
+    expect(run).toContain('DTEND;TZID=America/New_York:20261008T000000');
+    // Only the DTEND date moves: UNTIL names the last occurrence's start, 23:00 New York
+    // on the 9th = 03:00Z on the 10th.
+    expect(run).toContain('RRULE:FREQ=DAILY;UNTIL=20261010T030000Z');
+  });
   it('gives every event a stable UID and folds long lines', () => {
     const uids = lines.filter((l) => l.startsWith('UID:'));
     expect(new Set(uids).size).toBe(3);

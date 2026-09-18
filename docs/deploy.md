@@ -324,7 +324,11 @@ them forever. nginx stays the front for this host like every other on the box.
   more than one label before `.sez.`, which no certificate covers anyway
   (`aliasHostOnly`, `src/web/server.ts`). The session cookie carries
   `Domain=letsmeet.lol`, so **every** host under the apex receives it, not
-  only the sez hosts. Two things follow. The friend view uses it for one
+  only the sez hosts. Sessions minted before that (2026-09-17) are
+  host-only; `web_session.cookie_v` records which shape a row was handed,
+  and the first apex request on an old session re-issues the cookie with
+  `Domain` and marks the row, so nobody signs in again. The alias host
+  never issues cookies. Two things follow. The friend view uses it for one
   thing, the owner's `this is you · edit` link, and the alias host still
   routes nothing a session could act on. And nothing untrusted may ever
   be hosted on any `letsmeet.lol` subdomain: a page there would receive

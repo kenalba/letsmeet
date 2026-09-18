@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeAvailability, describeWeekly, isStale, splitAtTemplateStart, templateSlots,
   weeklyToTemplateIntervals, templateIntervalsToWeekly, sanitizeForeignRecord, isKnownZone,
-  endOfLocalDay, localDateOf,
+  endOfLocalDay, localDateOf, templateDates, templateDateFor, weeklyOverDates, TEMPLATE_MONDAY,
 } from '../../src/core/availability.js';
 
 const TZ = 'America/New_York';
@@ -77,6 +77,15 @@ describe('normalizeAvailability', () => {
     });
     expect(normalizeAvailability(a)).toEqual(a);
   });
+  it('keeps an away window that ends at midnight, and still rejects an inverted one', () => {
+    const midnight = { start: '2026-09-19', end: '2026-09-19', startTime: '23:00', endTime: '00:00' };
+    expect(normalizeAvailability({ timezone: TZ, weekly: [], away: [midnight] }).away)
+      .toEqual([midnight]);
+    expect(() => normalizeAvailability({
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-09-19', end: '2026-09-19', startTime: '18:00', endTime: '09:00' }],
+    })).toThrow(/end after it starts/);
+  });
 });
 
 describe('describeWeekly', () => {
@@ -115,10 +124,52 @@ describe('isStale', () => {
 });
 
 describe('template week', () => {
-  it('has 7 days of 34 half-hour slots from 7am to midnight', () => {
+  it('has 7 days of 34 half-hour slots from 7am to midnight, monday first', () => {
     const slots = templateSlots(TZ);
     expect(slots).toHaveLength(7 * 34);
-    expect(slots[0].start).toBe('2026-01-04T12:00:00.000Z'); // 07:00 EST, Sunday
+    expect(slots[0].start).toBe('2026-01-05T12:00:00.000Z'); // 07:00 EST, Monday
+  });
+  it('runs monday to sunday, so a column keeps its identity across pages', () => {
+    expect(TEMPLATE_MONDAY).toBe('2026-01-05');
+    expect(templateDates()).toEqual([
+      '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08',
+      '2026-01-09', '2026-01-10', '2026-01-11',
+    ]);
+    // The record counts weekdays from Sunday; the grid draws them from Monday.
+    expect(templateDateFor(1)).toBe('2026-01-05');
+    expect(templateDateFor(0)).toBe('2026-01-11');
+  });
+  it('round-trips a sunday block, which is the last column now', () => {
+    const weekly = [{ day: 0, start: '11:00', end: '13:00' }];
+    const ivs = weeklyToTemplateIntervals(weekly, 'UTC');
+    expect(ivs).toEqual([{ start: '2026-01-11T11:00:00.000Z', end: '2026-01-11T13:00:00.000Z' }]);
+    expect(templateIntervalsToWeekly(ivs, 'UTC')).toEqual(weekly);
+  });
+  it('puts each weekly block on every real date with that weekday', () => {
+    // 2026-09-14 and 2026-09-21 are Mondays; the 15th is a Tuesday and gets nothing.
+    expect(weeklyOverDates(
+      [{ day: 1, start: '19:00', end: '22:00' }],
+      ['2026-09-14', '2026-09-15', '2026-09-21'], 'UTC',
+    )).toEqual([
+      { start: '2026-09-14T19:00:00.000Z', end: '2026-09-14T22:00:00.000Z' },
+      { start: '2026-09-21T19:00:00.000Z', end: '2026-09-21T22:00:00.000Z' },
+    ]);
+  });
+  it('rolls a past-midnight block onto the next real date', () => {
+    expect(weeklyOverDates(
+      [{ day: 6, start: '22:00', end: '00:00' }], ['2026-09-19'], 'UTC',
+    )).toEqual([{ start: '2026-09-19T22:00:00.000Z', end: '2026-09-20T00:00:00.000Z' }]);
+  });
+  it('shifts with DST: the same wall clock lands an hour earlier in UTC after spring forward', () => {
+    // New York clocks jump forward on Sunday 2026-03-08, so Saturday the 7th is still EST
+    // (UTC-5) and the Sunday evening block is EDT (UTC-4) — one hour apart in offset.
+    expect(weeklyOverDates(
+      [{ day: 6, start: '19:00', end: '22:00' }, { day: 0, start: '19:00', end: '22:00' }],
+      ['2026-03-07', '2026-03-08'], TZ,
+    )).toEqual([
+      { start: '2026-03-08T00:00:00.000Z', end: '2026-03-08T03:00:00.000Z' },
+      { start: '2026-03-08T23:00:00.000Z', end: '2026-03-09T02:00:00.000Z' },
+    ]);
   });
   it('round-trips weekly blocks through template intervals', () => {
     const weekly = [{ day: 2, start: '19:00', end: '22:00' }, { day: 5, start: '22:00', end: '00:00' }];
@@ -186,6 +237,25 @@ describe('sanitizeForeignRecord', () => {
       { start: '2026-10-20', end: '2026-10-20' },
     ]);
     expect(out.timezone).toBe(TZ);
+  });
+  it('splits an away window that runs past midnight into the evening and the morning', () => {
+    const overnight = {
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-10-07', end: '2026-10-08', startTime: '22:00', endTime: '06:00', note: 'red eye' }],
+    } as unknown as Parameters<typeof sanitizeForeignRecord>[0];
+    // The day map only ever sees windows inside one date, so the small hours have to be
+    // their own entry or a write-back would lose them.
+    expect(sanitizeForeignRecord(overnight).away).toEqual([
+      { start: '2026-10-07', end: '2026-10-08', startTime: '22:00', endTime: '00:00', note: 'red eye' },
+      { start: '2026-10-08', end: '2026-10-09', startTime: '00:00', endTime: '06:00', note: 'red eye' },
+    ]);
+  });
+  it('leaves a window that ends at midnight alone, since that is the end of the day', () => {
+    const midnight = {
+      timezone: TZ, weekly: [],
+      away: [{ start: '2026-10-07', end: '2026-10-07', startTime: '23:00', endTime: '00:00' }],
+    } as unknown as Parameters<typeof sanitizeForeignRecord>[0];
+    expect(sanitizeForeignRecord(midnight).away).toEqual(midnight.away);
   });
   it('leaves a record this app wrote exactly as it is', () => {
     const ours = normalizeAvailability({

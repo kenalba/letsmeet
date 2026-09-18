@@ -107,7 +107,11 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
     if (hasStart !== hasEnd) throw new UserError('an away window needs both a start and an end time');
     if (hasStart) {
       const s = toMinutes(a.startTime, 'an away window start', false);
-      const e = toMinutes(a.endTime, 'an away window end', false);
+      let e = toMinutes(a.endTime, 'an away window end', false);
+      // Midnight is the one end that may sort before its start: it means the end of the day,
+      // which is how localWindow, freeIntervals and buildWeekView already read it. The
+      // editor's last row is the 11pm hour, so a stroke there has no other end to name.
+      if (e === 0) e = 1440;
       if (e <= s) throw new UserError('an away window must end after it starts');
       entry.startTime = fromMinutes(s);
       entry.endTime = fromMinutes(e);
@@ -147,6 +151,10 @@ export function normalizeAvailability(input: unknown): AvailabilityInput {
  * unusable `timezone` is the one thing that cannot be dropped — callers check
  * `isKnownZone` and say they cannot read the record.
  */
+/** ISO date + one day, for splitting an away window that rolls past midnight. */
+const nextDate = (d: string): string =>
+  DateTime.fromISO(d, { zone: 'utc' }).plus({ days: 1 }).toISODate()!;
+
 export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
   const weekly = rec.weekly.filter((b) =>
     Number.isInteger(b.day) && b.day >= 0 && b.day <= 6 && HHMM.test(b.start) && HHMM.test(b.end));
@@ -155,10 +163,29 @@ export function sanitizeForeignRecord<T extends AvailabilityInput>(rec: T): T {
     if (!YMD.test(a.start) || !YMD.test(a.end) || a.end < a.start) continue;
     const timed = a.startTime !== undefined && a.endTime !== undefined
       && HHMM.test(a.startTime) && HHMM.test(a.endTime);
-    if (timed) { away.push(a); continue; }
+    if (timed) {
+      // An end that sorts before its start rolls past midnight. Midnight itself is the end
+      // of the day, which every reader here already handles; anything earlier is a window
+      // this app's own writer cannot produce, and the day map would drop its small-hours
+      // half on write-back. Split it at the boundary instead: the evening, then the morning
+      // after.
+      if (a.endTime! < a.startTime! && a.endTime !== '00:00') {
+        const note = a.note !== undefined ? { note: a.note } : {};
+        away.push({ start: a.start, end: a.end, startTime: a.startTime!, endTime: '00:00', ...note });
+        away.push({
+          start: nextDate(a.start), end: nextDate(a.end),
+          startTime: '00:00', endTime: a.endTime!, ...note,
+        });
+        continue;
+      }
+      away.push(a);
+      continue;
+    }
     const { startTime: _s, endTime: _e, ...allDay } = a;
     away.push(allDay);
   }
+  // Sorted the way normalizeAvailability writes it, so a split entry lands in its place.
+  away.sort((x, y) => x.start.localeCompare(y.start) || (x.startTime ?? '').localeCompare(y.startTime ?? ''));
   const out = { ...rec, weekly, away };
   // The lexicon caps its length and nothing else; a name this app cannot route is no name.
   if (out.alias !== undefined && !isValidSezName(out.alias)) delete out.alias;
@@ -244,13 +271,23 @@ export function describeWeekly(weekly: WeeklyBlock[]): string {
 
 // ---- Template week: lets the editor reuse the poll grid model ---------------------
 
-/** A Sunday. The editor grid is these seven dates; only the weekday of each matters. */
-export const TEMPLATE_SUNDAY = '2026-01-04';
+/** A Monday. The editor grid is these seven dates; only the weekday of each matters. */
+export const TEMPLATE_MONDAY = '2026-01-05';
 export const TEMPLATE_START = '07:00';
 
-function templateDates(): string[] {
+/**
+ * The template week, Monday first — the order every grid in this app runs its columns in
+ * (`mondayOf`, `buildWeekView`), so a column keeps its identity when the editor pages from
+ * the usual week into a real one.
+ */
+export function templateDates(): string[] {
   return Array.from({ length: 7 }, (_, i) =>
-    DateTime.fromISO(TEMPLATE_SUNDAY).plus({ days: i }).toISODate()!);
+    DateTime.fromISO(TEMPLATE_MONDAY).plus({ days: i }).toISODate()!);
+}
+
+/** The template date whose weekday is `day` (0 = Sunday, as the record counts weekdays). */
+export function templateDateFor(day: number): string {
+  return templateDates()[(day + 6) % 7];
 }
 
 /** 7 × 34 half-hour UTC slots in `timezone`, in the poll grid's Interval shape. */
@@ -261,15 +298,29 @@ export function templateSlots(timezone: string): Interval[] {
   });
 }
 
-export function weeklyToTemplateIntervals(weekly: WeeklyBlock[], timezone: string): Interval[] {
-  const dates = templateDates();
-  const ivs = weekly.map((b) => {
-    const start = DateTime.fromISO(`${dates[b.day]}T${b.start}`, { zone: timezone });
-    let end = DateTime.fromISO(`${dates[b.day]}T${b.end}`, { zone: timezone });
-    if (end <= start) end = end.plus({ days: 1 });
-    return { start: start.toUTC().toISO()!, end: end.toUTC().toISO()! };
-  });
+/**
+ * Every weekly block on each of `dates`, as UTC intervals: a block lands on a date when the
+ * date's own weekday is the block's. The template week is seven dates like any other, so the
+ * editor's usual page and its dated pages both come from here — and reading the weekday off
+ * the date, rather than indexing the list by it, is what makes the two one function. Local
+ * wall clock in, UTC out, DST and past-midnight ends handled per date by `localRange`.
+ */
+export function weeklyOverDates(
+  weekly: WeeklyBlock[], dates: string[], timezone: string,
+): Interval[] {
+  const ivs: Interval[] = [];
+  for (const date of dates) {
+    const weekday = DateTime.fromISO(date, { zone: timezone }).weekday % 7; // luxon: 7 = Sunday
+    for (const b of weekly) {
+      if (b.day !== weekday) continue;
+      ivs.push(localRange(date, b.start, b.end, timezone)); // rolls a past-midnight end itself
+    }
+  }
   return ivs.length ? mergeIntervals(ivs) : [];
+}
+
+export function weeklyToTemplateIntervals(weekly: WeeklyBlock[], timezone: string): Interval[] {
+  return weeklyOverDates(weekly, templateDates(), timezone);
 }
 
 /**
