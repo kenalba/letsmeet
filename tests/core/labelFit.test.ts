@@ -7,6 +7,7 @@ import { fitLabel } from '../../src/core/labelFit.js';
  */
 describe('fitLabel', () => {
   it('lays a short note horizontally on one line where the width takes it', () => {
+    // Both orientations take it on one line here, so this is the one-line tie-break too.
     expect(fitLabel('wedding', 200, 60)).toEqual({ orient: 'h', lines: 1 });
   });
   it('turns a note that is too wide for one horizontal line down the column', () => {
@@ -29,6 +30,17 @@ describe('fitLabel', () => {
   });
   it('truncates in a box with no room for a single line', () => {
     expect(fitLabel('x', 30, 10)).toEqual({ orient: 'h', lines: 1, truncate: true });
+  });
+  it('prefers horizontal even where vertical would take fewer lines', () => {
+    // 50px of inner width wraps this into 3 lines; 90px of inner height would take it in 2.
+    // The preference order is horizontal-before-vertical, not fewest-lines, so h wins.
+    expect(fitLabel('family wedding weekend', 60, 100)).toEqual({ orient: 'h', lines: 3 });
+  });
+  it('never reports fewer than one line, however degenerate the box', () => {
+    // Callers divide the box by `lines`, so a zero would be a division by zero.
+    for (const [w, h] of [[0, 0], [30, 10], [-5, -10]]) {
+      expect(fitLabel('family wedding weekend', w, h).lines).toBeGreaterThanOrEqual(1);
+    }
   });
   it('takes the friend view\'s smaller metrics', () => {
     const font = { charWidth: 5, lineHeight: 12, pad: 3 };
