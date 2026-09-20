@@ -488,7 +488,7 @@ function Grid({ data }: { data: PollData }) {
                   ref={handleInput}
                   id="handle"
                   name="handle"
-                  aria-label="your bluesky handle"
+                  aria-label="your atmosphere handle"
                   placeholder="you.bsky.social"
                   autoComplete="username"
                   spellCheck={false}

@@ -38,7 +38,7 @@ export function LoginPage({ error, returnTo }: { error?: string; returnTo?: stri
                   state after it) can put the visitor back where they came from. */}
               {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               <div className="grid gap-2">
-                <Label htmlFor="handle">your bluesky handle</Label>
+                <Label htmlFor="handle">your atmosphere handle</Label>
                 <Input
                   id="handle"
                   name="handle"
