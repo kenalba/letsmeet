@@ -217,7 +217,12 @@ test('mark a week, go away, see it public, answer a poll pre-marked', async ({ p
   }
   await page.click('.week-nav a[href="?week=next"]');
   await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
+  for (let week = 2; week <= 8; week++) {
+    await page.click(`.week-nav a[href="?week=${week}"]`);
+    await expect(page.locator('.week-cell')).toHaveCount(7 * 17);
+  }
   await page.click('.week-nav a[href="?week=later"]');
+  await expect(page.locator('.week-nav a[href="?week=8"]')).toBeVisible();
   await expect(page.getByRole('link', { name: `make a poll with ${did}` })).toBeVisible();
   await page.goto(`/u/${did}`);
   const ics = await page.request.get(`/u/${did}/availability.ics`);

@@ -1,7 +1,7 @@
 import type { AvailabilityRecord } from '../../atproto/records.js';
 import { describeWeekly, isKnownZone, isStale, localDateOf } from '../../core/availability.js';
 import {
-  buildWeekView, dateRangeLabel, hourLabel, labelZones, localToday, monthDayLabel, HOURS,
+  buildWeekView, dateRangeLabel, hourLabel, labelZones, localToday, monthDayLabel, HOURS, MAX_PUBLIC_WEEK_OFFSET,
   type NoteZone, type WeekCell, type WeekChoice, type WeekDay, type WeekView,
 } from '../../core/weekView.js';
 import { cn } from '../lib/cn.js';
@@ -158,6 +158,8 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   const base = data.publicUrl.replace(/\/$/, '');
   const rec = data.record;
   const week = data.week ?? 'this';
+  const offset = typeof week === 'number' ? week : week === 'next' ? 1 : 0;
+  const weekHref = (n: number) => `?week=${n === 0 ? 'this' : n === 1 ? 'next' : n}`;
   // Every clock in the record is read in its timezone; one this app cannot use makes the
   // whole record unreadable (the sentence would be the only honest part, and the grid
   // below would throw). Say so rather than guess a zone or claim they posted nothing.
@@ -165,7 +167,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
   const stale = rec ? isStale(rec, data.now) : false;
   const upcoming = rec && !unreadable ? rec.away.filter((a) => a.end >= localToday(data.now, rec.timezone)) : [];
   const view = rec && !unreadable && !stale && week !== 'later'
-    ? buildWeekView(rec, data.now, week === 'next' ? 1 : 0) : null;
+    ? buildWeekView(rec, data.now, offset) : null;
   const later = rec && !unreadable && !stale
     ? buildWeekView(rec, data.now, 0).later : [];
   // `labelZones` drops the ones too short to carry a note and orders the rest biggest-first,
@@ -263,7 +265,7 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               <CardHeader>
                 <CardTitle>further out</CardTitle>
                 <CardAction className="week-nav">
-                  <a href="?week=next">← last week</a>
+                  <a href={weekHref(MAX_PUBLIC_WEEK_OFFSET)}>← last week</a>
                   <span className="off" aria-disabled="true">next week →</span>
                 </CardAction>
               </CardHeader>
@@ -283,10 +285,10 @@ export function PublicAvailabilityPage(data: PublicAvailabilityData) {
               <CardHeader>
                 <CardTitle>{view!.title}</CardTitle>
                 <CardAction className="week-nav">
-                  {week === 'this'
+                  {offset === 0
                     ? <span className="off" aria-disabled="true">← last week</span>
-                    : <a href="?week=this">← last week</a>}
-                  <a href={week === 'this' ? '?week=next' : '?week=later'}>
+                    : <a href={weekHref(offset - 1)}>← last week</a>}
+                  <a href={offset < MAX_PUBLIC_WEEK_OFFSET ? weekHref(offset + 1) : '?week=later'}>
                     next week →
                   </a>
                 </CardAction>

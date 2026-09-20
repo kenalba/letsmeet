@@ -12,10 +12,13 @@ import type { AvailabilityInput } from './availability.js';
 /** The rows: 7am through 11pm. A block past midnight fills the last row and stops. */
 export const HOURS: readonly number[] = Array.from({ length: 17 }, (_, i) => 7 + i);
 
-/** Which week the page shows: `?week=next`, `?week=later` (the poll prompt), else this one. */
-export type WeekChoice = 'this' | 'next' | 'later';
+/** Public availability shows this week through eight weeks ahead; later offers a poll. */
+export const MAX_PUBLIC_WEEK_OFFSET = 8;
+export type WeekChoice = 'this' | 'next' | 'later' | number;
 export function weekChoice(q: string | undefined): WeekChoice {
-  return q === 'next' || q === 'later' ? q : 'this';
+  if (q === 'next' || q === 'later') return q;
+  if (q && /^(0|[1-9]\d*)$/.test(q) && Number(q) <= MAX_PUBLIC_WEEK_OFFSET) return Number(q);
+  return 'this';
 }
 
 /** `early`: free the first half hour only; `late`: the second. Away wins over free. */
@@ -119,7 +122,7 @@ export function awayLater(away: AwayEntry[], afterSunday: string): AwayEntry[] {
   return away.filter((a) => a.start > afterSunday).sort((x, y) => x.start.localeCompare(y.start));
 }
 
-export function buildWeekView(rec: AvailabilityInput, now: Date, offset: 0 | 1): WeekView {
+export function buildWeekView(rec: AvailabilityInput, now: Date, offset: number): WeekView {
   const today = localToday(now, rec.timezone);
   const thisMonday = mondayOf(today);
   const monday = plusDays(thisMonday, 7 * offset);

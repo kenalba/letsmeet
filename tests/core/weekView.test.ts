@@ -41,6 +41,13 @@ describe('buildWeekView', () => {
     expect([v.monday, v.sunday, v.title]).toEqual(['2026-09-21', '2026-09-27', 'sep 21 – 27']);
     expect(v.days.some((d) => d.past || d.today)).toBe(false);
   });
+  it('shows eight weeks ahead across DST with away dates overriding the usual week', () => {
+    const v = buildWeekView({ ...base, weekly: [{ day: 1, start: '09:00', end: '12:00' }],
+      away: [{ start: '2026-11-09', end: '2026-11-09', note: 'away' }] }, NOW, 8);
+    expect([v.monday, v.sunday]).toEqual(['2026-11-09', '2026-11-15']);
+    expect(cell(v, 0, 9)).toEqual({ state: 'away', note: 'away' });
+    expect(v.days.some((d) => d.past || d.today)).toBe(false);
+  });
   it('draws a block by the hour: half-late, full, none, half-early', () => {
     const v = buildWeekView({
       ...base,
@@ -149,6 +156,8 @@ describe('labels', () => {
     expect(weekChoice('next')).toBe('next');
     expect(weekChoice('later')).toBe('later');
     expect(weekChoice('2026-09-21')).toBe('this');
+    for (let n = 0; n <= 8; n++) expect(weekChoice(String(n))).toBe(n);
+    for (const q of ['9', '-1', '1.5', '08', 'Infinity']) expect(weekChoice(q)).toBe('this');
   });
 });
 

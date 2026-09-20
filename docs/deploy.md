@@ -511,6 +511,13 @@ If any step fails, do not consider the deploy announcement-ready — fix
 forward and re-run the whole checklist from step 2, since OAuth, the outbox,
 and finalization all interact.
 
+## Public availability horizon
+
+Friends can page through this week and each of the next eight weeks. The ninth
+forward page offers a poll for plans further out. The usual weekly pattern and
+dated away entries apply to each displayed week; this does not extend a record’s
+“good through” date. The availability editor already supports later dates.
+
 ## 6. Known limits
 
 Carried over from the design spec (`docs/superpowers/specs/2026-08-31-wzrdz-poll-design.md`) — these are intentional v1 scope cuts, not bugs:

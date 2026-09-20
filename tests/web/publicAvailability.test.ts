@@ -187,7 +187,7 @@ describe('the week grid', () => {
     const html = render({ week: 'next' });
     expect(html).toContain('sep 21 – 27');
     expect(html).toContain('href="?week=this"');
-    expect(html).toContain('href="?week=later"');
+    expect(html).toContain('href="?week=2"');
     expect(html).toContain('next week →');
     expect(html).toContain('← last week');
     expect(html).not.toContain('further out →');
@@ -203,7 +203,7 @@ describe('the week grid', () => {
     expect(html).toContain('a usual week only says so much that far ahead.');
     expect(html).toContain('make a poll with ken.wzrdz.cool');
     expect(html).toContain('href="https://letsmeet.lol/new"');
-    expect(html).toContain('href="?week=next"');
+    expect(html).toContain('href="?week=8"');
     expect(html).toContain('pick some dates, they mark what works.');
     expect(html).toContain('← last week');
     expect(html).toContain('<span class="off" aria-disabled="true">next week →</span>');
@@ -247,6 +247,11 @@ describe('the week grid', () => {
     const { app, repo } = setup(async (h) => (h === 'ken.wzrdz.cool' ? KEN : null), 'https://letsmeet.lol');
     await repo.putRecord(KEN, AVAILABILITY_NSID, AVAILABILITY_RKEY, rec);
     expect(await (await app.request('/u/ken.wzrdz.cool?week=next')).text()).toContain('sep 21 – 27');
+    const eighth = await (await app.request('/u/ken.wzrdz.cool?week=8')).text();
+    expect(eighth).toContain('nov 9 – 15');
+    expect(eighth).toContain('href="?week=7"');
+    expect(eighth).toContain('href="?week=later"');
+    expect(await (await app.request('/u/ken.wzrdz.cool?week=9')).text()).toContain('sep 14 – 20');
     expect(await (await app.request('/u/ken.wzrdz.cool?week=later')).text()).toContain('further out');
     expect(await (await app.request('/u/ken.wzrdz.cool?week=whatever')).text()).toContain('sep 14 – 20');
   });
